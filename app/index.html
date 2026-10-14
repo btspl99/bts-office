@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self' data:">
+<title>BTS Office</title>
+<link rel="stylesheet" href="common/base.css">
+<style>
+  body { background: var(--surface-2); }
+  #titlebar { background: var(--surface-2); color: var(--ink); }
+  #titlebar .tb-logo { background: var(--ink); color: var(--surface); }
+  .home { flex: 1; overflow: auto; display: grid; grid-template-columns: 1fr; }
+  .wrap { max-width: 1060px; width: 100%; margin: 0 auto; padding: 26px 40px 48px; }
+  .hello { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin: 10px 0 26px; }
+  .hello h1 { font-size: 40px; line-height: 1.05; font-weight: 800; letter-spacing: -1.2px; margin: 0; }
+  .hello p { margin: 8px 0 0; color: var(--ink-2); font-size: 15px; }
+  .hello .actions { display: flex; gap: 8px; }
+
+  /* The four app tiles: each tile is a little stack of paper in the app's colour */
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+  .tile { border: 0; padding: 0; background: transparent; text-align: left; cursor: default; position: relative; }
+  .tile .paper { position: relative; height: 210px; border-radius: 14px; background: var(--c); overflow: hidden; color: #fff; padding: 18px; display: flex; flex-direction: column; justify-content: space-between; transition: transform .18s ease; }
+  .tile .paper::before, .tile .paper::after { content: ""; position: absolute; border-radius: 10px; background: rgba(255,255,255,.95); }
+  .tile .sheet { position: absolute; right: -26px; bottom: -34px; width: 54%; height: 70%; background: #fff; border-radius: 10px; box-shadow: -10px -8px 24px rgba(0,0,0,.18); transform: rotate(-7deg); padding: 14px; transition: transform .22s ease; }
+  .tile:hover .sheet { transform: rotate(-3deg) translate(-6px, -8px); }
+  .tile:hover .paper { transform: translateY(-2px); }
+  @media (prefers-reduced-motion: reduce) { .tile .sheet, .tile .paper { transition: none; } }
+  .tile .paper::before, .tile .paper::after { display: none; }
+  .tile .letter { font-size: 15px; font-weight: 800; width: 34px; height: 34px; border-radius: 9px; background: rgba(255,255,255,.2); display: grid; place-items: center; }
+  .tile .name { font-size: 20px; font-weight: 700; letter-spacing: -.3px; position: relative; z-index: 1; }
+  .tile .desc { font-size: 12.5px; opacity: .85; margin-top: 3px; max-width: 44%; line-height: 1.35; }
+  .tile .new { margin-top: 10px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 6px; }
+  .tile .new .ic { color: var(--c); }
+  /* mini previews inside the white sheet */
+  .ln { height: 6px; border-radius: 3px; background: #e3e6ec; margin-bottom: 7px; }
+  .ln.h { height: 9px; width: 55%; background: var(--c); opacity: .85; }
+  .cells { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
+  .cells i { height: 11px; background: #eef1f4; border-radius: 2px; }
+  .cells i.k { background: color-mix(in srgb, var(--c) 30%, white); }
+  .bars { display: flex; align-items: flex-end; gap: 5px; height: 46px; margin-top: 8px; }
+  .bars i { flex: 1; background: var(--c); border-radius: 3px 3px 0 0; opacity: .8; }
+  .slide { aspect-ratio: 16/9; border-radius: 6px; background: color-mix(in srgb, var(--c) 14%, white); padding: 10px; }
+
+  .section-head { display: flex; align-items: center; justify-content: space-between; margin: 40px 0 10px; }
+  .section-head h2 { font-size: 17px; margin: 0; font-weight: 700; }
+  .rec { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .rec .bs-row { border-radius: 0; border-bottom: 1px solid var(--line); padding: 12px 16px; }
+  .rec .bs-row:last-child { border-bottom: 0; }
+  .rec .empty { padding: 34px; text-align: center; color: var(--ink-3); }
+  .drop-hint { margin-top: 14px; color: var(--ink-3); font-size: 12.5px; display: flex; gap: 8px; align-items: center; }
+  body.dragging .rec { outline: 2px dashed var(--ink-3); outline-offset: 4px; }
+  @media (max-width: 980px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+</style>
+<script src="common/icons.js"></script>
+</head>
+<body data-app="start">
+<header id="titlebar"><div class="tb-app"><span class="tb-logo">B</span><span>BTS Office</span></div></header>
+<main class="home">
+  <div class="wrap">
+    <div class="hello">
+      <div><h1 id="greet">Good morning</h1><p>Write, calculate, present and read — free for every student.</p></div>
+      <div class="actions">
+        <button class="btn" id="open-btn" data-icon="folder-open">Open a file</button>
+        <button class="btn" id="theme-btn" data-icon="moon" title="Switch light or dark">Theme</button>
+      </div>
+    </div>
+
+    <div class="tiles">
+      <button class="tile" data-app="docs" style="--c:#3C4FE0">
+        <div class="paper"><div><div class="letter">D</div></div><div><div class="name">Docs</div><div class="desc">Essays, notes, letters and reports</div></div>
+          <div class="sheet"><div class="ln h"></div><div class="ln"></div><div class="ln" style="width:86%"></div><div class="ln"></div><div class="ln" style="width:70%"></div><div class="ln"></div></div></div>
+        <div class="new" data-icon="plus">New document</div>
+      </button>
+      <button class="tile" data-app="sheets" style="--c:#0F8A6A">
+        <div class="paper"><div><div class="letter">S</div></div><div><div class="name">Sheets</div><div class="desc">Budgets, marks, data and charts</div></div>
+          <div class="sheet"><div class="cells"><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="bars"><i style="height:40%"></i><i style="height:75%"></i><i style="height:55%"></i><i style="height:95%"></i></div></div></div>
+        <div class="new" data-icon="plus">New spreadsheet</div>
+      </button>
+      <button class="tile" data-app="slides" style="--c:#D9661A">
+        <div class="paper"><div><div class="letter">P</div></div><div><div class="name">Slides</div><div class="desc">Presentations for class and seminars</div></div>
+          <div class="sheet"><div class="slide"><div class="ln h" style="width:70%"></div><div class="ln" style="width:45%"></div></div><div class="slide" style="margin-top:6px;opacity:.6"></div></div></div>
+        <div class="new" data-icon="plus">New presentation</div>
+      </button>
+      <button class="tile" data-app="pdf" style="--c:#C7354A">
+        <div class="paper"><div><div class="letter">R</div></div><div><div class="name">PDF</div><div class="desc">Read, search and print PDF files</div></div>
+          <div class="sheet"><div class="ln h" style="width:40%"></div><div class="ln"></div><div class="ln"></div><div class="ln" style="width:60%"></div><div class="ln" style="height:28px;background:color-mix(in srgb,var(--c) 18%,white)"></div></div></div>
+        <div class="new" data-icon="folder-open">Open a PDF</div>
+      </button>
+    </div>
+
+    <div class="section-head"><h2>Recent files</h2><button class="btn" id="clear-btn" style="height:28px">Clear list</button></div>
+    <div class="rec" id="recent"></div>
+    <div class="drop-hint" data-icon="upload">Drop any document, spreadsheet, presentation or PDF here to open it.</div>
+  </div>
+</main>
+<script>
+(function () {
+  const desktop = !!(window.bts && window.bts.isDesktop);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const COLORS = { docx: '#3C4FE0', txt: '#47526a', md: '#47526a', html: '#47526a', odt: '#3C4FE0', xlsx: '#0F8A6A', xls: '#0F8A6A', csv: '#0F8A6A', ods: '#0F8A6A', pptx: '#D9661A', pdf: '#C7354A' };
+  const h = new Date().getHours();
+  document.getElementById('greet').textContent = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  let theme = 'light'; try { theme = localStorage.getItem('bts-theme') || 'light'; } catch {}
+  const apply = t => { document.documentElement.dataset.theme = (t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)) ? 'dark' : 'light'; };
+  apply(theme);
+  if (navigator.platform.startsWith('Mac')) document.documentElement.classList.add('mac');
+  const syncBar = () => { if (desktop) { const dark = document.documentElement.dataset.theme === 'dark'; bts.titlebarColor(dark ? '#181d28' : '#f6f7f9', dark ? '#e7ebf3' : '#172033'); } };
+  syncBar();
+  document.getElementById('theme-btn').onclick = () => { theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; try { localStorage.setItem('bts-theme', theme); } catch {} apply(theme); syncBar(); if (desktop) bts.setSettings({ theme }); };
+
+  document.querySelectorAll('.tile').forEach(t => t.onclick = async () => {
+    const app = t.dataset.app;
+    if (!desktop) { location.href = app + '.html'; return; }
+    if (app === 'pdf') { await bts.openDialog('pdf'); return; }
+    bts.openApp(app);
+  });
+  document.getElementById('open-btn').onclick = () => desktop ? bts.openDialog('all') : null;
+
+  async function renderRecent() {
+    const el = document.getElementById('recent');
+    const list = desktop ? await bts.recent() : [];
+    if (!list.length) { el.innerHTML = '<div class="empty">Nothing here yet. Files you open or save will appear here so you can get back to them quickly.</div>'; return; }
+    el.innerHTML = list.slice(0, 14).map(r => { const e = (r.name.split('.').pop() || '').toLowerCase(); return `<button class="bs-row" data-path="${esc(r.path)}"><div class="fi" style="background:${COLORS[e] || '#47526a'}">${esc(e.toUpperCase().slice(0, 4))}</div><div><div>${esc(r.name)}</div><div class="meta">${esc(r.path)}</div></div><div class="meta" style="margin-left:auto">${new Date(r.time).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</div></button>`; }).join('');
+  }
+  document.getElementById('recent').onclick = e => { const r = e.target.closest('[data-path]'); if (r && desktop) bts.openApp(null, r.dataset.path); };
+  document.getElementById('clear-btn').onclick = async () => { if (desktop) { await bts.clearRecent(); renderRecent(); } };
+  renderRecent(); window.addEventListener('focus', renderRecent);
+
+  document.addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('dragging'); });
+  document.addEventListener('dragleave', e => { if (!e.relatedTarget) document.body.classList.remove('dragging'); });
+  document.addEventListener('drop', e => { e.preventDefault(); document.body.classList.remove('dragging'); if (!desktop) return; [...e.dataTransfer.files].forEach(f => { const p = bts.pathFor(f); if (p) bts.openApp(null, p); }); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,174 @@
+{
+  "name": "bts-office",
+  "productName": "BTS Office",
+  "version": "1.0.0",
+  "description": "Free, open-source office suite for students: documents, spreadsheets, presentations and PDF.",
+  "main": "main.js",
+  "license": "GPL-3.0-or-later",
+  "author": {
+    "name": "Bhoomiputra Tech Solutions Pvt Ltd",
+    "email": "btspl99@gmail.com"
+  },
+  "homepage": "https://github.com/bts-office/bts-office",
+  "scripts": {
+    "start": "electron .",
+    "icons": "node tools/build-icons.js",
+    "dist:win": "electron-builder --win nsis --x64",
+    "dist:linux": "electron-builder --linux AppImage deb"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
+    "@fontsource/figtree": "^5.3.0",
+    "chart.js": "^4.5.1",
+    "docx": "^9.11.0",
+    "exceljs": "^4.4.0",
+    "file-saver": "^2.0.5",
+    "hyperformula": "^2.7.1",
+    "jszip": "^3.10.2",
+    "lucide-static": "^1.57.0",
+    "mammoth": "^1.13.0",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^4.10.38",
+    "pptxgenjs": "^3.12.0",
+    "xlsx": "^0.18.5"
+  },
+  "build": {
+    "appId": "in.btspl.office",
+    "productName": "BTS Office",
+    "copyright": "Copyright \u00a9 2026 Bhoomiputra Tech Solutions Pvt Ltd \u2014 GPL-3.0",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "app/**/*",
+      "build/icon.png",
+      "LICENSE",
+      "!node_modules/**/*"
+    ],
+    "asar": true,
+    "fileAssociations": [
+      {
+        "ext": "docx",
+        "name": "Word Document",
+        "description": "Word document",
+        "icon": "build/file-docs.ico",
+        "role": "Editor"
+      },
+      {
+        "ext": "txt",
+        "name": "Text Document",
+        "description": "Text document",
+        "icon": "build/file-docs.ico",
+        "role": "Editor"
+      },
+      {
+        "ext": "odt",
+        "name": "OpenDocument Text",
+        "description": "OpenDocument text",
+        "icon": "build/file-docs.ico",
+        "role": "Editor"
+      },
+      {
+        "ext": "xlsx",
+        "name": "Excel Workbook",
+        "description": "Spreadsheet",
+        "icon": "build/file-sheets.ico",
+        "role": "Editor"
+      },
+      {
+        "ext": "xls",
+        "name": "Excel 97-2003 Workbook",
+        "description": "Spreadsheet",
+        "icon": "build/file-sheets.ico",
+        "role": "Editor"
+      },
+      {
+        "ext": "csv",
+        "name": "CSV File",
+        "description": "Comma-separated values",
+        "icon": "build/file-sheets.ico",
+        "role": "Editor"
+      },
+      {
+        "ext": "ods",
+        "name": "OpenDocument Spreadsheet",
+        "description": "Spreadsheet",
+        "icon": "build/file-sheets.ico",
+        "role": "Editor"
+      },
+      {
+        "ext": "pptx",
+        "name": "PowerPoint Presentation",
+        "description": "Presentation",
+        "icon": "build/file-slides.ico",
+        "role": "Editor"
+      },
+      {
+        "ext": "pdf",
+        "name": "PDF Document",
+        "description": "PDF document",
+        "icon": "build/file-pdf.ico",
+        "role": "Viewer"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false,
+      "legalTrademarks": "BTS Office"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "BTS Office",
+      "menuCategory": "BTS Office",
+      "license": "LICENSE",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "include": "build/installer.nsh",
+      "artifactName": "BTS-Office-Setup-${version}.${ext}",
+      "uninstallDisplayName": "BTS Office",
+      "deleteAppDataOnUninstall": false
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icon.png",
+      "category": "Office",
+      "maintainer": "btspl99@gmail.com"
+    },
+    "extraResources": [
+      {
+        "from": "build/",
+        "to": ".",
+        "filter": [
+          "file-*.ico"
+        ]
+      }
+    ],
+    "publish": null
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bts-office/bts-office.git"
+  }
+}

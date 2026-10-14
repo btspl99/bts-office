@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self' data: blob:">
+<title>BTS Docs</title>
+<link rel="stylesheet" href="common/base.css">
+<link rel="stylesheet" href="docs/docs.css">
+<script src="common/icons.js"></script>
+<script src="common/shell.js"></script>
+<script src="vendor/jszip.min.js"></script>
+<script src="vendor/mammoth.browser.min.js"></script>
+<script src="vendor/docx.iife.js"></script>
+<script src="docs/editor.js" defer></script>
+<script src="docs/tables.js" defer></script>
+<script src="docs/insert.js" defer></script>
+<script src="docs/panes.js" defer></script>
+<script src="docs/import.js" defer></script>
+<script src="docs/docx-export.js" defer></script>
+<script src="docs/templates.js" defer></script>
+<script src="docs/app.js" defer></script>
+</head>
+<body data-app="docs">
+<nav id="ribbon-tabs">
+  <button class="file-tab">File</button>
+  <button data-tab="home">Home</button>
+  <button data-tab="insert">Insert</button>
+  <button data-tab="design">Design</button>
+  <button data-tab="layout">Layout</button>
+  <button data-tab="references">References</button>
+  <button data-tab="review">Review</button>
+  <button data-tab="view">View</button>
+  <button data-tab="table" class="contextual hidden" id="tab-table">Table</button>
+  <button data-tab="picture" class="contextual hidden" id="tab-picture">Picture</button>
+  <span class="spacer"></span>
+  <div class="rt-right">
+    <button data-cmd="comments-toggle" id="rt-comments" title="Show comments"><span data-icon="message-square"></span><span>Comments</span></button>
+    <button data-cmd="toggle-ribbon" title="Collapse the ribbon (Ctrl+F1)" data-icon="chevron-up"></button>
+  </div>
+</nav>
+
+<div id="ribbon">
+  <!-- ================= HOME ================= -->
+  <section class="ribbon-panel" data-panel="home">
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg split" data-cmd="paste" data-icon="clipboard-paste" title="Paste (Ctrl+V)"><span>Paste <svg class="ic caret" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></span></button>
+      <div class="rstack">
+        <button class="rb md" data-cmd="cut" data-icon="scissors" title="Cut (Ctrl+X)"><span>Cut</span></button>
+        <button class="rb md" data-cmd="copy" data-icon="copy" title="Copy (Ctrl+C)"><span>Copy</span></button>
+        <button class="rb md" data-cmd="format-painter" id="btn-painter" data-icon="paintbrush" title="Format painter — click to copy formatting once, double-click to keep it on"><span>Painter</span></button>
+      </div>
+    </div><div class="rgroup-label">Clipboard</div></div>
+
+    <div class="rgroup"><div class="rgroup-body"><div class="rcol">
+      <div class="rrow">
+        <div class="combo" id="font-combo"><input class="rinput" id="font-name" spellcheck="false" title="Font" value="Calibri"><button class="rb combo-btn" data-cmd="font-menu" title="Choose font"><svg class="ic" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m6 9 6 6 6-6"/></svg></button></div>
+        <div class="combo small" id="size-combo"><input class="rinput" id="font-size" spellcheck="false" title="Font size" value="11"><button class="rb combo-btn" data-cmd="size-menu" title="Choose size"><svg class="ic" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m6 9 6 6 6-6"/></svg></button></div>
+        <button class="rb" data-cmd="grow" data-icon="a-arrow-up" title="Increase font size (Ctrl+Shift+&gt;)"></button>
+        <button class="rb" data-cmd="shrink" data-icon="a-arrow-down" title="Decrease font size (Ctrl+Shift+&lt;)"></button>
+        <button class="rb" data-cmd="case-menu" data-icon="case-sensitive" title="Change case"></button>
+        <button class="rb" data-cmd="clear-format" data-icon="remove-formatting" title="Clear all formatting"></button>
+      </div>
+      <div class="rrow">
+        <button class="rb" data-cmd="bold" data-icon="bold" title="Bold (Ctrl+B)" data-state="bold"></button>
+        <button class="rb" data-cmd="italic" data-icon="italic" title="Italic (Ctrl+I)" data-state="italic"></button>
+        <button class="rb" data-cmd="underline" data-icon="underline" title="Underline (Ctrl+U)" data-state="underline"></button>
+        <button class="rb" data-cmd="strike" data-icon="strikethrough" title="Strikethrough" data-state="strikeThrough"></button>
+        <button class="rb" data-cmd="sub" data-icon="subscript" title="Subscript (Ctrl+=)" data-state="subscript"></button>
+        <button class="rb" data-cmd="sup" data-icon="superscript" title="Superscript (Ctrl+Shift+=)" data-state="superscript"></button>
+        <span class="rsep"></span>
+        <button class="rb color-btn" data-cmd="fore-color" data-icon="baseline" title="Font colour"><span class="swatch" id="sw-fore" style="background:#c7354a"></span></button>
+        <button class="rb mini-caret" data-cmd="fore-color-menu" title="More font colours"><svg class="ic" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></button>
+        <button class="rb color-btn" data-cmd="hilite" data-icon="highlighter" title="Text highlight colour"><span class="swatch" id="sw-hilite" style="background:#ffff00"></span></button>
+        <button class="rb mini-caret" data-cmd="hilite-menu" title="More highlight colours"><svg class="ic" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></button>
+      </div>
+    </div></div><div class="rgroup-label">Font</div></div>
+
+    <div class="rgroup"><div class="rgroup-body"><div class="rcol">
+      <div class="rrow">
+        <button class="rb" data-cmd="bullets" data-icon="list" title="Bullets (Ctrl+Shift+L)" id="btn-bullets"></button>
+        <button class="rb mini-caret" data-cmd="bullets-menu" title="Bullet library"><svg class="ic" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></button>
+        <button class="rb" data-cmd="numbering" data-icon="list-ordered" title="Numbering" id="btn-numbering"></button>
+        <button class="rb mini-caret" data-cmd="numbering-menu" title="Numbering library"><svg class="ic" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></button>
+        <button class="rb" data-cmd="outdent" data-icon="indent-decrease" title="Decrease indent (Shift+Tab in lists)"></button>
+        <button class="rb" data-cmd="indent" data-icon="indent-increase" title="Increase indent (Tab in lists)"></button>
+        <button class="rb" data-cmd="marks" data-icon="pilcrow" title="Show formatting marks" id="btn-marks"></button>
+      </div>
+      <div class="rrow">
+        <button class="rb" data-cmd="align-left" data-icon="align-left" title="Align left (Ctrl+L)" data-align="left"></button>
+        <button class="rb" data-cmd="align-center" data-icon="align-center" title="Center (Ctrl+E)" data-align="center"></button>
+        <button class="rb" data-cmd="align-right" data-icon="align-right" title="Align right (Ctrl+R)" data-align="right"></button>
+        <button class="rb" data-cmd="align-justify" data-icon="align-justify" title="Justify (Ctrl+J)" data-align="justify"></button>
+        <span class="rsep"></span>
+        <button class="rb" data-cmd="line-spacing-menu" data-icon="arrow-down-up" title="Line and paragraph spacing"><svg class="ic caret" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></button>
+        <button class="rb" data-cmd="shading" data-icon="paint-bucket" title="Paragraph shading"></button>
+        <button class="rb" data-cmd="borders-menu" data-icon="square-dashed-bottom" title="Paragraph borders"></button>
+        <button class="rb" data-cmd="paragraph-dialog" data-icon="settings-2" title="Paragraph settings"></button>
+      </div>
+    </div></div><div class="rgroup-label">Paragraph</div></div>
+
+    <div class="rgroup"><div class="rgroup-body">
+      <div class="rgallery styles-gallery" id="styles-gallery"></div>
+      <div class="gal-nav">
+        <button class="rb" data-cmd="gal-up" title="Previous row"><svg class="ic" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m18 15-6-6-6 6"/></svg></button>
+        <button class="rb" data-cmd="gal-down" title="Next row"><svg class="ic" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m6 9 6 6 6-6"/></svg></button>
+        <button class="rb" data-cmd="styles-menu" title="All styles"><svg class="ic" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 6h14M8 12l4 4 4-4"/></svg></button>
+      </div>
+    </div><div class="rgroup-label">Styles</div></div>
+
+    <div class="rgroup"><div class="rgroup-body"><div class="rstack">
+      <button class="rb md" data-cmd="find" data-icon="search" title="Find (Ctrl+F)"><span>Find</span></button>
+      <button class="rb md" data-cmd="replace" data-icon="replace" title="Replace (Ctrl+H)"><span>Replace</span></button>
+      <button class="rb md" data-cmd="select-all" data-icon="text-select" title="Select all (Ctrl+A)"><span>Select all</span></button>
+    </div></div><div class="rgroup-label">Editing</div></div>
+  </section>
+
+  <!-- ================= INSERT ================= -->
+  <section class="ribbon-panel" data-panel="insert">
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="blank-page" data-icon="file-plus" title="Insert a blank page"><span>Blank page</span></button>
+      <button class="rb lg" data-cmd="page-break" data-icon="square-split-vertical" title="Page break (Ctrl+Enter)"><span>Page break</span></button>
+    </div><div class="rgroup-label">Pages</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="table-menu" data-icon="table" title="Insert a table"><span>Table</span></button>
+    </div><div class="rgroup-label">Tables</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="picture" data-icon="image" title="Insert a picture from this PC"><span>Picture</span></button>
+      <button class="rb lg" data-cmd="shapes-menu" data-icon="shapes" title="Insert a shape"><span>Shapes</span></button>
+    </div><div class="rgroup-label">Illustrations</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="link" data-icon="link" title="Insert link (Ctrl+K)"><span>Link</span></button>
+      <button class="rb lg" data-cmd="comment-new" data-icon="message-square-plus" title="New comment"><span>Comment</span></button>
+    </div><div class="rgroup-label">Links &amp; comments</div></div>
+    <div class="rgroup"><div class="rgroup-body"><div class="rstack">
+      <button class="rb md" data-cmd="header-menu" data-icon="panel-top" title="Header"><span>Header</span></button>
+      <button class="rb md" data-cmd="footer-menu" data-icon="panel-bottom" title="Footer"><span>Footer</span></button>
+      <button class="rb md" data-cmd="pagenum-menu" data-icon="hash" title="Page number"><span>Page number</span></button>
+    </div></div><div class="rgroup-label">Header &amp; footer</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="textbox" data-icon="square-pen" title="Insert a text box"><span>Text box</span></button>
+      <div class="rstack">
+        <button class="rb md" data-cmd="datetime" data-icon="calendar-clock" title="Date &amp; time"><span>Date &amp; time</span></button>
+        <button class="rb md" data-cmd="hr" data-icon="minus" title="Horizontal line"><span>Horizontal line</span></button>
+        <button class="rb md" data-cmd="dropcap" data-icon="type" title="Drop cap on the first letter of the paragraph"><span>Drop cap</span></button>
+      </div>
+    </div><div class="rgroup-label">Text</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="equation" data-icon="sigma" title="Insert an equation"><span>Equation</span></button>
+      <button class="rb lg" data-cmd="symbol" data-icon="omega" title="Insert a symbol (₹, ©, °, Greek…)"><span>Symbol</span></button>
+    </div><div class="rgroup-label">Symbols</div></div>
+  </section>
+
+  <!-- ================= DESIGN ================= -->
+  <section class="ribbon-panel" data-panel="design">
+    <div class="rgroup"><div class="rgroup-body">
+      <div class="rgallery themes-gallery" id="themes-gallery"></div>
+      <div class="gal-nav">
+        <button class="rb" data-cmd="thgal-up" title="Previous row"><svg class="ic" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m18 15-6-6-6 6"/></svg></button>
+        <button class="rb" data-cmd="thgal-down" title="Next row"><svg class="ic" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m6 9 6 6 6-6"/></svg></button>
+      </div>
+      <div class="rstack" style="margin-left:6px">
+        <button class="rb md" data-cmd="spacing-menu" data-icon="list-collapse" title="Paragraph spacing for the whole document"><span>Paragraph spacing</span></button>
+        <button class="rb md" data-cmd="theme-fonts-menu" data-icon="type" title="Document fonts"><span>Fonts</span></button>
+      </div>
+    </div><div class="rgroup-label">Document formatting</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="watermark-menu" data-icon="stamp" title="Watermark"><span>Watermark</span></button>
+      <button class="rb lg" data-cmd="page-color" data-icon="palette" title="Page colour"><span>Page colour</span></button>
+      <button class="rb lg" data-cmd="page-border-menu" data-icon="frame" title="Page borders"><span>Page borders</span></button>
+    </div><div class="rgroup-label">Page background</div></div>
+  </section>
+
+  <!-- ================= LAYOUT ================= -->
+  <section class="ribbon-panel" data-panel="layout">
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="margins-menu" data-icon="layout-template" title="Margins"><span>Margins</span></button>
+      <button class="rb lg" data-cmd="orientation-menu" data-icon="rotate-ccw-square" title="Orientation"><span>Orientation</span></button>
+      <button class="rb lg" data-cmd="size-page-menu" data-icon="file-text" title="Paper size"><span>Size</span></button>
+      <button class="rb lg" data-cmd="columns-menu" data-icon="columns-2" title="Columns"><span>Columns</span></button>
+      <button class="rb lg" data-cmd="breaks-menu" data-icon="square-split-vertical" title="Breaks"><span>Breaks</span></button>
+    </div><div class="rgroup-label">Page setup</div></div>
+    <div class="rgroup"><div class="rgroup-body"><div class="rcol layout-fields">
+      <div class="lf-head">Indent</div>
+      <label class="lf">Left <input class="rinput num" type="number" step="0.1" min="0" max="20" data-cmd="indent-left" id="in-indent-left"> <span>cm</span></label>
+      <label class="lf">Right <input class="rinput num" type="number" step="0.1" min="0" max="20" data-cmd="indent-right" id="in-indent-right"> <span>cm</span></label>
+    </div><div class="rcol layout-fields">
+      <div class="lf-head">Spacing</div>
+      <label class="lf">Before <input class="rinput num" type="number" step="2" min="0" max="200" data-cmd="space-before" id="in-space-before"> <span>pt</span></label>
+      <label class="lf">After <input class="rinput num" type="number" step="2" min="0" max="200" data-cmd="space-after" id="in-space-after"> <span>pt</span></label>
+    </div><div class="rcol layout-fields">
+      <div class="lf-head">Line spacing</div>
+      <select class="rsel" data-cmd="line-spacing-select" id="sel-line"><option value="1">1.0</option><option value="1.15">1.15</option><option value="1.5">1.5</option><option value="2">2.0</option><option value="2.5">2.5</option><option value="3">3.0</option></select>
+    </div></div><div class="rgroup-label">Paragraph</div></div>
+  </section>
+
+  <!-- ================= REFERENCES ================= -->
+  <section class="ribbon-panel" data-panel="references">
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="toc-menu" data-icon="table-of-contents" title="Table of contents"><span>Table of contents</span></button>
+      <div class="rstack">
+        <button class="rb md" data-cmd="toc-update" data-icon="refresh-cw" title="Update table of contents"><span>Update table</span></button>
+        <button class="rb md" data-cmd="addtext-menu" data-icon="list-tree" title="Add the current paragraph to the table of contents"><span>Add text</span></button>
+      </div>
+    </div><div class="rgroup-label">Table of contents</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="footnote" data-icon="footprints" title="Insert footnote"><span>Insert footnote</span></button>
+      <div class="rstack">
+        <button class="rb md" data-cmd="footnote-next" data-icon="arrow-down-to-line" title="Go to next footnote"><span>Next footnote</span></button>
+      </div>
+    </div><div class="rgroup-label">Footnotes</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="caption" data-icon="captions" title="Insert caption (Figure / Table)"><span>Insert caption</span></button>
+    </div><div class="rgroup-label">Captions</div></div>
+  </section>
+
+  <!-- ================= REVIEW ================= -->
+  <section class="ribbon-panel" data-panel="review">
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg on" data-cmd="spelling" id="btn-spell" data-icon="spell-check" title="Show spelling mistakes"><span>Spelling</span></button>
+      <button class="rb lg" data-cmd="word-count" data-icon="book-open-check" title="Word count"><span>Word count</span></button>
+    </div><div class="rgroup-label">Proofing</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="read-aloud" id="btn-read" data-icon="volume-2" title="Read the document aloud"><span>Read aloud</span></button>
+    </div><div class="rgroup-label">Speech</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="comment-new" data-icon="message-square-plus" title="New comment"><span>New comment</span></button>
+      <div class="rstack">
+        <button class="rb md" data-cmd="comment-delete" data-icon="message-square-x" title="Delete this comment"><span>Delete</span></button>
+        <button class="rb md" data-cmd="comment-prev" data-icon="chevron-up" title="Previous comment"><span>Previous</span></button>
+        <button class="rb md" data-cmd="comment-next" data-icon="chevron-down" title="Next comment"><span>Next</span></button>
+      </div>
+      <div class="rstack">
+        <button class="rb md" data-cmd="comment-delete-all" data-icon="trash-2" title="Delete all comments"><span>Delete all</span></button>
+        <button class="rb md" data-cmd="comments-toggle" id="btn-show-comments" data-icon="message-square" title="Show comments"><span>Show comments</span></button>
+      </div>
+    </div><div class="rgroup-label">Comments</div></div>
+  </section>
+
+  <!-- ================= VIEW ================= -->
+  <section class="ribbon-panel" data-panel="view">
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg on" data-cmd="print-layout" data-icon="file-text" title="Print layout"><span>Print layout</span></button>
+      <button class="rb lg" data-cmd="focus-mode" id="btn-focus" data-icon="scan" title="Focus mode — hide everything but the page (Esc to exit)"><span>Focus</span></button>
+      <button class="rb lg" data-cmd="dark-canvas" id="btn-dark-canvas" data-icon="moon" title="Dark background around the page"><span>Dark canvas</span></button>
+    </div><div class="rgroup-label">Views</div></div>
+    <div class="rgroup"><div class="rgroup-body"><div class="rstack">
+      <label class="check rcheck"><input type="checkbox" data-cmd="ruler" id="chk-ruler" checked> Ruler</label>
+      <label class="check rcheck"><input type="checkbox" data-cmd="nav-pane" id="chk-nav"> Navigation pane</label>
+      <label class="check rcheck"><input type="checkbox" data-cmd="marks-check" id="chk-marks"> Formatting marks</label>
+    </div></div><div class="rgroup-label">Show</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="zoom-menu" data-icon="zoom-in" title="Zoom"><span>Zoom</span></button>
+      <button class="rb lg" data-cmd="zoom-100" data-icon="scan-search" title="Zoom to 100%"><span>100%</span></button>
+      <div class="rstack">
+        <button class="rb md" data-cmd="zoom-page" data-icon="file" title="Fit one whole page"><span>One page</span></button>
+        <button class="rb md" data-cmd="zoom-width" data-icon="move-horizontal" title="Fit the page width"><span>Page width</span></button>
+      </div>
+    </div><div class="rgroup-label">Zoom</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="theme-toggle" data-icon="sun-moon" title="Switch light / dark app theme"><span>App theme</span></button>
+    </div><div class="rgroup-label">Appearance</div></div>
+  </section>
+
+  <!-- ================= TABLE (contextual) ================= -->
+  <section class="ribbon-panel" data-panel="table">
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="tbl-delete-menu" data-icon="trash-2" title="Delete cells, rows, columns or table"><span>Delete</span></button>
+      <div class="rstack">
+        <button class="rb md" data-cmd="tbl-row-above" data-icon="between-horizontal-start" title="Insert row above"><span>Insert above</span></button>
+        <button class="rb md" data-cmd="tbl-row-below" data-icon="between-horizontal-end" title="Insert row below"><span>Insert below</span></button>
+      </div>
+      <div class="rstack">
+        <button class="rb md" data-cmd="tbl-col-left" data-icon="between-vertical-start" title="Insert column left"><span>Insert left</span></button>
+        <button class="rb md" data-cmd="tbl-col-right" data-icon="between-vertical-end" title="Insert column right"><span>Insert right</span></button>
+      </div>
+    </div><div class="rgroup-label">Rows &amp; columns</div></div>
+    <div class="rgroup"><div class="rgroup-body"><div class="rstack">
+      <button class="rb md" data-cmd="tbl-merge" data-icon="table-cells-merge" title="Merge selected cells (drag across cells to select)"><span>Merge cells</span></button>
+      <button class="rb md" data-cmd="tbl-split" data-icon="table-cells-split" title="Split cell"><span>Split cell</span></button>
+    </div></div><div class="rgroup-label">Merge</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <div class="rgallery tstyles-gallery" id="tstyles-gallery"></div>
+    </div><div class="rgroup-label">Table styles</div></div>
+    <div class="rgroup"><div class="rgroup-body"><div class="rstack">
+      <button class="rb md" data-cmd="tbl-shading" data-icon="paint-bucket" title="Cell shading"><span>Shading</span></button>
+      <button class="rb md" data-cmd="tbl-borders-menu" data-icon="grid-3x3" title="Borders"><span>Borders</span></button>
+      <label class="check rcheck"><input type="checkbox" data-cmd="tbl-header-row" id="chk-header-row"> Header row</label>
+    </div></div><div class="rgroup-label">Design</div></div>
+    <div class="rgroup"><div class="rgroup-body"><div class="rcol">
+      <div class="rrow">
+        <button class="rb" data-cmd="cell-align-left" data-icon="align-left" title="Align text left"></button>
+        <button class="rb" data-cmd="cell-align-center" data-icon="align-center" title="Center text"></button>
+        <button class="rb" data-cmd="cell-align-right" data-icon="align-right" title="Align text right"></button>
+      </div>
+      <div class="rrow">
+        <button class="rb" data-cmd="cell-valign-top" data-icon="align-vertical-justify-start" title="Align top"></button>
+        <button class="rb" data-cmd="cell-valign-middle" data-icon="align-vertical-justify-center" title="Align middle"></button>
+        <button class="rb" data-cmd="cell-valign-bottom" data-icon="align-vertical-justify-end" title="Align bottom"></button>
+      </div>
+    </div></div><div class="rgroup-label">Alignment</div></div>
+    <div class="rgroup"><div class="rgroup-body"><div class="rstack">
+      <button class="rb md" data-cmd="tbl-autofit-content" data-icon="move-horizontal" title="AutoFit to contents"><span>Fit contents</span></button>
+      <button class="rb md" data-cmd="tbl-autofit-window" data-icon="maximize-2" title="AutoFit to page width"><span>Fit window</span></button>
+      <button class="rb md" data-cmd="tbl-distribute" data-icon="columns-3" title="Make all columns the same width"><span>Equal widths</span></button>
+    </div></div><div class="rgroup-label">Cell size</div></div>
+  </section>
+
+  <!-- ================= PICTURE (contextual) ================= -->
+  <section class="ribbon-panel" data-panel="picture">
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="img-wrap-inline" data-wrap="inline" data-icon="text-cursor" title="In line with text"><span>In line</span></button>
+      <button class="rb lg" data-cmd="img-wrap-left" data-wrap="left" data-icon="wrap-text" title="Wrap text — picture on the left"><span>Wrap left</span></button>
+      <button class="rb lg" data-cmd="img-wrap-right" data-wrap="right" data-icon="text-wrap" title="Wrap text — picture on the right"><span>Wrap right</span></button>
+      <button class="rb lg" data-cmd="img-wrap-center" data-wrap="center" data-icon="align-center-horizontal" title="Top and bottom (centered)"><span>Centered</span></button>
+    </div><div class="rgroup-label">Arrange</div></div>
+    <div class="rgroup"><div class="rgroup-body"><div class="rcol layout-fields">
+      <label class="lf">Width <input class="rinput num" type="number" step="0.1" min="0.2" data-cmd="img-width" id="in-img-w"> <span>cm</span></label>
+      <label class="lf">Height <input class="rinput num" type="number" step="0.1" min="0.2" data-cmd="img-height" id="in-img-h"> <span>cm</span></label>
+    </div><div class="rstack">
+      <label class="check rcheck"><input type="checkbox" id="chk-img-lock" checked> Lock ratio</label>
+      <button class="rb md" data-cmd="img-reset" data-icon="rotate-ccw" title="Reset to original size"><span>Reset size</span></button>
+    </div></div><div class="rgroup-label">Size</div></div>
+    <div class="rgroup"><div class="rgroup-body"><div class="rstack">
+      <button class="rb md" data-cmd="img-border" id="btn-img-border" data-icon="square" title="Picture border"><span>Border</span></button>
+      <button class="rb md" data-cmd="img-rounded" id="btn-img-rounded" data-icon="squircle" title="Rounded corners"><span>Rounded</span></button>
+      <button class="rb md" data-cmd="img-shadow" id="btn-img-shadow" data-icon="copy" title="Soft shadow"><span>Shadow</span></button>
+    </div></div><div class="rgroup-label">Picture style</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="img-alt" data-icon="message-square-text" title="Alternative text"><span>Alt text</span></button>
+      <button class="rb lg" data-cmd="img-replace" data-icon="image-up" title="Replace picture"><span>Replace</span></button>
+      <button class="rb lg" data-cmd="img-delete" data-icon="trash-2" title="Delete picture"><span>Delete</span></button>
+    </div><div class="rgroup-label">Picture</div></div>
+  </section>
+</div>
+
+<main id="workspace">
+  <aside class="pane hidden" id="nav-pane">
+    <header>Navigation<button class="rb" data-cmd="nav-close" data-icon="x" title="Close"></button></header>
+    <div class="pane-body"><div id="nav-list"></div></div>
+  </aside>
+  <div id="canvas">
+    <div id="recover-bar" class="hidden"></div>
+    <div id="zoomer">
+      <div id="ruler" class="no-print"><div id="ruler-inner"></div></div>
+      <div id="sheet-row">
+        <div id="sheet" class="sheet">
+          <div id="wm-layer" aria-hidden="true"></div>
+          <div id="pborder" aria-hidden="true"></div>
+          <div id="hdr" class="hf" contenteditable="true" spellcheck="true" data-ph="Header"></div>
+          <div id="body-wrap">
+            <div id="doc" class="doc-content" contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true" aria-label="Document"></div>
+            <div id="fn-area" class="fn-area doc-content" contenteditable="false"></div>
+          </div>
+          <div id="ftr" class="hf" contenteditable="true" spellcheck="true" data-ph="Footer"></div>
+          <div id="guides" aria-hidden="true"></div>
+          <div id="img-handles" class="hidden"><i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i><i data-h="e"></i><i data-h="s"></i><span id="img-size-tip"></span></div>
+        </div>
+        <div id="crail" class="hidden"></div>
+      </div>
+    </div>
+  </div>
+  <aside class="pane hidden" id="find-pane">
+    <header><span id="find-title">Find</span><button class="rb" data-cmd="find-close" data-icon="x" title="Close"></button></header>
+    <div class="pane-body">
+      <div class="find-box"><span data-icon="search" data-icon-size="15"></span><input id="find-input" placeholder="Search the document" spellcheck="false"><span id="find-count"></span></div>
+      <div class="find-row" id="replace-row"><input id="replace-input" placeholder="Replace with…" spellcheck="false"></div>
+      <div class="find-opts">
+        <label class="check"><input type="checkbox" id="find-case"> Match case</label>
+        <label class="check"><input type="checkbox" id="find-word"> Whole words only</label>
+      </div>
+      <div class="find-actions">
+        <button class="btn" data-cmd="find-prev" title="Previous (Shift+Enter)"><span data-icon="chevron-up" data-icon-size="15"></span></button>
+        <button class="btn" data-cmd="find-next" title="Next (Enter)"><span data-icon="chevron-down" data-icon-size="15"></span></button>
+        <span style="flex:1"></span>
+        <button class="btn replace-only" data-cmd="replace-one">Replace</button>
+        <button class="btn primary replace-only" data-cmd="replace-all">Replace all</button>
+      </div>
+      <button class="linkish" data-cmd="find-toggle-replace" id="find-toggle-replace">Show replace</button>
+      <div id="find-results"></div>
+    </div>
+  </aside>
+</main>
+<footer id="statusbar"></footer>
+<div id="print-root" aria-hidden="true"></div>
+</body>
+</html>

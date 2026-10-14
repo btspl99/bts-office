@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self' data: blob:">
+<title>BTS Slides</title>
+<link rel="stylesheet" href="common/base.css">
+<link rel="stylesheet" href="slides/slides.css">
+<script src="common/icons.js"></script>
+<script src="common/shell.js"></script>
+<script src="vendor/jszip.min.js"></script>
+<script src="vendor/pptxgen.bundle.js"></script>
+<script src="slides/themes.js" defer></script>
+<script src="slides/model.js" defer></script>
+<script src="slides/render.js" defer></script>
+<script src="slides/templates.js" defer></script>
+<script src="slides/editor.js" defer></script>
+<script src="slides/commands.js" defer></script>
+<script src="slides/present.js" defer></script>
+<script src="slides/pptx-export.js" defer></script>
+<script src="slides/pptx-import.js" defer></script>
+<script src="slides/app.js" defer></script>
+</head>
+<body data-app="slides">
+<nav id="ribbon-tabs">
+  <button class="file-tab">File</button>
+  <button data-tab="home">Home</button>
+  <button data-tab="insert">Insert</button>
+  <button data-tab="design">Design</button>
+  <button data-tab="transitions">Transitions</button>
+  <button data-tab="animations">Animations</button>
+  <button data-tab="show">Slide Show</button>
+  <button data-tab="review">Review</button>
+  <button data-tab="view">View</button>
+  <button data-tab="format" class="contextual hidden" id="tab-format">Shape Format</button>
+  <span class="spacer"></span>
+  <div class="rt-right">
+    <button data-cmd="present-current" title="Present from current slide (Shift+F5)" class="rt-present" data-icon="presentation">Present</button>
+    <button data-cmd="toggle-ribbon" title="Collapse the ribbon (Ctrl+F1)" data-icon="chevron-up"></button>
+  </div>
+</nav>
+
+<div id="ribbon">
+  <!-- ================= HOME ================= -->
+  <section class="ribbon-panel" data-panel="home">
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="paste" data-icon="clipboard-paste" title="Paste (Ctrl+V)"><span>Paste</span></button>
+      <div class="rcol">
+        <button class="rb md" data-cmd="cut" data-icon="scissors" title="Cut (Ctrl+X)">Cut</button>
+        <button class="rb md" data-cmd="copy" data-icon="copy" title="Copy (Ctrl+C)">Copy</button>
+        <button class="rb md" data-cmd="format-painter" data-icon="paintbrush" title="Format painter: copy formatting from the selected object to the next one you click">Format</button>
+      </div>
+    </div><div class="rgroup-label">Clipboard</div></div>
+
+    <div class="rgroup"><div class="rgroup-body">
+      <div class="split-lg">
+        <button class="rb lg" data-cmd="new-slide" data-icon="square-plus" title="New slide (Ctrl+M)"><span>New Slide</span></button>
+        <button class="rb split-caret" data-cmd="new-slide-menu" title="Choose a layout" data-icon="chevron-down"></button>
+      </div>
+      <div class="rcol">
+        <button class="rb md" data-cmd="layout-menu" data-icon="layout-template" title="Change the layout of this slide">Layout</button>
+        <button class="rb md" data-cmd="reset-slide" data-icon="rotate-ccw" title="Reset placeholders to their layout positions">Reset</button>
+        <button class="rb md" data-cmd="section-menu" data-icon="rows-3" title="Organise slides into sections">Section</button>
+      </div>
+    </div><div class="rgroup-label">Slides</div></div>
+
+    <div class="rgroup"><div class="rgroup-body"><div class="rcol">
+      <div class="rrow">
+        <input class="rinput font-input" id="font-name" list="font-list" data-cmd="font-name" title="Font" style="width:136px">
+        <input class="rinput" id="font-size" list="size-list" data-cmd="font-size" title="Font size" style="width:52px">
+        <button class="rb" data-cmd="grow-font" data-icon="a-arrow-up" title="Increase font size (Ctrl+])"></button>
+        <button class="rb" data-cmd="shrink-font" data-icon="a-arrow-down" title="Decrease font size (Ctrl+[)"></button>
+        <button class="rb" data-cmd="clear-format" data-icon="remove-formatting" title="Clear all formatting"></button>
+      </div>
+      <div class="rrow">
+        <button class="rb" data-cmd="bold" data-icon="bold" title="Bold (Ctrl+B)" id="b-bold"></button>
+        <button class="rb" data-cmd="italic" data-icon="italic" title="Italic (Ctrl+I)" id="b-italic"></button>
+        <button class="rb" data-cmd="underline" data-icon="underline" title="Underline (Ctrl+U)" id="b-underline"></button>
+        <button class="rb" data-cmd="strike" data-icon="strikethrough" title="Strikethrough" id="b-strike"></button>
+        <button class="rb" data-cmd="shadow-text" data-icon="type" title="Text shadow" id="b-tshadow"></button>
+        <button class="rb" data-cmd="char-spacing" data-icon="arrow-right-left" title="Character spacing"></button>
+        <button class="rb" data-cmd="change-case" data-icon="case-sensitive" title="Change case"></button>
+        <button class="rb color-btn" data-cmd="font-color" data-icon="baseline" title="Font color"><span class="swatch" id="sw-font" style="background:#D0384E"></span></button>
+        <button class="rb color-btn" data-cmd="highlight" data-icon="highlighter" title="Text highlight color"><span class="swatch" id="sw-hl" style="background:#ffff00"></span></button>
+      </div>
+    </div></div><div class="rgroup-label">Font</div></div>
+
+    <div class="rgroup"><div class="rgroup-body"><div class="rcol">
+      <div class="rrow">
+        <button class="rb" data-cmd="bullets" data-icon="list" title="Bullets" id="b-ul"></button>
+        <button class="rb" data-cmd="numbering" data-icon="list-ordered" title="Numbering" id="b-ol"></button>
+        <button class="rb" data-cmd="outdent" data-icon="indent-decrease" title="Decrease list level (Shift+Tab)"></button>
+        <button class="rb" data-cmd="indent" data-icon="indent-increase" title="Increase list level (Tab)"></button>
+        <button class="rb" data-cmd="line-spacing" data-icon="arrow-down-up" title="Line spacing"></button>
+      </div>
+      <div class="rrow">
+        <button class="rb" data-cmd="align-left" data-icon="align-left" title="Align left (Ctrl+L)" id="b-al"></button>
+        <button class="rb" data-cmd="align-center" data-icon="align-center" title="Center (Ctrl+E)" id="b-ac"></button>
+        <button class="rb" data-cmd="align-right" data-icon="align-right" title="Align right (Ctrl+R)" id="b-ar"></button>
+        <button class="rb" data-cmd="align-justify" data-icon="align-justify" title="Justify (Ctrl+J)" id="b-aj"></button>
+        <button class="rb" data-cmd="valign" data-icon="align-vertical-justify-center" title="Align text vertically in the box"></button>
+        <button class="rb" data-cmd="text-dir" data-icon="between-vertical-start" title="Text direction"></button>
+      </div>
+    </div></div><div class="rgroup-label">Paragraph</div></div>
+
+    <div class="rgroup"><div class="rgroup-body">
+      <div class="shape-mini" id="home-shapes"></div>
+      <button class="rb lg" data-cmd="arrange-menu" data-icon="layers" title="Arrange objects"><span>Arrange</span></button>
+      <button class="rb lg" data-cmd="quick-styles" data-icon="swatch-book" title="Quick styles"><span>Quick Styles</span></button>
+      <div class="rcol">
+        <button class="rb md color-btn" data-cmd="shape-fill" data-icon="paint-bucket" title="Shape fill">Fill<span class="swatch" id="sw-fill" style="background:#D9661A"></span></button>
+        <button class="rb md" data-cmd="shape-outline" data-icon="pen-line" title="Shape outline: color, weight, dashes">Outline</button>
+        <button class="rb md" data-cmd="shape-effects" data-icon="sparkles" title="Shape effects: shadow, transparency">Effects</button>
+      </div>
+    </div><div class="rgroup-label">Drawing</div></div>
+
+    <div class="rgroup"><div class="rgroup-body"><div class="rcol">
+      <button class="rb md" data-cmd="find" data-icon="search" title="Find text (Ctrl+F)">Find</button>
+      <button class="rb md" data-cmd="replace" data-icon="replace" title="Replace text (Ctrl+H)">Replace</button>
+      <button class="rb md" data-cmd="select-menu" data-icon="mouse-pointer-2" title="Select objects">Select</button>
+    </div></div><div class="rgroup-label">Editing</div></div>
+  </section>
+
+  <!-- ================= INSERT ================= -->
+  <section class="ribbon-panel" data-panel="insert">
+    <div class="rgroup"><div class="rgroup-body">
+      <div class="split-lg">
+        <button class="rb lg" data-cmd="new-slide" data-icon="square-plus" title="New slide (Ctrl+M)"><span>New Slide</span></button>
+        <button class="rb split-caret" data-cmd="new-slide-menu" title="Choose a layout" data-icon="chevron-down"></button>
+      </div>
+      <button class="rb lg" data-cmd="duplicate-slide" data-icon="copy-plus" title="Duplicate the selected slides"><span>Duplicate Slide</span></button>
+    </div><div class="rgroup-label">Slides</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="insert-table" data-icon="table" title="Insert a table"><span>Table</span></button>
+    </div><div class="rgroup-label">Tables</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="insert-picture" data-icon="image" title="Insert a picture from this PC"><span>Pictures</span></button>
+      <button class="rb lg" data-cmd="insert-icon" data-icon="smile" title="Insert an icon"><span>Icons</span></button>
+    </div><div class="rgroup-label">Images</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="shapes-menu" data-icon="shapes" title="Insert a shape"><span>Shapes</span></button>
+      <button class="rb lg" data-cmd="insert-chart" data-icon="chart-column" title="Insert a chart"><span>Chart</span></button>
+    </div><div class="rgroup-label">Illustrations</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="insert-textbox" data-icon="text-cursor-input" title="Draw a text box"><span>Text Box</span></button>
+      <button class="rb lg" data-cmd="header-footer" data-icon="panel-bottom" title="Date, slide number and footer"><span>Header &amp; Footer</span></button>
+      <button class="rb lg" data-cmd="wordart" data-icon="wand-sparkles" title="Insert decorative text"><span>WordArt</span></button>
+      <div class="rcol">
+        <button class="rb md" data-cmd="insert-date" data-icon="calendar" title="Insert the current date">Date &amp; Time</button>
+        <button class="rb md" data-cmd="insert-slidenum" data-icon="hash" title="Insert the slide number">Slide Number</button>
+      </div>
+    </div><div class="rgroup-label">Text</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="insert-symbol" data-icon="omega" title="Insert a symbol"><span>Symbol</span></button>
+    </div><div class="rgroup-label">Symbols</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="new-comment" data-icon="message-square-plus" title="Add a comment to this slide"><span>Comment</span></button>
+    </div><div class="rgroup-label">Comments</div></div>
+  </section>
+
+  <!-- ================= DESIGN ================= -->
+  <section class="ribbon-panel" data-panel="design">
+    <div class="rgroup"><div class="rgroup-body">
+      <div class="theme-gal" id="theme-gal"></div>
+      <button class="rb gal-more" data-cmd="themes-more" data-icon="chevron-down" title="More themes"></button>
+    </div><div class="rgroup-label">Themes</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <div class="variant-gal" id="variant-gal"></div>
+    </div><div class="rgroup-label">Variants</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="slide-size" data-icon="ratio" title="Slide size"><span>Slide Size</span></button>
+      <button class="rb lg" data-cmd="format-bg" data-icon="paint-roller" title="Format background"><span>Format Background</span></button>
+    </div><div class="rgroup-label">Customize</div></div>
+  </section>
+
+  <!-- ================= TRANSITIONS ================= -->
+  <section class="ribbon-panel" data-panel="transitions">
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="preview-transition" data-icon="play" title="Preview the transition"><span>Preview</span></button>
+    </div><div class="rgroup-label">Preview</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <div class="fx-gal" id="trans-gal"></div>
+      <button class="rb lg" data-cmd="trans-options" data-icon="settings-2" title="Effect options"><span>Effect Options</span></button>
+    </div><div class="rgroup-label">Transition to This Slide</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <div class="rcol">
+        <label class="rlabel">Duration <input class="rinput num" type="number" min="0.1" max="10" step="0.1" id="trans-dur" data-cmd="trans-dur"> s</label>
+        <button class="rb md" data-cmd="trans-apply-all" data-icon="copy-check" title="Apply this transition to all slides">Apply To All</button>
+      </div>
+      <div class="rcol">
+        <label class="rlabel check-row"><input type="checkbox" id="trans-click" data-cmd="trans-click" checked> On Mouse Click</label>
+        <label class="rlabel check-row"><input type="checkbox" id="trans-auto-on" data-cmd="trans-auto-on"> After <input class="rinput num" type="number" min="0" step="0.5" id="trans-auto" data-cmd="trans-auto"> s</label>
+      </div>
+    </div><div class="rgroup-label">Timing</div></div>
+  </section>
+
+  <!-- ================= ANIMATIONS ================= -->
+  <section class="ribbon-panel" data-panel="animations">
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="preview-anim" data-icon="play" title="Preview the animations on this slide"><span>Preview</span></button>
+    </div><div class="rgroup-label">Preview</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <div class="fx-gal" id="anim-gal"></div>
+      <button class="rb lg" data-cmd="anim-options" data-icon="settings-2" title="Effect options"><span>Effect Options</span></button>
+    </div><div class="rgroup-label">Animation</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="anim-pane" data-icon="list-video" title="Show the animation pane" id="b-anim-pane"><span>Animation Pane</span></button>
+    </div><div class="rgroup-label">Advanced</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <div class="rcol">
+        <label class="rlabel">Start <select class="rsel" id="anim-trigger" data-cmd="anim-trigger"><option value="click">On Click</option><option value="with">With Previous</option><option value="after">After Previous</option></select></label>
+        <label class="rlabel">Duration <input class="rinput num" type="number" min="0.1" max="20" step="0.1" id="anim-dur" data-cmd="anim-dur"> s</label>
+        <label class="rlabel">Delay <input class="rinput num" type="number" min="0" max="60" step="0.1" id="anim-delay" data-cmd="anim-delay"> s</label>
+      </div>
+      <div class="rcol">
+        <button class="rb md" data-cmd="anim-earlier" data-icon="chevron-up" title="Play this animation earlier">Move Earlier</button>
+        <button class="rb md" data-cmd="anim-later" data-icon="chevron-down" title="Play this animation later">Move Later</button>
+      </div>
+    </div><div class="rgroup-label">Timing</div></div>
+  </section>
+
+  <!-- ================= SLIDE SHOW ================= -->
+  <section class="ribbon-panel" data-panel="show">
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="present-start" data-icon="presentation" title="From beginning (F5)"><span>From Beginning</span></button>
+      <button class="rb lg" data-cmd="present-current" data-icon="play" title="From current slide (Shift+F5)"><span>From Current Slide</span></button>
+      <button class="rb lg" data-cmd="present-window" data-icon="app-window" title="Play the slide show inside this window"><span>Reading View</span></button>
+    </div><div class="rgroup-label">Start Slide Show</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="hide-slide" data-icon="eye-off" title="Hide this slide during the slide show" id="b-hide"><span>Hide Slide</span></button>
+      <div class="rcol">
+        <label class="rlabel check-row"><input type="checkbox" id="show-loop" data-cmd="show-loop"> Loop until Esc</label>
+        <label class="rlabel check-row"><input type="checkbox" id="show-timings" data-cmd="show-timings" checked> Use timings</label>
+        <label class="rlabel check-row"><input type="checkbox" id="show-anims" data-cmd="show-anims" checked> Play animations</label>
+      </div>
+    </div><div class="rgroup-label">Set Up</div></div>
+  </section>
+
+  <!-- ================= REVIEW ================= -->
+  <section class="ribbon-panel" data-panel="review">
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg on" data-cmd="spelling" data-icon="spell-check" title="Check spelling as you type" id="b-spell"><span>Spelling</span></button>
+      <button class="rb lg" data-cmd="word-count" data-icon="letter-text" title="Count slides, words and characters"><span>Word Count</span></button>
+    </div><div class="rgroup-label">Proofing</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="new-comment" data-icon="message-square-plus" title="New comment"><span>New Comment</span></button>
+      <div class="rcol">
+        <button class="rb md" data-cmd="prev-comment" data-icon="chevron-left" title="Previous comment">Previous</button>
+        <button class="rb md" data-cmd="next-comment" data-icon="chevron-right" title="Next comment">Next</button>
+        <button class="rb md" data-cmd="delete-comments" data-icon="trash-2" title="Delete all comments on this slide">Delete</button>
+      </div>
+      <button class="rb lg" data-cmd="comments-pane" data-icon="message-square" title="Show comments" id="b-comments"><span>Show Comments</span></button>
+    </div><div class="rgroup-label">Comments</div></div>
+  </section>
+
+  <!-- ================= VIEW ================= -->
+  <section class="ribbon-panel" data-panel="view">
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="view-normal" data-icon="panel-left" title="Normal view" id="b-v-normal"><span>Normal</span></button>
+      <button class="rb lg" data-cmd="view-sorter" data-icon="layout-grid" title="Slide sorter" id="b-v-sorter"><span>Slide Sorter</span></button>
+      <button class="rb lg" data-cmd="view-notes" data-icon="notebook-pen" title="Notes page" id="b-v-notes"><span>Notes Page</span></button>
+      <button class="rb lg" data-cmd="present-window" data-icon="book-open" title="Reading view"><span>Reading View</span></button>
+    </div><div class="rgroup-label">Presentation Views</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <div class="rcol">
+        <label class="rlabel check-row"><input type="checkbox" id="v-ruler" data-cmd="toggle-ruler"> Ruler</label>
+        <label class="rlabel check-row"><input type="checkbox" id="v-grid" data-cmd="toggle-grid"> Gridlines</label>
+        <label class="rlabel check-row"><input type="checkbox" id="v-guides" data-cmd="toggle-guides"> Guides</label>
+      </div>
+      <div class="rcol">
+        <label class="rlabel check-row"><input type="checkbox" id="v-snap" data-cmd="toggle-snap" checked> Smart guides</label>
+        <label class="rlabel check-row"><input type="checkbox" id="v-notes" data-cmd="toggle-notes-check" checked> Notes</label>
+      </div>
+    </div><div class="rgroup-label">Show</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="zoom-dialog" data-icon="zoom-in" title="Zoom"><span>Zoom</span></button>
+      <button class="rb lg" data-cmd="zoom-fit" data-icon="scan" title="Fit slide to window"><span>Fit to Window</span></button>
+    </div><div class="rgroup-label">Zoom</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="theme-toggle" data-icon="moon" title="Switch between light and dark app theme"><span>Dark Mode</span></button>
+    </div><div class="rgroup-label">Appearance</div></div>
+  </section>
+
+  <!-- ================= FORMAT (contextual) ================= -->
+  <section class="ribbon-panel" data-panel="format">
+    <div class="rgroup" data-for="shape text"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="change-shape" data-icon="shapes" title="Change to another shape"><span>Change Shape</span></button>
+    </div><div class="rgroup-label">Insert Shapes</div></div>
+    <div class="rgroup" data-for="shape text icon"><div class="rgroup-body">
+      <div class="style-gal" id="style-gal"></div>
+      <div class="rcol">
+        <button class="rb md color-btn" data-cmd="shape-fill" data-icon="paint-bucket" title="Shape fill">Fill<span class="swatch" id="sw-fill2" style="background:#D9661A"></span></button>
+        <button class="rb md" data-cmd="shape-outline" data-icon="pen-line" title="Shape outline">Outline</button>
+        <button class="rb md" data-cmd="shape-effects" data-icon="sparkles" title="Shape effects">Effects</button>
+      </div>
+    </div><div class="rgroup-label">Shape Styles</div></div>
+    <div class="rgroup" data-for="shape text"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="text-effects" data-icon="wand-sparkles" title="Text effects (WordArt)"><span>Text Effects</span></button>
+      <div class="rcol">
+        <button class="rb md color-btn" data-cmd="font-color" data-icon="baseline" title="Text fill">Text Fill</button>
+        <button class="rb md" data-cmd="autofit-menu" data-icon="wrap-text" title="Text fitting">Autofit</button>
+      </div>
+    </div><div class="rgroup-label">WordArt Styles</div></div>
+    <div class="rgroup" data-for="image"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="crop" data-icon="crop" title="Crop the picture" id="b-crop"><span>Crop</span></button>
+      <div class="rcol">
+        <button class="rb md" data-cmd="pic-corners" data-icon="square-dashed" title="Rounded corners">Corners</button>
+        <button class="rb md" data-cmd="pic-replace" data-icon="image-plus" title="Change picture">Change</button>
+        <button class="rb md" data-cmd="pic-reset" data-icon="rotate-ccw" title="Reset crop and size">Reset</button>
+      </div>
+    </div><div class="rgroup-label">Picture</div></div>
+    <div class="rgroup" data-for="table"><div class="rgroup-body">
+      <div class="rcol">
+        <button class="rb md" data-cmd="tbl-row-above" data-icon="between-horizontal-start" title="Insert row above">Row Above</button>
+        <button class="rb md" data-cmd="tbl-row-below" data-icon="between-horizontal-end" title="Insert row below">Row Below</button>
+        <button class="rb md" data-cmd="tbl-del-row" data-icon="trash-2" title="Delete row">Delete Row</button>
+      </div>
+      <div class="rcol">
+        <button class="rb md" data-cmd="tbl-col-left" data-icon="between-vertical-start" title="Insert column left">Col Left</button>
+        <button class="rb md" data-cmd="tbl-col-right" data-icon="between-vertical-end" title="Insert column right">Col Right</button>
+        <button class="rb md" data-cmd="tbl-del-col" data-icon="trash-2" title="Delete column">Delete Col</button>
+      </div>
+      <div class="rcol">
+        <label class="rlabel check-row"><input type="checkbox" id="tbl-header" data-cmd="tbl-header"> Header Row</label>
+        <label class="rlabel check-row"><input type="checkbox" id="tbl-banded" data-cmd="tbl-banded"> Banded Rows</label>
+        <button class="rb md" data-cmd="tbl-color" data-icon="palette" title="Table style color">Style Color</button>
+      </div>
+      <button class="rb lg" data-cmd="tbl-cell-fill" data-icon="paint-bucket" title="Shade the current cell"><span>Cell Shading</span></button>
+    </div><div class="rgroup-label">Table</div></div>
+    <div class="rgroup" data-for="chart"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="chart-edit" data-icon="sheet" title="Edit chart data"><span>Edit Data</span></button>
+      <button class="rb lg" data-cmd="chart-type" data-icon="chart-pie" title="Change chart type"><span>Chart Type</span></button>
+    </div><div class="rgroup-label">Chart</div></div>
+    <div class="rgroup" data-for="any"><div class="rgroup-body">
+      <div class="rcol">
+        <button class="rb md" data-cmd="bring-forward-menu" data-icon="bring-to-front" title="Bring forward">Bring Forward</button>
+        <button class="rb md" data-cmd="send-backward-menu" data-icon="send-to-back" title="Send backward">Send Backward</button>
+        <button class="rb md" data-cmd="selection-pane" data-icon="layers-2" title="Selection pane">Selection Pane</button>
+      </div>
+      <div class="rcol">
+        <button class="rb md" data-cmd="align-menu" data-icon="align-start-vertical" title="Align objects">Align</button>
+        <button class="rb md" data-cmd="group-menu" data-icon="group" title="Group objects">Group</button>
+        <button class="rb md" data-cmd="rotate-menu" data-icon="rotate-cw" title="Rotate or flip">Rotate</button>
+      </div>
+    </div><div class="rgroup-label">Arrange</div></div>
+    <div class="rgroup" data-for="any"><div class="rgroup-body"><div class="rcol">
+      <label class="rlabel" title="Height">H <input class="rinput num" type="number" step="0.1" min="0.05" id="size-h" data-cmd="size-h"> in</label>
+      <label class="rlabel" title="Width">W <input class="rinput num" type="number" step="0.1" min="0.05" id="size-w" data-cmd="size-w"> in</label>
+      <label class="rlabel check-row"><input type="checkbox" id="size-lock" data-cmd="size-lock"> Lock aspect</label>
+    </div></div><div class="rgroup-label">Size</div></div>
+  </section>
+</div>
+
+<datalist id="font-list"></datalist>
+<datalist id="size-list"></datalist>
+
+<main id="workspace">
+  <aside id="rail" tabindex="0" aria-label="Slides"></aside>
+  <div id="center">
+    <div id="stage-area">
+      <div id="ruler-h" class="ruler h hidden"></div>
+      <div id="ruler-v" class="ruler v hidden"></div>
+      <div id="stage" tabindex="-1">
+        <div id="stage-inner"><div id="slide-host"></div></div>
+      </div>
+    </div>
+    <div id="notes-split" title="Drag to resize the notes pane"></div>
+    <div id="notes-wrap"><div id="notes" contenteditable="true" spellcheck="true" data-placeholder="Click to add notes"></div></div>
+  </div>
+  <div id="sorter" class="hidden" tabindex="0"></div>
+  <div id="notes-view" class="hidden"></div>
+  <aside class="pane hidden" id="side-pane"><header><span id="pane-title">Pane</span><button class="rb" data-cmd="close-pane" data-icon="x" title="Close"></button></header><div class="pane-body" id="pane-body"></div></aside>
+</main>
+<footer id="statusbar"></footer>
+<div id="print-root"></div>
+</body>
+</html>

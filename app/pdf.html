@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; font-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' data: blob:">
+<title>BTS PDF</title>
+<link rel="stylesheet" href="common/base.css">
+<link rel="stylesheet" href="pdf/pdf.css">
+<script src="common/icons.js"></script>
+<script src="common/shell.js"></script>
+<script type="module" src="pdf/app.js"></script>
+</head>
+<body data-app="pdf" data-tool="text" class="nodoc">
+<nav id="ribbon-tabs">
+  <button class="file-tab">File</button>
+  <button data-tab="home">Home</button>
+  <button data-tab="comment">Comment</button>
+  <button data-tab="tools">Tools</button>
+  <button data-tab="view">View</button>
+</nav>
+<div id="ribbon">
+  <!-- ================= HOME ================= -->
+  <section class="ribbon-panel" data-panel="home">
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="open" data-icon="folder-open" title="Open a PDF (Ctrl+O)"><span>Open</span></button>
+      <button class="rb lg needs-doc" data-cmd="print" data-icon="printer" title="Print (Ctrl+P)"><span>Print</span></button>
+    </div><div class="rgroup-label">File</div></div>
+
+    <div class="rgroup needs-doc"><div class="rgroup-body">
+      <div class="rcol">
+        <div class="rrow">
+          <button class="rb" data-cmd="first-page" data-icon="chevron-first" title="First page (Home)"></button>
+          <button class="rb" data-cmd="prev-page" data-icon="chevron-left" title="Previous page (Page Up)"></button>
+          <label class="pg-box"><input class="rinput" id="pg-input" data-cmd="goto-page" value="1" aria-label="Page number"><span id="pg-total">/ 1</span></label>
+          <button class="rb" data-cmd="next-page" data-icon="chevron-right" title="Next page (Page Down)"></button>
+          <button class="rb" data-cmd="last-page" data-icon="chevron-last" title="Last page (End)"></button>
+        </div>
+        <div class="rrow">
+          <button class="rb md" data-cmd="find" data-icon="search" title="Find text (Ctrl+F)">Find</button>
+        </div>
+      </div>
+    </div><div class="rgroup-label">Pages</div></div>
+
+    <div class="rgroup needs-doc"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="zoom-in" data-icon="zoom-in" title="Zoom in (Ctrl+=)"><span>Zoom in</span></button>
+      <button class="rb lg" data-cmd="zoom-out" data-icon="zoom-out" title="Zoom out (Ctrl+-)"><span>Zoom out</span></button>
+      <div class="rstack tight">
+        <button class="rb md" data-cmd="fit-width" data-fit="width" data-icon="move-horizontal" title="Fit the page width to the window">Fit width</button>
+        <button class="rb md" data-cmd="fit-page" data-fit="page" data-icon="expand" title="Show the whole page">Fit page</button>
+        <button class="rb md" data-cmd="actual-size" data-icon="ratio" title="Actual size (Ctrl+0)">Actual size</button>
+      </div>
+    </div><div class="rgroup-label">Zoom</div></div>
+
+    <div class="rgroup needs-doc"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="rotate-left" data-icon="rotate-ccw" title="Rotate view left"><span>Rotate left</span></button>
+      <button class="rb lg" data-cmd="rotate-right" data-icon="rotate-cw" title="Rotate view right"><span>Rotate right</span></button>
+    </div><div class="rgroup-label">Rotate</div></div>
+
+    <div class="rgroup needs-doc"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="tool" data-tool="text" data-icon="text-cursor" title="Select text and annotations"><span>Select</span></button>
+      <button class="rb lg" data-cmd="tool" data-tool="hand" data-icon="hand" title="Hand tool: drag to scroll"><span>Hand</span></button>
+      <button class="rb lg" data-cmd="tool" data-tool="highlight" data-icon="highlighter" title="Highlight text"><span>Highlight</span></button>
+    </div><div class="rgroup-label">Tools</div></div>
+  </section>
+
+  <!-- ================= COMMENT ================= -->
+  <section class="ribbon-panel" data-panel="comment">
+    <div class="rgroup needs-doc"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="tool" data-tool="text" data-icon="mouse-pointer-2" title="Select text, click an annotation to select or move it"><span>Select</span></button>
+      <button class="rb lg" data-cmd="tool" data-tool="hand" data-icon="hand" title="Hand tool: drag to scroll"><span>Hand</span></button>
+    </div><div class="rgroup-label">Select</div></div>
+
+    <div class="rgroup needs-doc"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="tool" data-tool="highlight" data-icon="highlighter" title="Highlight: select text to highlight it"><span>Highlight</span></button>
+      <button class="rb lg" data-cmd="tool" data-tool="underline" data-icon="underline" title="Underline: select text to underline it"><span>Underline</span></button>
+      <button class="rb lg" data-cmd="tool" data-tool="strike" data-icon="strikethrough" title="Strikeout: select text to strike it out"><span>Strikeout</span></button>
+    </div><div class="rgroup-label">Text markup</div></div>
+
+    <div class="rgroup needs-doc"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="tool" data-tool="note" data-icon="sticky-note" title="Sticky note: click on the page to add a note"><span>Sticky note</span></button>
+      <button class="rb lg" data-cmd="tool" data-tool="textbox" data-icon="type" title="Text box: click on the page to type text"><span>Text box</span></button>
+    </div><div class="rgroup-label">Comments</div></div>
+
+    <div class="rgroup needs-doc"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="tool" data-tool="pen" data-icon="pen-line" title="Freehand pen"><span>Pen</span></button>
+      <div class="rcol">
+        <div class="rrow">
+          <button class="rb" data-cmd="tool" data-tool="rect" data-icon="square" title="Rectangle"></button>
+          <button class="rb" data-cmd="tool" data-tool="ellipse" data-icon="circle" title="Ellipse"></button>
+          <button class="rb" data-cmd="tool" data-tool="arrow" data-icon="move-up-right" title="Arrow"></button>
+        </div>
+        <div class="rrow">
+          <select class="rsel" id="width-sel" data-cmd="width" title="Line width">
+            <option value="1">1 pt</option><option value="2" selected>2 pt</option><option value="3">3 pt</option>
+            <option value="4">4 pt</option><option value="6">6 pt</option><option value="8">8 pt</option><option value="12">12 pt</option>
+          </select>
+        </div>
+      </div>
+    </div><div class="rgroup-label">Draw</div></div>
+
+    <div class="rgroup needs-doc"><div class="rgroup-body">
+      <div class="rcol">
+        <div class="rrow">
+          <button class="rb md color-btn" data-cmd="color" title="Color for the current tool or selected annotation" id="color-btn"><span class="sw-dot" id="color-dot"></span>Color<svg class="ic caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></button>
+        </div>
+        <div class="rrow swatches">
+          <button class="rb sw" data-cmd="swatch" data-c="#FFD400" style="--c:#FFD400" title="Yellow"></button>
+          <button class="rb sw" data-cmd="swatch" data-c="#5BD15B" style="--c:#5BD15B" title="Green"></button>
+          <button class="rb sw" data-cmd="swatch" data-c="#4FC3F7" style="--c:#4FC3F7" title="Blue"></button>
+          <button class="rb sw" data-cmd="swatch" data-c="#FF7EB6" style="--c:#FF7EB6" title="Pink"></button>
+          <button class="rb sw" data-cmd="swatch" data-c="#D93025" style="--c:#D93025" title="Red"></button>
+          <button class="rb sw" data-cmd="swatch" data-c="#1A56DB" style="--c:#1A56DB" title="Dark blue"></button>
+          <button class="rb sw" data-cmd="swatch" data-c="#172033" style="--c:#172033" title="Black"></button>
+        </div>
+      </div>
+    </div><div class="rgroup-label">Color</div></div>
+
+    <div class="rgroup needs-doc"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="tool" data-tool="eraser" data-icon="eraser" title="Eraser: click or drag over annotations to remove them"><span>Eraser</span></button>
+      <button class="rb lg" data-cmd="delete-annot" data-icon="trash-2" title="Delete the selected annotation (Delete)"><span>Delete</span></button>
+      <div class="rstack tight">
+        <button class="rb md" data-cmd="undo" data-icon="undo-2" title="Undo (Ctrl+Z)">Undo</button>
+        <button class="rb md" data-cmd="redo" data-icon="redo-2" title="Redo (Ctrl+Y)">Redo</button>
+        <button class="rb md" data-cmd="clear-page" data-icon="file-x" title="Remove all annotations on this page">Clear page</button>
+      </div>
+    </div><div class="rgroup-label">Edit</div></div>
+  </section>
+
+  <!-- ================= TOOLS ================= -->
+  <section class="ribbon-panel" data-panel="tools">
+    <div class="rgroup needs-doc"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="combine" data-icon="combine" title="Add the pages of another PDF to the end of this one"><span>Combine PDFs</span></button>
+      <button class="rb lg" data-cmd="extract-page" data-icon="file-output" title="Save the current page as a separate PDF"><span>Extract page</span></button>
+      <button class="rb lg" data-cmd="page-image" data-icon="image" title="Save the current page as a PNG picture"><span>Page as image</span></button>
+    </div><div class="rgroup-label">Pages</div></div>
+    <div class="rgroup needs-doc"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="copy-page-text" data-icon="clipboard-copy" title="Copy all text on the current page"><span>Copy page text</span></button>
+      <button class="rb lg" data-cmd="properties" data-icon="info" title="Document properties"><span>Properties</span></button>
+    </div><div class="rgroup-label">Document</div></div>
+  </section>
+
+  <!-- ================= VIEW ================= -->
+  <section class="ribbon-panel" data-panel="view">
+    <div class="rgroup needs-doc"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="mode" data-mode="single" data-icon="rectangle-vertical" title="One page at a time"><span>Single page</span></button>
+      <button class="rb lg" data-cmd="mode" data-mode="continuous" data-icon="scroll-text" title="Scroll through all pages"><span>Continuous</span></button>
+      <button class="rb lg" data-cmd="mode" data-mode="spread" data-icon="book-open" title="Two pages side by side"><span>Two-page</span></button>
+    </div><div class="rgroup-label">Page layout</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="sidebar" data-pane="thumbs" data-icon="gallery-vertical-end" title="Page thumbnails"><span>Thumbnails</span></button>
+      <button class="rb lg" data-cmd="sidebar" data-pane="outline" data-icon="list-tree" title="Bookmarks / outline"><span>Bookmarks</span></button>
+    </div><div class="rgroup-label">Sidebar</div></div>
+    <div class="rgroup needs-doc"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="dark-read" data-icon="moon" title="Dark reading mode: inverts page colors to rest your eyes"><span>Dark pages</span></button>
+      <button class="rb lg" data-cmd="fullscreen" data-icon="fullscreen" title="Full screen reading (Esc to exit)"><span>Full screen</span></button>
+    </div><div class="rgroup-label">Reading</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="theme-toggle" data-icon="sun-moon" title="Switch light / dark theme"><span>App theme</span></button>
+    </div><div class="rgroup-label">Theme</div></div>
+  </section>
+</div>
+
+<main id="workspace">
+  <aside id="sidebar" class="hidden">
+    <header>
+      <div class="sb-tabs" role="tablist">
+        <button data-cmd="sidebar-pane" data-pane="thumbs" role="tab">Pages</button>
+        <button data-cmd="sidebar-pane" data-pane="outline" role="tab">Bookmarks</button>
+      </div>
+      <button class="rb" data-cmd="sidebar-close" data-icon="panel-left-close" title="Hide sidebar"></button>
+    </header>
+    <div class="sb-pane" id="thumbs" data-pane="thumbs"></div>
+    <div class="sb-pane" id="outline" data-pane="outline"></div>
+  </aside>
+  <div id="viewer-wrap">
+    <div id="viewer" tabindex="0">
+      <div id="pages"></div>
+      <div id="empty">
+        <div class="drop">
+          <div class="drop-art" aria-hidden="true"><div class="sheet s1"></div><div class="sheet s2"></div><div class="sheet s3"><span>PDF</span></div></div>
+          <h1>Open a PDF to start reading</h1>
+          <p>Drag a PDF file here, or choose one from your computer.<br>Highlight, draw and add notes, then save a copy with your annotations.</p>
+          <button class="btn primary big" data-cmd="open" data-icon="folder-open">Open a PDF</button>
+          <div class="recent-wrap hidden" id="recent-wrap"><h2>Recent PDFs</h2><div id="recent-list"></div></div>
+        </div>
+      </div>
+    </div>
+    <div id="findbar" class="hidden" data-own-keys>
+      <span class="fb-ic" data-icon="search"></span>
+      <input id="find-input" placeholder="Find in document" spellcheck="false" aria-label="Find text">
+      <span id="find-count"></span>
+      <button class="rb" data-cmd="find-case" id="find-case" data-icon="case-sensitive" title="Match case"></button>
+      <button class="rb" data-cmd="find-prev" data-icon="chevron-up" title="Previous match (Shift+Enter)"></button>
+      <button class="rb" data-cmd="find-next" data-icon="chevron-down" title="Next match (Enter)"></button>
+      <button class="rb" data-cmd="find-close" data-icon="x" title="Close (Esc)"></button>
+    </div>
+    <div id="reading-hud"><span id="hud-page"></span><button class="rb" data-cmd="fullscreen" data-icon="minimize" title="Exit full screen (Esc)"></button></div>
+  </div>
+</main>
+<div id="print-root" aria-hidden="true"></div>
+<footer id="statusbar"></footer>
+</body>
+</html>
