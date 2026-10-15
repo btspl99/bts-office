@@ -22,32 +22,26 @@
   const firstFamily = (ff) => (ff || '').split(',')[0].trim().replace(/^["']|["']$/g, '');
   const HIGHLIGHTS = { FFFF00: 'yellow', '00FF00': 'green', '00FFFF': 'cyan', FF00FF: 'magenta', '0000FF': 'blue', FF0000: 'red', '000080': 'darkBlue', '008080': 'darkCyan', '008000': 'darkGreen', '800080': 'darkMagenta', '800000': 'darkRed', '808000': 'darkYellow', '808080': 'darkGray', C0C0C0: 'lightGray', '000000': 'black' };
 
+  /** Resolved formatting of each named style, used as the "base" so runs only carry direct formatting. */
+  const SID = { Normal: 'normal', NoSpacing: 'nospace', Title: 'title', Subtitle: 'subtitle', Heading1: 'h1', Heading2: 'h2', Heading3: 'h3', Heading4: 'h4', Heading5: 'h5', Heading6: 'h6', Quote: 'quote', IntenseQuote: 'iquote', Caption: 'caption', Code: 'code', ListParagraph: 'listpara' };
+  D.DOCX_SID = SID;
+  const toBase = (r) => ({ font: r.font, size: r.size || 11, color: String(D.resolveColor(r.color) || '#111111').replace('#', '').toUpperCase(), bold: !!r.bold, italic: !!r.italic, caps: !!r.caps, smallcaps: !!r.smallcaps });
   function bases() {
-    const th = D.theme(); const head = D.design.headFont || th.head, body = D.design.bodyFont || th.body;
-    const acc = th.accent.slice(1).toUpperCase(), dark = th.dark.slice(1).toUpperCase();
-    const N = { font: body, size: 11, color: '111111', bold: false, italic: false };
-    return {
-      acc, dark, head, body,
-      Normal: N, NoSpacing: N, ListParagraph: N, TOC1: N, TOC2: N, TOC3: N,
-      Title: { font: head, size: 28, color: dark, bold: false, italic: false },
-      Subtitle: { font: body, size: 13, color: '5A6275', bold: false, italic: false },
-      Heading1: { font: head, size: 16, color: acc, bold: false, italic: false },
-      Heading2: { font: head, size: 13, color: acc, bold: false, italic: false },
-      Heading3: { font: head, size: 12, color: dark, bold: false, italic: false },
-      Heading4: { font: head, size: 11, color: acc, bold: false, italic: true },
-      Heading5: { font: head, size: 11, color: dark, bold: false, italic: false },
-      Heading6: { font: head, size: 11, color: dark, bold: false, italic: false },
-      Quote: { font: body, size: 11, color: '404654', bold: false, italic: true },
-      Code: { font: 'Consolas', size: 10, color: '1D2433', bold: false, italic: false },
-      Caption: { font: body, size: 9, color: dark, bold: false, italic: true },
-    };
+    const out = { acc: D.accent().slice(1).toUpperCase(), dark: D.darkColor().slice(1).toUpperCase(), head: D.headFont(), body: D.bodyFont() };
+    Object.entries(SID).forEach(([k, id]) => { out[k] = toBase(D.resolvedStyle(id)); });
+    ['TOC1', 'TOC2', 'TOC3', 'Bibliography', 'TableofFigures'].forEach(k => out[k] = out.Normal);
+    (D.design.customStyles || []).forEach(u => { if (u.type !== 'c') out['BTSU' + u.id] = toBase(D.resolvedStyle(u.id)); });
+    return out;
   }
 
   function styleIdOf(el) {
     const t = el.tagName;
     if (/^H[1-6]$/.test(t)) return 'Heading' + t[1];
     if (t === 'PRE') return 'Code';
-    if (el.closest('blockquote') && D.rootOf(el)) return 'Quote';
+    const bq = el.closest('blockquote'); if (bq && D.rootOf(el)) return bq.classList.contains('intense') ? 'IntenseQuote' : 'Quote';
+    if (el.classList.contains('bib-entry')) return 'Bibliography';
+    if (el.classList.contains('listpara')) return 'ListParagraph';
+    const us = [...el.classList].find(c => c.startsWith('us-')); if (us && D.findStyle(us.slice(3))) return 'BTSU' + us.slice(3);
     if (el.classList.contains('title')) return 'Title';
     if (el.classList.contains('subtitle')) return 'Subtitle';
     if (el.classList.contains('nospace')) return 'NoSpacing';
@@ -80,7 +74,9 @@
     const X = window.docx; if (!X) throw new Error('DOCX library failed to load');
     D.endPreview(); D.clearCellSel && D.clearCellSel();
     const oldZoom = D.zoom; if (oldZoom !== 100) D.setZoom(100);
-    try { return await build(X); } finally { if (oldZoom !== 100) D.setZoom(oldZoom); }
+    const mmPrev = D.mm && D.mm.preview; if (mmPrev) D.mmPreview(false);
+    document.body.classList.add('exporting');
+    try { return await build(X); } finally { document.body.classList.remove('exporting'); if (oldZoom !== 100) D.setZoom(oldZoom); if (mmPrev) D.mmPreview(true); }
   };
 
   async function build(X) {
@@ -100,8 +96,14 @@
     const safeId = (id) => { let s = String(id).replace(/[^A-Za-z0-9_]/g, '_'); if (!/^[A-Za-z_]/.test(s)) s = '_' + s; return s.slice(0, 40); };
 
     /* ---------- runs ---------- */
+    const CHAR_RSTYLE = { emphasis: 'Emphasis', strong: 'Strong', 'subtle-em': 'SubtleEmphasis', 'intense-em': 'IntenseEmphasis', 'subtle-ref': 'SubtleReference', 'intense-ref': 'IntenseReference', 'book-title': 'BookTitle' };
+    const fontAttrs = (fam) => ({ ascii: fam, hAnsi: fam, eastAsia: fam, cs: D.csFontFor(fam) });
     function runProps(el, block, base, inLink) {
       const cs = getComputedStyle(el); const o = {};
+      // character style (or citation) → run style; compare against base + style so only direct formatting is written
+      let cst = null, isCite = false;
+      for (let a = el; a && a !== block && !D.isRoot(a); a = a.parentElement) { if (!cst && a.classList) { const c = [...a.classList].find(x => x.startsWith('cs-')); if (c && D.findStyle(c.slice(3))) cst = c.slice(3); } if (a.classList && a.classList.contains('cite')) isCite = true; }
+      if (cst) { const r = D.styleDef(cst); base = Object.assign({}, base); if (r.font) base.font = D.resolveFont(r.font); if (r.size) base.size = r.size; if (r.color) base.color = String(D.resolveColor(r.color)).replace('#', '').toUpperCase(); if (r.bold !== undefined) base.bold = !!r.bold; if (r.italic !== undefined) base.italic = !!r.italic; if (r.caps !== undefined) base.caps = !!r.caps; if (r.smallcaps !== undefined) base.smallcaps = !!r.smallcaps; }
       let deco = new Set(), bg = null, va = null, sizeEl = el;
       for (let a = el; a; a = a.parentElement) {
         const s = a === el ? cs : getComputedStyle(a);
@@ -110,7 +112,7 @@
         if (!bg && !a.matches('.cmt,.eq,.fld,.fn-ref,a')) bg = hex(s.backgroundColor);
         if (!va && (s.verticalAlign === 'super' || s.verticalAlign === 'sub')) { va = s.verticalAlign; sizeEl = a.parentElement; }
       }
-      const fam = firstFamily(cs.fontFamily); if (fam && fam.toLowerCase() !== String(base.font).toLowerCase()) o.font = fam;
+      const fam = firstFamily(cs.fontFamily); if (fam && fam.toLowerCase() !== String(base.font).toLowerCase()) o.font = fontAttrs(fam);
       const sz = Math.round(parseFloat(getComputedStyle(sizeEl).fontSize) * 0.75 * 2) / 2; if (sz && Math.abs(sz - base.size) > 0.01) o.size = Math.round(sz * 2);
       const bold = +cs.fontWeight >= 600; if (bold !== base.bold) o.bold = bold;
       const ital = cs.fontStyle === 'italic' || cs.fontStyle.startsWith('oblique'); if (ital !== base.italic) o.italics = ital;
@@ -119,22 +121,34 @@
       const col = hex(cs.color); if (col && col !== base.color && !(inLink && col === '1F5FD6') && !(base.color === '111111' && col === '000000')) o.color = col;
       if (bg) { if (HIGHLIGHTS[bg]) o.highlight = HIGHLIGHTS[bg]; else o.shading = { type: X.ShadingType.CLEAR, fill: bg, color: 'auto' }; }
       if (va === 'super') o.superScript = true; else if (va === 'sub') o.subScript = true;
-      if (cs.textTransform === 'uppercase') o.allCaps = true;
-      if (cs.fontVariantCaps === 'small-caps' || cs.fontVariant === 'small-caps') o.smallCaps = true;
+      if ((cs.textTransform === 'uppercase') !== !!base.caps) o.allCaps = cs.textTransform === 'uppercase';
+      const sc = cs.fontVariantCaps === 'small-caps' || cs.fontVariant === 'small-caps'; if (sc !== !!base.smallcaps) o.smallCaps = sc;
+      if (cst) o.style = CHAR_RSTYLE[cst] || 'BTSU' + cst;
+      if (isCite) o.style = 'BTSCitation';
       if (inLink) o.style = 'Hyperlink';
       return o;
     }
+    let curTC = null, tcSeq = 9001;
+    const tcDate = (t) => { const d = new Date(t || Date.now()); return (isNaN(d) ? new Date() : d).toISOString().replace(/\.\d+Z$/, 'Z'); };
+    function mkRun(o) {
+      if (!curTC) return new X.TextRun(o);
+      const opts = { ...o, id: tcSeq++, author: curTC.author || 'Unknown', date: tcDate(curTC.time) };
+      return curTC.kind === 'ins' ? new X.InsertedTextRun(opts) : new X.DeletedTextRun(opts);
+    }
+    /** w:fldSimple whose cached result keeps the surrounding run formatting. */
+    function field(instr, text, props) { const f = new X.SimpleField(instr); f.root.push(new X.TextRun({ ...props, text })); return f; }
     function textRuns(text, props, pre) {
       text = text.replace(/​/g, '');
       if (!pre) text = text.replace(/ /g, ' ');
       if (!text) return [];
+      if (D.hasDevanagari(text)) props = { ...props, language: { value: 'en-IN', bidirectional: 'hi-IN' } };
       const out = [];
       const lines = pre ? text.split('\n') : [text];
       lines.forEach((ln, li) => {
         const parts = ln.split('\t'); const children = [];
         parts.forEach((p, i) => { if (i) children.push(new X.Tab()); if (p) children.push(p); });
-        if (li > 0) out.push(new X.TextRun({ ...props, break: 1 }));
-        if (children.length) out.push(new X.TextRun({ ...props, children }));
+        if (li > 0) out.push(mkRun({ ...props, break: 1 }));
+        if (children.length) out.push(mkRun({ ...props, children }));
       });
       return out;
     }
@@ -147,6 +161,7 @@
       const opts = { type: im.type, data: im.data, transformation: { width: Math.round(w), height: Math.round(h) }, altText: { name: 'Picture', description: img.alt || '', title: img.alt || '' } };
       const side = img.classList.contains('img-left') ? 'left' : img.classList.contains('img-right') ? 'right' : null;
       if (side) opts.floating = { horizontalPosition: { relative: X.HorizontalPositionRelativeFrom.COLUMN, align: side === 'left' ? X.HorizontalPositionAlign.LEFT : X.HorizontalPositionAlign.RIGHT }, verticalPosition: { relative: X.VerticalPositionRelativeFrom.PARAGRAPH, offset: 0 }, wrap: { type: X.TextWrappingType.SQUARE, side: X.TextWrappingSide.BOTH_SIDES }, margins: { left: 114300, right: 114300, top: 38100, bottom: 38100 } };
+      if (img.dataset.decorative) opts.altText = { name: 'Decorative picture', description: '', title: '' };
       if (img.classList.contains('img-border')) opts.outline = { type: 'solidFill', solidFillType: 'rgb', value: '3C4250', width: 9525 };
       return new X.ImageRun(opts);
     }
@@ -161,6 +176,13 @@
           if (t === 'BR') { if (n.nextSibling || n.previousSibling) { const nx = n.nextSibling; if (!(nx == null || (nx.nodeType === 3 && !nx.data.trim() && !nx.nextSibling))) sink.push(new X.TextRun({ break: 1 })); } continue; }
           if (t === 'IMG') { const r = imageRun(n, base, ctx.hf); if (r) sink.push(r); continue; }
           if (n.classList.contains('fn-ref')) { fnSeq++; footnotes[fnSeq] = { children: [new X.Paragraph({ children: [new X.TextRun({ text: n.dataset.text || '', size: 18 })] })] }; sink.push(new X.FootnoteReferenceRun(fnSeq)); continue; }
+          if (n.classList.contains('tc-ins') || n.classList.contains('tc-del')) {
+            const prev = curTC; curTC = { kind: n.classList.contains('tc-ins') ? 'ins' : 'del', author: n.dataset.author, time: n.dataset.time };
+            if (prev && prev.kind === 'del') curTC = prev; // a deletion inside an insertion stays deleted
+            walk(n, sink, inLink); curTC = prev; continue;
+          }
+          if (n.classList.contains('seq')) { if (curTC) { sink.push(...textRuns(n.textContent, runProps(n, block, base, false))); continue; } sink.push(field(`SEQ ${(n.dataset.seq || 'Figure').replace(/[^A-Za-z]/g, '')} \\* ARABIC`, n.textContent || '1', runProps(n, block, base, false))); continue; }
+          if (n.classList.contains('mf')) { if (curTC) { sink.push(...textRuns('«' + n.dataset.field + '»', runProps(n, block, base, false))); continue; } sink.push(field(` MERGEFIELD ${/\s/.test(n.dataset.field || '') ? '"' + n.dataset.field.replace(/"/g, '') + '"' : (n.dataset.field || 'Field')} `, '«' + (n.dataset.field || 'Field') + '»', runProps(n, block, base, false))); continue; }
           if (n.classList.contains('fld')) { const p = runProps(n, block, base, false); sink.push(new X.TextRun({ ...p, children: [n.dataset.fld === 'pages' ? X.PageNumber.TOTAL_PAGES : X.PageNumber.CURRENT] })); continue; }
           if (n.classList.contains('tab')) { sink.push(new X.TextRun({ ...runProps(n, block, base, inLink), children: [new X.Tab()] })); continue; }
           if (n.classList.contains('frac')) { const [a, b] = n.children; const p = runProps(n, block, base, inLink); const wrap = (s) => s.length > 1 ? '(' + s + ')' : s; sink.push(new X.TextRun({ ...p, text: wrap(a ? a.textContent : '') + '/' + wrap(b ? b.textContent : '') })); continue; }
@@ -194,15 +216,22 @@
       const cs = getComputedStyle(el);
       const o = { children: inlineChildren(el, base, ctx) };
       if (HEADINGS[sid]) o.heading = HEADINGS[sid]; else if (sid !== 'Normal') o.style = sid;
-      const al = AL[cs.textAlign]; if (al) o.alignment = al;
-      // spacing (emulate CSS margin collapsing between siblings)
+      const sdef = SID[sid] ? D.resolvedStyle(SID[sid]) : (/^BTSU/.test(sid) ? D.resolvedStyle(sid.slice(4)) : D.resolvedStyle('normal'));
+      const direct = !!(el.style.marginTop || el.style.marginBottom || el.style.lineHeight || el.closest('td,th,li,.textbox,.cols') || ctx.hf || el.closest('.biblio,.toc'));
+      const al = AL[cs.textAlign]; const styleAl = sdef.align || 'left'; const curAl = cs.textAlign.replace('start', 'left').replace(/^end$/, 'right');
+      if (el.style.textAlign || curAl !== styleAl) o.alignment = al || X.AlignmentType.LEFT;
+      // spacing (emulate CSS margin collapsing between siblings); paragraphs without direct spacing use the style's
       const fs = parseFloat(cs.fontSize) || 14.67;
       const before = parseFloat(cs.marginTop) || 0, after = parseFloat(cs.marginBottom) || 0;
-      const spacing = { before: tw(Math.max(0, before - (ctx.prevAfter || 0))), after: tw(after) };
-      const lh = parseFloat(cs.lineHeight); if (lh && cs.lineHeight !== 'normal') { spacing.line = Math.round(lh / fs * 240); spacing.lineRule = X.LineRuleType.AUTO; }
-      o.spacing = spacing; ctx.prevAfter = after;
+      if (direct || ctx.prevAfterDirect) {
+        const spacing = { before: tw(Math.max(0, before - (ctx.prevAfter || 0))), after: tw(after) };
+        const lh = parseFloat(cs.lineHeight); if (lh && cs.lineHeight !== 'normal') { spacing.line = Math.round(lh / fs * 240); spacing.lineRule = X.LineRuleType.AUTO; }
+        o.spacing = spacing;
+      }
+      ctx.prevAfter = after; ctx.prevAfterDirect = direct && !!el.style.marginBottom;
       // indents relative to the container's content box
-      if (!extra.numbering && ctx.box) {
+      const styleIndentOnly = !el.style.marginLeft && !el.style.textIndent && !el.style.paddingLeft && !el.closest('td,th,.textbox') && !ctx.hf && (sid === 'Quote' || sid === 'IntenseQuote' || sid === 'ListParagraph' || sid === 'Bibliography' || /^BTSU/.test(sid) || sid === 'Code' || ((sdef.indent || sdef.firstLine) && !!ctx.box));
+      if (!extra.numbering && ctx.box && !styleIndentOnly) {
         const r = el.getBoundingClientRect();
         let left = r.left - ctx.box.left, right = ctx.box.right - r.right;
         if (ctx.inCols) { left = parseFloat(cs.marginLeft) || 0; right = parseFloat(cs.marginRight) || 0; }
@@ -215,7 +244,7 @@
       }
       if (extra.numbering) o.numbering = extra.numbering;
       // borders & shading (paragraph itself, or enclosing blockquote / pre)
-      if (el.tagName !== 'TD' && el.tagName !== 'TH') {
+      if (el.tagName !== 'TD' && el.tagName !== 'TH' && !((sid === 'Quote' || sid === 'IntenseQuote' || sid === 'Code') && !el.style.borderLeft && !el.style.backgroundColor)) {
         const bq = el.closest('blockquote'); const src = el.tagName === 'PRE' ? cs : (bq && D.rootOf(bq) ? getComputedStyle(bq) : cs);
         const bd = {}; ['Top', 'Bottom', 'Left', 'Right'].forEach(s => { const b = borderOf(src === cs ? cs : src, s); if (b && (src === cs || s === 'Left')) bd[s.toLowerCase()] = b; });
         if (Object.keys(bd).length) o.border = bd;
@@ -290,7 +319,7 @@
           o.margins = { left: tw(pl), right: tw(parseFloat(cs.paddingRight) || 0), top: tw(pt), bottom: tw(parseFloat(cs.paddingBottom) || 0) };
           return new X.TableCell(o);
         });
-        const header = ri === 0 && /t-(header|banded|dark|grid-accent|light|minimal)/.test(t.className) && !t.classList.contains('t-noheader');
+        const header = ri === 0 && (/t-(header|banded|dark|grid-accent|light|minimal|hrow)/.test(t.className) || [...row.cells].every(c => c.tagName === 'TH')) && !t.classList.contains('t-noheader');
         return new X.TableRow({ children: cells, tableHeader: header || undefined, cantSplit: true });
       });
       const tbl = { rows, columnWidths: colTw, width: { size: colTw.reduce((a, b) => a + b, 0), type: X.WidthType.DXA }, layout: X.TableLayoutType.FIXED, borders: { top: NONE, bottom: NONE, left: NONE, right: NONE, insideHorizontal: NONE, insideVertical: NONE } };
@@ -303,12 +332,12 @@
 
     /* ---------- TOC ---------- */
     function tocBlocks(toc, ctx) {
-      const out = []; const title = toc.querySelector('.toc-title');
+      const out = []; const title = toc.querySelector('.toc-title'); const tof = toc.classList.contains('tof');
       if (title) out.push(new X.Paragraph({ style: 'TOCHeading', children: [new X.TextRun(title.textContent)] }));
       $$('p[data-target]', toc).forEach(p => {
         const lvl = +((p.className.match(/toc-l(\d)/) || [, 1])[1]);
         const text = p.querySelector('.toc-t').textContent, num = p.querySelector('.toc-n').textContent;
-        out.push(new X.Paragraph({ style: 'TOC' + lvl, tabStops: [{ type: X.TabStopType.RIGHT, position: contentTw - 10, leader: X.LeaderType.DOT }], children: [new X.InternalHyperlink({ anchor: safeId(p.dataset.target), children: [new X.TextRun(text), new X.TextRun({ children: [new X.Tab(), num] })] })] }));
+        out.push(new X.Paragraph({ style: tof ? 'TableofFigures' : 'TOC' + lvl, tabStops: [{ type: X.TabStopType.RIGHT, position: contentTw - 10, leader: X.LeaderType.DOT }], children: [new X.InternalHyperlink({ anchor: safeId(p.dataset.target), children: [new X.TextRun(text), new X.TextRun({ children: [new X.Tab(), num] })] })] }));
       });
       if (!out.length) out.push(new X.Paragraph(''));
       ctx.prevAfter = 8;
@@ -402,46 +431,125 @@
       children: sectionsChildren[i].length ? sectionsChildren[i] : [new X.Paragraph('')],
     }));
 
-    /* ---------- styles ---------- */
+    /* ---------- styles (real named styles in w:styles) ---------- */
     const ps2 = D.design.pspacing || { after: 8, line: 1.15, before: 0 };
-    const run = (b, extra = {}) => ({ font: b.font, size: b.size * 2, color: b.color, bold: b.bold, italics: b.italic, ...extra });
+    const RS = (id) => D.resolvedStyle(id);
+    const normalAfter = RS('normal').after || 0;
+    const runOf = (r, isChar) => {
+      const o = {};
+      if (r.font) { const f = D.resolveFont(r.font); o.font = { ascii: f, hAnsi: f, eastAsia: f, cs: D.csFontFor(f) }; }
+      if (r.size) o.size = Math.round(r.size * 2);
+      if (r.color) o.color = String(D.resolveColor(r.color)).replace('#', '').toUpperCase();
+      if (r.bold !== undefined || !isChar) o.bold = !!r.bold;
+      if (r.italic !== undefined || !isChar) o.italics = !!r.italic;
+      if (r.underline) o.underline = { type: X.UnderlineType.SINGLE };
+      if (r.caps) o.allCaps = true; if (r.smallcaps) o.smallCaps = true;
+      if (r.letter) o.characterSpacing = Math.round(r.letter * 20);
+      return o;
+    };
+    const paraOf = (r, id) => {
+      const o = { spacing: { before: Math.round(Math.max(0, (r.before || 0) - (id === 'normal' ? 0 : normalAfter)) * 20), after: Math.round((r.after || 0) * 20), line: Math.round((r.line || 1) * 240), lineRule: X.LineRuleType.AUTO } };
+      if (r.align && r.align !== 'left') o.alignment = AL[r.align] || X.AlignmentType.LEFT;
+      const ind = {}; if (r.indent) ind.left = Math.round(r.indent / 2.54 * 1440); if (r.firstLine > 0) ind.firstLine = Math.round(r.firstLine / 2.54 * 1440); else if (r.firstLine < 0) ind.hanging = Math.round(-r.firstLine / 2.54 * 1440); if (Object.keys(ind).length) o.indent = ind;
+      if (/^h[1-6]$|^title$/.test(id)) { o.keepNext = true; o.keepLines = true; }
+      return o;
+    };
+    const full = (id) => { const r = RS(id); return { run: runOf(r), paragraph: paraOf(r, id) }; };
+    const nb = RS('normal');
+    const accHex = D.accent().slice(1).toUpperCase();
+    const pstyle = (docxId, name, id, extra = {}) => { const f = full(id); return { id: docxId, name, basedOn: 'Normal', next: 'Normal', quickFormat: true, run: { ...f.run, ...(extra.run || {}) }, paragraph: { ...f.paragraph, ...(extra.paragraph || {}) } }; };
     const styles = {
       default: {
-        document: { run: { font: B.body, size: 22, color: '111111' }, paragraph: { spacing: { after: Math.round(ps2.after * 20), before: Math.round((ps2.before || 0) * 20), line: Math.round(ps2.line * 240), lineRule: X.LineRuleType.AUTO } } },
-        title: { run: run(B.Title), paragraph: { spacing: { after: 80 } } },
-        heading1: { run: run(B.Heading1), paragraph: { spacing: { before: 280, after: 80 }, keepNext: true, keepLines: true } },
-        heading2: { run: run(B.Heading2), paragraph: { spacing: { before: 200, after: 60 }, keepNext: true, keepLines: true } },
-        heading3: { run: run(B.Heading3), paragraph: { spacing: { before: 160, after: 60 }, keepNext: true, keepLines: true } },
-        heading4: { run: run(B.Heading4), paragraph: { spacing: { before: 160, after: 40 }, keepNext: true } },
-        heading5: { run: run(B.Heading5), paragraph: { spacing: { before: 120, after: 40 }, keepNext: true } },
-        heading6: { run: run(B.Heading6), paragraph: { spacing: { before: 120, after: 40 }, keepNext: true } },
+        document: { run: { font: { ascii: nb.font, hAnsi: nb.font, eastAsia: nb.font, cs: D.csFontFor(nb.font) }, size: Math.round((nb.size || 11) * 2), color: String(nb.color).replace('#', '').toUpperCase() }, paragraph: { spacing: { after: Math.round(ps2.after * 20), before: Math.round((ps2.before || 0) * 20), line: Math.round(ps2.line * 240), lineRule: X.LineRuleType.AUTO } } },
+        title: full('title'), heading1: full('h1'), heading2: full('h2'), heading3: full('h3'), heading4: full('h4'), heading5: full('h5'), heading6: full('h6'),
         hyperlink: { run: { color: '1F5FD6', underline: { type: X.UnderlineType.SINGLE } } },
-        listParagraph: { paragraph: { spacing: { after: 40 } } },
+        listParagraph: { run: {}, paragraph: { spacing: { after: 40 }, indent: { left: 720 }, contextualSpacing: true } },
       },
       paragraphStyles: [
-        { id: 'Subtitle', name: 'Subtitle', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: run(B.Subtitle, { characterSpacing: 8 }), paragraph: { spacing: { after: 240 } } },
-        { id: 'Quote', name: 'Quote', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: run(B.Quote), paragraph: { indent: { left: 432, right: 576 }, border: { left: { style: X.BorderStyle.SINGLE, size: 18, color: B.acc, space: 8 } }, spacing: { before: 200, after: 200 } } },
+        pstyle('Subtitle', 'Subtitle', 'subtitle'),
+        pstyle('Quote', 'Quote', 'quote', { paragraph: { indent: { left: 432, right: 576 }, border: { left: { style: X.BorderStyle.SINGLE, size: 18, color: accHex, space: 8 } } } }),
+        pstyle('IntenseQuote', 'Intense Quote', 'iquote', { paragraph: { indent: { left: 490, right: 490 }, border: { top: { style: X.BorderStyle.SINGLE, size: 6, color: accHex, space: 8 }, bottom: { style: X.BorderStyle.SINGLE, size: 6, color: accHex, space: 8 } } } }),
         { id: 'NoSpacing', name: 'No Spacing', basedOn: 'Normal', quickFormat: true, paragraph: { spacing: { after: 0, before: 0, line: 240, lineRule: X.LineRuleType.AUTO } } },
-        { id: 'Caption', name: 'Caption', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: run(B.Caption), paragraph: { spacing: { before: 40, after: 200 } } },
-        { id: 'Code', name: 'Code', basedOn: 'Normal', quickFormat: true, run: run(B.Code), paragraph: { spacing: { after: 160, line: 270, lineRule: X.LineRuleType.AUTO }, shading: { type: X.ShadingType.CLEAR, fill: 'F3F4F7', color: 'auto' } } },
-        { id: 'TOCHeading', name: 'TOC Heading', basedOn: 'Heading1', next: 'Normal', quickFormat: true, run: run(B.Heading1) },
+        pstyle('Caption', 'caption', 'caption'),
+        pstyle('Code', 'Code', 'code', { paragraph: { shading: { type: X.ShadingType.CLEAR, fill: 'F3F4F7', color: 'auto' } } }),
+        { id: 'TOCHeading', name: 'TOC Heading', basedOn: 'Heading1', next: 'Normal', quickFormat: true, run: full('h1').run },
         { id: 'TOC1', name: 'toc 1', basedOn: 'Normal', next: 'Normal', paragraph: { spacing: { after: 60 } } },
         { id: 'TOC2', name: 'toc 2', basedOn: 'Normal', next: 'Normal', paragraph: { spacing: { after: 60 }, indent: { left: 220 } } },
         { id: 'TOC3', name: 'toc 3', basedOn: 'Normal', next: 'Normal', paragraph: { spacing: { after: 60 }, indent: { left: 440 } } },
+        { id: 'TableofFigures', name: 'table of figures', basedOn: 'Normal', next: 'Normal', paragraph: { spacing: { after: 60 } } },
+        { id: 'Bibliography', name: 'Bibliography', basedOn: 'Normal', next: 'Normal', paragraph: { indent: { left: 720, hanging: 720 }, spacing: { after: 120 } } },
+        ...(D.design.customStyles || []).filter(u => u.type !== 'c').map(u => pstyle('BTSU' + u.id, u.name, u.id)),
+      ],
+      characterStyles: [
+        ...D.BASE_STYLES.filter(st => st.type === 'c').map(st => ({ id: { emphasis: 'Emphasis', strong: 'Strong', 'subtle-em': 'SubtleEmphasis', 'intense-em': 'IntenseEmphasis', 'subtle-ref': 'SubtleReference', 'intense-ref': 'IntenseReference', 'book-title': 'BookTitle' }[st.id], name: st.name, basedOn: 'DefaultParagraphFont', quickFormat: true, run: runOf(D.styleDef(st.id), true) })),
+        ...(D.design.customStyles || []).filter(u => u.type === 'c').map(u => ({ id: 'BTSU' + u.id, name: u.name, basedOn: 'DefaultParagraphFont', quickFormat: true, run: runOf(D.styleDef(u.id), true) })),
+        { id: 'BTSCitation', name: 'BTS Citation', basedOn: 'DefaultParagraphFont', run: {} },
       ],
     };
 
     const comments = cids.length ? { children: cids.map((cid, i) => { const c = D.comments[cid] || {}; return { id: i, author: c.author || 'Student', initials: (c.author || 'S').slice(0, 2).toUpperCase(), date: new Date(c.time || Date.now()), children: (c.text || ' ').split('\n').map(t => new X.Paragraph({ children: [new X.TextRun(t || ' ')] })) }; }) } : undefined;
 
+    const PR = BTS.props || {}; const author = (PR.author || '').trim() || BTS.userName || 'Student';
     const doc = new X.Document({
-      creator: D.author(), title: BTS.title, description: 'Created with BTS Docs', lastModifiedBy: D.author(),
+      creator: author, title: PR.title || BTS.title, subject: PR.subject || undefined, keywords: PR.keywords || undefined, description: PR.comments || undefined, lastModifiedBy: BTS.userName || author,
       styles, numbering: { config: numbering.length ? numbering : [{ reference: 'none', levels: [{ level: 0, format: X.LevelFormat.DECIMAL, text: '%1.', alignment: X.AlignmentType.LEFT }] }] },
       footnotes: fnSeq ? footnotes : undefined, comments,
       background: D.design.pageColor ? { color: D.design.pageColor.slice(1).toUpperCase() } : undefined,
-      features: { updateFields: false },
+      features: { updateFields: false, trackRevisions: !!D.design.track },
       sections,
     });
     const blob = await X.Packer.toBlob(doc);
-    return new Uint8Array(await blob.arrayBuffer());
+    return await postProcess(new Uint8Array(await blob.arrayBuffer()));
+  }
+
+  /* ---------- package post-processing: properties, protection, BTS data part ---------- */
+  const xesc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  async function postProcess(bytes) {
+    const zip = await JSZip.loadAsync(bytes);
+    const P = BTS.props || {}; const author = (P.author || '').trim() || BTS.userName || 'Student';
+    const ct = await zip.file('[Content_Types].xml').async('string'); let ctx = ct;
+    const addOverride = (part, type) => { if (!ctx.includes(`PartName="${part}"`)) ctx = ctx.replace('</Types>', `<Override PartName="${part}" ContentType="${type}"/></Types>`); };
+    // core properties
+    const coreF = zip.file('docProps/core.xml');
+    if (coreF) {
+      let core = await coreF.async('string');
+      const setTag = (tag, val) => { const re = new RegExp(`<${tag}[^>]*>[\\s\\S]*?</${tag}>|<${tag}\\s*/>`); const el = `<${tag}>${xesc(val)}</${tag}>`; if (!val) { core = core.replace(re, ''); return; } core = re.test(core) ? core.replace(re, el) : core.replace('</cp:coreProperties>', el + '</cp:coreProperties>'); };
+      setTag('dc:creator', author); setTag('cp:category', P.category || ''); setTag('cp:contentStatus', D.design.protect && D.design.protect.mode === 'final' ? 'Final' : '');
+      zip.file('docProps/core.xml', core);
+    }
+    // app properties (company)
+    const appF = zip.file('docProps/app.xml');
+    if (appF) { let app = await appF.async('string'); app = app.replace(/<Company>[\s\S]*?<\/Company>|<Company\/>/, ''); if (P.company) { if (/<Properties[^>]*\/>/.test(app)) app = app.replace(/<Properties([^>]*)\/>/, '<Properties$1></Properties>'); app = app.replace('</Properties>', `<Company>${xesc(P.company)}</Company></Properties>`); } zip.file('docProps/app.xml', app); }
+    else if (P.company) {
+      zip.file('docProps/app.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>BTS Docs</Application><Company>${xesc(P.company)}</Company></Properties>`);
+      addOverride('/docProps/app.xml', 'application/vnd.openxmlformats-officedocument.extended-properties+xml');
+      let rels = await zip.file('_rels/.rels').async('string'); if (!rels.includes('docProps/app.xml')) rels = rels.replace('</Relationships>', '<Relationship Id="rIdBtsApp" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>'); zip.file('_rels/.rels', rels);
+    }
+    // Mark as final (Word's convention) as a custom property
+    if (D.design.protect && D.design.protect.mode === 'final') {
+      zip.file('docProps/custom.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="_MarkAsFinal"><vt:bool>true</vt:bool></property></Properties>`);
+      addOverride('/docProps/custom.xml', 'application/vnd.openxmlformats-officedocument.custom-properties+xml');
+      let rels = await zip.file('_rels/.rels').async('string'); if (!rels.includes('docProps/custom.xml')) rels = rels.replace('</Relationships>', '<Relationship Id="rIdBtsCustom" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties" Target="docProps/custom.xml"/></Relationships>'); zip.file('_rels/.rels', rels);
+    }
+    // read-only protection in settings.xml (after trackRevisions / displayBackgroundShape, before defaultTabStop)
+    const setF = zip.file('word/settings.xml');
+    if (setF && D.design.protect && D.design.protect.mode === 'readonly') {
+      let st = await setF.async('string'); const el = '<w:documentProtection w:edit="readOnly" w:enforcement="1"/>';
+      if (/<w:trackRevisions[^>]*\/>/.test(st)) st = st.replace(/(<w:trackRevisions[^>]*\/>)/, '$1' + el);
+      else if (/<w:displayBackgroundShape[^>]*\/>/.test(st)) st = st.replace(/(<w:displayBackgroundShape[^>]*\/>)/, '$1' + el);
+      else st = st.replace(/(<w:settings[^>]*>)/, '$1' + el);
+      zip.file('word/settings.xml', st);
+    }
+    // BTS Docs data part (styles, sources, citations, protection) — custom XML, preserved by Word
+    const data = { v: 1, app: 'BTS Docs', design: D.design, cites: $$('.cite', D.doc).map(c => ({ src: c.dataset.src || '', page: c.dataset.page || '' })) };
+    zip.file('customXml/item1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><btsDocs xmlns="https://office.btspl.tech/ns/btsdocs/2026">${xesc(JSON.stringify(data))}</btsDocs>`);
+    zip.file('customXml/itemProps1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="no"?><ds:datastoreItem ds:itemID="{6F1B6D2A-5C3E-4B8F-9A7D-B75D0C5E2026}" xmlns:ds="http://schemas.openxmlformats.org/officeDocument/2006/customXml"><ds:schemaRefs><ds:schemaRef ds:uri="https://office.btspl.tech/ns/btsdocs/2026"/></ds:schemaRefs></ds:datastoreItem>`);
+    zip.file('customXml/_rels/item1.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXmlProps" Target="itemProps1.xml"/></Relationships>`);
+    addOverride('/customXml/itemProps1.xml', 'application/vnd.openxmlformats-officedocument.customXmlProperties+xml');
+    if (!/Extension="xml"/i.test(ctx)) ctx = ctx.replace(/(<Types[^>]*>)/, '$1<Default Extension="xml" ContentType="application/xml"/>');
+    const drF = zip.file('word/_rels/document.xml.rels');
+    if (drF) { let dr = await drF.async('string'); if (!dr.includes('customXml/item1.xml')) dr = dr.replace('</Relationships>', '<Relationship Id="rIdBtsData" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml" Target="../customXml/item1.xml"/></Relationships>'); zip.file('word/_rels/document.xml.rels', dr); }
+    zip.file('[Content_Types].xml', ctx);
+    return await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
   }
 })();

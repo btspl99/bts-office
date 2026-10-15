@@ -1,3 +1,5 @@
-- Automatic updates: BTS Office downloads new versions in the background and installs them when you close it.
-- New Updates section in File > Options & about, with Check for updates.
-- The start screen shows your version and update status.
+- 50 professional fonts built in, including Hindi and Marathi fonts and look-alikes for Calibri, Cambria, Arial and Times New Roman, with a searchable font picker.
+- Docs: track changes, citations and bibliography (APA, MLA, IEEE, Harvard, Chicago), captions, mail merge for certificates and letters, 14 style sets, a Styles pane and an accessibility checker.
+- Sheets: PivotTables, sparklines, Goal Seek, Flash Fill, sheet protection, threaded comments, 12 workbook themes, 28 table styles and 9 new chart types.
+- Slides: presenter view, rehearse timings, Slide Master, reuse slides, comments, handouts PDF and 31 themes.
+- Every app: search any command with Alt+Q, document properties, and version history that keeps a copy every time you save.

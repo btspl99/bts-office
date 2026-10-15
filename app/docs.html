@@ -14,10 +14,16 @@
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/mammoth.browser.min.js"></script>
 <script src="vendor/docx.iife.js"></script>
+<script src="vendor/xlsx.full.min.js"></script>
 <script src="docs/editor.js" defer></script>
+<script src="docs/styles.js" defer></script>
 <script src="docs/tables.js" defer></script>
 <script src="docs/insert.js" defer></script>
 <script src="docs/panes.js" defer></script>
+<script src="docs/refs.js" defer></script>
+<script src="docs/track.js" defer></script>
+<script src="docs/mailmerge.js" defer></script>
+<script src="docs/review.js" defer></script>
 <script src="docs/import.js" defer></script>
 <script src="docs/docx-export.js" defer></script>
 <script src="docs/templates.js" defer></script>
@@ -31,6 +37,7 @@
   <button data-tab="design">Design</button>
   <button data-tab="layout">Layout</button>
   <button data-tab="references">References</button>
+  <button data-tab="mailings">Mailings</button>
   <button data-tab="review">Review</button>
   <button data-tab="view">View</button>
   <button data-tab="table" class="contextual hidden" id="tab-table">Table</button>
@@ -56,7 +63,7 @@
 
     <div class="rgroup"><div class="rgroup-body"><div class="rcol">
       <div class="rrow">
-        <div class="combo" id="font-combo"><input class="rinput" id="font-name" spellcheck="false" title="Font" value="Calibri"><button class="rb combo-btn" data-cmd="font-menu" title="Choose font"><svg class="ic" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m6 9 6 6 6-6"/></svg></button></div>
+        <div class="combo" id="font-combo"><input class="rinput" id="font-name" spellcheck="false" title="Font name — type a name and press Enter" value="Calibri"><button class="rb combo-btn" data-cmd="font-menu" title="Choose a font (search, preview, recent and theme fonts)"><svg class="ic" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m6 9 6 6 6-6"/></svg></button></div>
         <div class="combo small" id="size-combo"><input class="rinput" id="font-size" spellcheck="false" title="Font size" value="11"><button class="rb combo-btn" data-cmd="size-menu" title="Choose size"><svg class="ic" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m6 9 6 6 6-6"/></svg></button></div>
         <button class="rb" data-cmd="grow" data-icon="a-arrow-up" title="Increase font size (Ctrl+Shift+&gt;)"></button>
         <button class="rb" data-cmd="shrink" data-icon="a-arrow-down" title="Decrease font size (Ctrl+Shift+&lt;)"></button>
@@ -106,7 +113,12 @@
       <div class="gal-nav">
         <button class="rb" data-cmd="gal-up" title="Previous row"><svg class="ic" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m18 15-6-6-6 6"/></svg></button>
         <button class="rb" data-cmd="gal-down" title="Next row"><svg class="ic" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m6 9 6 6 6-6"/></svg></button>
-        <button class="rb" data-cmd="styles-menu" title="All styles"><svg class="ic" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 6h14M8 12l4 4 4-4"/></svg></button>
+        <button class="rb" data-cmd="styles-menu" title="All styles, new style and modify style"><svg class="ic" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 6h14M8 12l4 4 4-4"/></svg></button>
+      </div>
+      <div class="rstack" style="margin-left:4px">
+        <button class="rb md" data-cmd="styles-pane" data-icon="panel-right" title="Styles pane — see, apply and modify every style"><span>Styles pane</span></button>
+        <button class="rb md" data-cmd="modify-style" data-icon="pencil-ruler" title="Modify the style of the current paragraph"><span>Modify style</span></button>
+        <button class="rb md" data-cmd="new-style" data-icon="square-plus" title="Create a new style from the selected formatting"><span>New style</span></button>
       </div>
     </div><div class="rgroup-label">Styles</div></div>
 
@@ -156,6 +168,14 @@
   <!-- ================= DESIGN ================= -->
   <section class="ribbon-panel" data-panel="design">
     <div class="rgroup"><div class="rgroup-body">
+      <div class="rgallery stylesets-gallery" id="stylesets-gallery"></div>
+      <div class="gal-nav">
+        <button class="rb" data-cmd="ssgal-up" title="Previous style sets"><svg class="ic" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m18 15-6-6-6 6"/></svg></button>
+        <button class="rb" data-cmd="ssgal-down" title="More style sets"><svg class="ic" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m6 9 6 6 6-6"/></svg></button>
+        <button class="rb" data-cmd="stylesets-menu" title="All style sets"><svg class="ic" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 6h14M8 12l4 4 4-4"/></svg></button>
+      </div>
+    </div><div class="rgroup-label">Style sets</div></div>
+    <div class="rgroup"><div class="rgroup-body">
       <div class="rgallery themes-gallery" id="themes-gallery"></div>
       <div class="gal-nav">
         <button class="rb" data-cmd="thgal-up" title="Previous row"><svg class="ic" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m18 15-6-6-6 6"/></svg></button>
@@ -163,9 +183,9 @@
       </div>
       <div class="rstack" style="margin-left:6px">
         <button class="rb md" data-cmd="spacing-menu" data-icon="list-collapse" title="Paragraph spacing for the whole document"><span>Paragraph spacing</span></button>
-        <button class="rb md" data-cmd="theme-fonts-menu" data-icon="type" title="Document fonts"><span>Fonts</span></button>
+        <button class="rb md" data-cmd="theme-fonts-menu" data-icon="type" title="Theme fonts for headings and body text"><span>Fonts</span></button>
       </div>
-    </div><div class="rgroup-label">Document formatting</div></div>
+    </div><div class="rgroup-label">Colours &amp; fonts</div></div>
     <div class="rgroup"><div class="rgroup-body">
       <button class="rb lg" data-cmd="watermark-menu" data-icon="stamp" title="Watermark"><span>Watermark</span></button>
       <button class="rb lg" data-cmd="page-color" data-icon="palette" title="Page colour"><span>Page colour</span></button>
@@ -212,16 +232,59 @@
       </div>
     </div><div class="rgroup-label">Footnotes</div></div>
     <div class="rgroup"><div class="rgroup-body">
-      <button class="rb lg" data-cmd="caption" data-icon="captions" title="Insert caption (Figure / Table)"><span>Insert caption</span></button>
+      <button class="rb lg" data-cmd="insert-citation" data-icon="quote" title="Insert citation — cite a source at the cursor"><span>Insert citation</span></button>
+      <div class="rstack">
+        <button class="rb md" data-cmd="manage-sources" data-icon="library" title="Manage sources — books, articles, web pages, reports, theses"><span>Manage sources</span></button>
+        <div class="rrow rlabeled"><span class="rlbl">Style</span><select class="rsel" data-cmd="cite-style" id="sel-cite-style" title="Citation style (APA, MLA, IEEE, Harvard, Chicago)"><option value="apa">APA 7th</option><option value="mla">MLA 9th</option><option value="ieee">IEEE</option><option value="harvard">Harvard</option><option value="chicago">Chicago</option></select></div>
+        <button class="rb md" data-cmd="bibliography-menu" data-icon="book-open" title="Bibliography — insert or update the reference list"><span>Bibliography</span></button>
+      </div>
+    </div><div class="rgroup-label">Citations &amp; bibliography</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="caption" data-icon="captions" title="Insert caption (Figure, Table or Equation, numbered automatically)"><span>Insert caption</span></button>
+      <div class="rstack">
+        <button class="rb md" data-cmd="insert-tof" data-icon="images" title="Insert table of figures (list of figures or tables)"><span>Table of figures</span></button>
+        <button class="rb md" data-cmd="update-fields" data-icon="refresh-ccw" title="Update fields — caption numbers, contents, figures, citations (F9)"><span>Update fields</span></button>
+      </div>
     </div><div class="rgroup-label">Captions</div></div>
+  </section>
+
+  <!-- ================= MAILINGS ================= -->
+  <section class="ribbon-panel" data-panel="mailings">
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="mm-recipients" data-icon="users" title="Select recipients — use a CSV or Excel list, or type one"><span>Select recipients</span></button>
+      <button class="rb lg" data-cmd="mm-edit-list" data-icon="list-checks" title="Edit recipient list — choose who is included"><span>Edit recipient list</span></button>
+    </div><div class="rgroup-label">Start mail merge</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="mm-insert-field" data-icon="braces" title="Insert merge field (a column from the recipient list)"><span>Insert merge field</span></button>
+      <div class="rstack">
+        <button class="rb md" data-cmd="mm-highlight" id="btn-mm-hl" data-icon="highlighter" title="Highlight merge fields"><span>Highlight fields</span></button>
+        <button class="rb md" data-cmd="mm-convert" data-icon="wand-sparkles" title="Convert {{Name}} placeholders into merge fields"><span>Convert {{fields}}</span></button>
+      </div>
+    </div><div class="rgroup-label">Write &amp; insert fields</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="mm-preview" id="btn-mm-preview" data-icon="scan-eye" title="Preview results — show real data in the fields"><span>Preview results</span></button>
+      <div class="rcol"><div class="rrow">
+        <button class="rb" data-cmd="mm-first" data-icon="chevrons-left" title="First record"></button>
+        <button class="rb" data-cmd="mm-prev" data-icon="chevron-left" title="Previous record"></button>
+        <input class="rinput num" id="mm-rec" title="Go to record number (Enter)" style="width:44px;text-align:center">
+        <button class="rb" data-cmd="mm-next" data-icon="chevron-right" title="Next record"></button>
+        <button class="rb" data-cmd="mm-last" data-icon="chevrons-right" title="Last record"></button>
+      </div><div class="rrow"><span id="mm-total" class="rlbl"></span></div></div>
+    </div><div class="rgroup-label">Preview results</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="mm-finish" data-icon="files" title="Finish &amp; merge — one copy per recipient, separated by page breaks"><span>Finish &amp; merge</span></button>
+    </div><div class="rgroup-label">Finish</div></div>
   </section>
 
   <!-- ================= REVIEW ================= -->
   <section class="ribbon-panel" data-panel="review">
     <div class="rgroup"><div class="rgroup-body">
       <button class="rb lg on" data-cmd="spelling" id="btn-spell" data-icon="spell-check" title="Show spelling mistakes"><span>Spelling</span></button>
-      <button class="rb lg" data-cmd="word-count" data-icon="book-open-check" title="Word count"><span>Word count</span></button>
+      <button class="rb lg" data-cmd="word-count" data-icon="book-open-check" title="Word count, reading time and readability"><span>Word count</span></button>
     </div><div class="rgroup-label">Proofing</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="a11y-check" id="btn-a11y" data-icon="accessibility" title="Check accessibility — alt text, headings, tables, contrast"><span>Check accessibility</span></button>
+    </div><div class="rgroup-label">Accessibility</div></div>
     <div class="rgroup"><div class="rgroup-body">
       <button class="rb lg" data-cmd="read-aloud" id="btn-read" data-icon="volume-2" title="Read the document aloud"><span>Read aloud</span></button>
     </div><div class="rgroup-label">Speech</div></div>
@@ -237,6 +300,25 @@
         <button class="rb md" data-cmd="comments-toggle" id="btn-show-comments" data-icon="message-square" title="Show comments"><span>Show comments</span></button>
       </div>
     </div><div class="rgroup-label">Comments</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="track-toggle" id="btn-track" data-icon="file-pen-line" title="Track changes — mark insertions and deletions"><span>Track changes</span></button>
+      <div class="rstack">
+        <button class="rb md" data-cmd="markup-menu" data-icon="eye" title="Show markup — simple, all markup or original"><span>Show markup</span></button>
+      </div>
+    </div><div class="rgroup-label">Tracking</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg split" data-cmd="tc-accept" data-icon="file-check" title="Accept this change and move to the next one"><span>Accept <svg class="ic caret" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></span></button>
+      <button class="rb lg split" data-cmd="tc-reject" data-icon="file-x" title="Reject this change and move to the next one"><span>Reject <svg class="ic caret" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></span></button>
+      <div class="rstack">
+        <button class="rb md" data-cmd="tc-prev" data-icon="chevron-up" title="Previous tracked change"><span>Previous</span></button>
+        <button class="rb md" data-cmd="tc-next" data-icon="chevron-down" title="Next tracked change"><span>Next</span></button>
+        <button class="rb md" data-cmd="tc-accept-all" data-icon="check-check" title="Accept all changes"><span>Accept all</span></button>
+      </div>
+    </div><div class="rgroup-label">Changes</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="restrict-editing" id="btn-restrict" data-icon="lock" title="Restrict editing — make the document read-only"><span>Restrict editing</span></button>
+      <button class="rb lg" data-cmd="mark-final" id="btn-final" data-icon="badge-check" title="Mark as final — discourage further editing"><span>Mark as final</span></button>
+    </div><div class="rgroup-label">Protect</div></div>
   </section>
 
   <!-- ================= VIEW ================= -->
@@ -250,6 +332,7 @@
       <label class="check rcheck"><input type="checkbox" data-cmd="ruler" id="chk-ruler" checked> Ruler</label>
       <label class="check rcheck"><input type="checkbox" data-cmd="nav-pane" id="chk-nav"> Navigation pane</label>
       <label class="check rcheck"><input type="checkbox" data-cmd="marks-check" id="chk-marks"> Formatting marks</label>
+      <label class="check rcheck"><input type="checkbox" data-cmd="styles-pane-check" id="chk-styles"> Styles pane</label>
     </div></div><div class="rgroup-label">Show</div></div>
     <div class="rgroup"><div class="rgroup-body">
       <button class="rb lg" data-cmd="zoom-menu" data-icon="zoom-in" title="Zoom"><span>Zoom</span></button>
@@ -329,7 +412,7 @@
       <button class="rb md" data-cmd="img-shadow" id="btn-img-shadow" data-icon="copy" title="Soft shadow"><span>Shadow</span></button>
     </div></div><div class="rgroup-label">Picture style</div></div>
     <div class="rgroup"><div class="rgroup-body">
-      <button class="rb lg" data-cmd="img-alt" data-icon="message-square-text" title="Alternative text"><span>Alt text</span></button>
+      <button class="rb lg" data-cmd="img-alt" data-icon="message-square-text" title="Add alt text (describe the picture for screen readers)"><span>Alt text</span></button>
       <button class="rb lg" data-cmd="img-replace" data-icon="image-up" title="Replace picture"><span>Replace</span></button>
       <button class="rb lg" data-cmd="img-delete" data-icon="trash-2" title="Delete picture"><span>Delete</span></button>
     </div><div class="rgroup-label">Picture</div></div>
@@ -343,6 +426,7 @@
   </aside>
   <div id="canvas">
     <div id="recover-bar" class="hidden"></div>
+    <div id="protect-bar" class="hidden"></div>
     <div id="zoomer">
       <div id="ruler" class="no-print"><div id="ruler-inner"></div></div>
       <div id="sheet-row">
@@ -381,6 +465,22 @@
       <button class="linkish" data-cmd="find-toggle-replace" id="find-toggle-replace">Show replace</button>
       <div id="find-results"></div>
     </div>
+  </aside>
+  <aside class="pane hidden" id="styles-pane">
+    <header>Styles<button class="rb" data-cmd="styles-close" data-icon="x" title="Close"></button></header>
+    <div class="pane-body">
+      <div class="sp-set">Style set: <b id="styles-set-name">Classic</b> <button class="linkish" data-cmd="stylesets-menu" title="Change the style set">Change</button></div>
+      <div id="styles-list"></div>
+      <div class="sp-actions">
+        <button class="btn" data-cmd="new-style" title="Create a new style from the selected formatting">New style…</button>
+        <button class="btn" data-cmd="modify-style" title="Modify the style of the current paragraph">Modify…</button>
+      </div>
+      <div class="hint" style="margin-top:8px">Click to apply · right-click or ⋯ to modify. Changing a style updates every paragraph that uses it.</div>
+    </div>
+  </aside>
+  <aside class="pane hidden" id="a11y-pane">
+    <header>Accessibility<button class="rb" data-cmd="a11y-recheck" data-icon="refresh-cw" title="Check again" style="margin-left:auto"></button><button class="rb" data-cmd="a11y-close" data-icon="x" title="Close" style="margin-left:2px"></button></header>
+    <div class="pane-body"><div id="a11y-list"></div></div>
   </aside>
 </main>
 <footer id="statusbar"></footer>

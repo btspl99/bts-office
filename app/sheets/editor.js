@@ -91,7 +91,7 @@
     wrap.style.maxWidth = Math.max(rc.w, host.width - rc.x - 20) + 'px';
     wrap.style.background = style.fill || '#fff';
     const fs = (style.sz || 11) * 96 / 72 * z;
-    ed.style.font = `${style.i ? 'italic ' : ''}${style.b ? 'bold ' : ''}${fs}px ${SU.cssFont(style.font || 'Calibri')}`;
+    ed.style.font = `${style.i ? 'italic ' : ''}${style.b ? 'bold ' : ''}${fs}px ${SU.cssFont(style.font || SU.defFont)}`;
     ed.style.color = style.color || '#000'; ed.style.textAlign = style.h === 'center' ? 'center' : style.h === 'right' ? 'right' : 'left';
     ed.style.paddingTop = Math.max(0, (rc.h - fs * 1.22) - 3 * z) + 'px';
     if (style.wrap) { ed.style.paddingTop = '1px'; }
@@ -366,6 +366,10 @@
     if (e.altKey && k === 'ArrowDown') { e.preventDefault(); A.openDropdownAtActive(); return; }
     if (e.altKey && (k === '=' || k === '+')) { e.preventDefault(); e.stopPropagation(); A.autoSum('SUM'); return; }
     if (e.altKey && k === 'Enter') { e.preventDefault(); Ed.start(null, 'edit'); return; }
+    if (e.altKey && e.shiftKey && !mod && (k === 'ArrowRight' || k === 'ArrowLeft')) { e.preventDefault(); App.cmd(k === 'ArrowRight' ? 'group' : 'ungroup'); return; }
+    if (mod && e.altKey && k.toLowerCase() === 'm') { e.preventDefault(); App.cmd('comment-new'); return; }
+    if (e.altKey && k === 'F5') { e.preventDefault(); App.cmd(mod ? 'pivot-refresh-all' : 'pv-refresh'); return; }
+    if (mod && e.shiftKey && k.toLowerCase() === 'f') { e.preventDefault(); App.cmd('font-pick'); return; }
     if (k.startsWith('Arrow')) {
       e.preventDefault();
       const dr = k === 'ArrowDown' ? 1 : k === 'ArrowUp' ? -1 : 0, dc = k === 'ArrowRight' ? 1 : k === 'ArrowLeft' ? -1 : 0;

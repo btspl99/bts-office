@@ -8,13 +8,29 @@
   A.setMode = (m) => BTS.setStatus('mode', `<span class="sb-mode">${m}</span>`);
 
   /* ---------- protection ---------- */
-  A.protectedCheck = (silent, g) => {
-    const s = S(); if (!s.protected) return false;
-    if (g === undefined) { const st = s.style(s.active.r, s.active.c); if (st.locked === false && !g) return false; }
-    if (!silent) BTS.toast('This sheet is protected. Unprotect it on the Review tab to make changes.', { error: true, ms: 3200 });
+  /** Returns true (and explains why) when an edit isn't allowed.
+   *  g undefined → the active cell; g = range → every cell in it; g === true → any change. kind = an allowed-action key (Prot.OPTIONS). */
+  A.protectedCheck = (silent, g, kind) => {
+    const s = S();
+    if (window.Pivot && kind !== 'formatCells') {
+      const pv = g === undefined ? Pivot.at(s, s.active.r, s.active.c) : (g && g !== true ? s.pivots.find(p => p.out && SU.intersects(p.out, g) && !(g.r0 <= p.out.r0 && g.r1 >= p.out.r1 && g.c0 <= p.out.c0 && g.c1 >= p.out.c1)) : null);
+      if (pv) { if (!silent) BTS.toast('You can’t change this part of a PivotTable. Use the PivotTable Fields pane, or select the whole PivotTable.', { error: true, ms: 3600 }); return true; }
+    }
+    if (!s.protected) return false;
+    if (kind && window.Prot && Prot.allowed(s, kind)) return false;
+    if (g === undefined) { if (Prot.cellEditable(s, s.active.r, s.active.c)) return false; }
+    else if (g && g !== true && !kind) { if (Prot.rangeEditable(s, g)) return false; }
+    if (!silent) BTS.toast('The cell or chart you’re trying to change is on a protected sheet. Unprotect it on the Review tab to make changes.', { error: true, ms: 3600 });
     return true;
   };
-  function guard() { return A.protectedCheck(false, true); }
+  /** guard for an operation: kind (format, insert…) or the target ranges (editing contents) */
+  function guard(kind, ranges) {
+    if (kind) return A.protectedCheck(false, true, kind);
+    const rs = ranges || A.sels().map(g => A.eff(g));
+    for (const g of rs) if (A.protectedCheck(false, g)) return true;
+    return false;
+  }
+  A.guard = guard;
 
   /* ---------- effective ranges ---------- */
   A.eff = (g, s = S()) => {
@@ -64,6 +80,7 @@
     return { v: p.text && text[0] === "'" ? text.slice(1) : String(p.value) };
   };
   A.enterValue = (s, r, c, text, opts = {}) => {
+    if (s === S() && A.protectedCheck(false, opts.ctrlEnter ? A.sels().map(g => A.eff(g))[0] : { r0: r, c0: c, r1: r, c1: c })) return false;
     const res = A.interpret(s, r, c, text);
     if (res.error) {
       BTS.dialog({ title: 'There’s a problem with this formula', body: `<p style="max-width:440px;line-height:1.5;margin:4px 0">Check the formula for typos, unmatched brackets or missing arguments.<br><br><code style="background:var(--surface-3);padding:2px 6px;border-radius:4px">${SU.esc(res.error)}</code></p><p class="dlg-note">Not trying to type a formula? Start the entry with an apostrophe (') to enter it as text.</p>`, buttons: [{ label: 'OK', primary: true, value: true }] }).then(() => { const el = Ed.state && (Ed.state.src === 'bar' ? document.getElementById('fx') : document.getElementById('cell-editor')); el && el.focus(); });
@@ -221,7 +238,7 @@
   let lastAction = null;
   A.repeatLast = () => { if (lastAction) lastAction(); };
   A.applyStyle = (patchOrFn, label = 'Format', ranges) => {
-    if (guard()) return;
+    if (guard('formatCells')) return;
     const s = S(); ranges = ranges || A.sels().map(g => A.eff(g));
     const doit = (rs) => wb.run(label, () => {
       for (const g of rs) for (let r = g.r0; r <= g.r1; r++) for (let c = g.c0; c <= g.c1; c++) {
@@ -249,7 +266,7 @@
   /* ---------- borders ---------- */
   A.borderLine = { style: 'thin', color: '#000000' };
   A.applyBorders = (kind) => {
-    if (guard()) return;
+    if (guard('formatCells')) return;
     const s = S(); const line = { ...A.borderLine }; const thick = { style: 'medium', color: line.color }, dbl = { style: 'double', color: line.color };
     const ranges = A.sels().map(g => A.eff(g));
     wb.run('Borders', () => {
@@ -285,13 +302,14 @@
 
   /* ---------- clear ---------- */
   A.clear = (what = 'contents') => {
-    if (guard()) return;
     const s = S(); const ranges = A.sels().map(g => what === 'contents' ? A.effData(g) : A.eff(g));
+    if (what === 'formats' ? guard('formatCells') : guard(null, ranges)) return;
     wb.run('Clear', () => {
       for (const g of ranges) {
         if (what === 'contents' || what === 'all') { const cells = []; for (let r = g.r0; r <= g.r1; r++) for (let c = g.c0; c <= g.c1; c++) if (!s.isEmpty(r, c)) cells.push({ r, c, v: null }); wb.setContents(s, cells); }
         if (what === 'formats' || what === 'all') { for (const k of [...s.styles.keys()]) { const { r, c } = unkey(k); if (SU.inRange(g, r, c)) wb.setStyle(s, r, c, null); } }
         if (what === 'comments' || what === 'all') { const m = new Map(s.comments); let ch = false; for (const k of [...m.keys()]) { const { r, c } = unkey(k); if (SU.inRange(g, r, c)) { m.delete(k); ch = true; } } if (ch) wb.setProp(s, 'comments', m); }
+        if (what === 'comments' || what === 'all' || what === 'threads') { const m = new Map(s.threads); let ch = false; for (const k of [...m.keys()]) { const { r, c } = unkey(k); if (SU.inRange(g, r, c)) { m.delete(k); ch = true; } } if (ch) wb.setProp(s, 'threads', m); }
         if (what === 'links' || what === 'all' || what === 'contents') { const m = new Map(s.links); let ch = false; for (const k of [...m.keys()]) { const { r, c } = unkey(k); if (SU.inRange(g, r, c)) { m.delete(k); ch = true; } } if (ch) wb.setProp(s, 'links', m); }
         if (what === 'all') { const mg = s.merges.filter(m => !(m.r0 >= g.r0 && m.r1 <= g.r1 && m.c0 >= g.c0 && m.c1 <= g.c1)); if (mg.length !== s.merges.length) wb.setProp(s, 'merges', mg); }
       }
@@ -300,7 +318,7 @@
 
   /* ---------- merge ---------- */
   A.merge = async (kind) => {
-    if (guard()) return;
+    if (guard('formatCells') || guard()) return;
     const s = S(); let g = A.eff(s.sel);
     if (kind === 'unmerge') { wb.run('Unmerge', () => wb.setProp(s, 'merges', s.merges.filter(m => !SU.intersects(m, g)))); Grid.notify(); return; }
     if (Grid.isWholeCols(s.sel) || Grid.isWholeRows(s.sel)) { BTS.toast('Select a smaller range to merge.', { error: true }); return; }
@@ -387,8 +405,8 @@
   };
   /** opts: mode all|values|formulas|formats|transpose|nocopyborders|colwidths|valuesnf ; op: add|sub|mul|div ; skipBlanks */
   A.pasteInternal = (mode = 'all', opts = {}) => {
-    if (guard()) return;
     const clip = A.clip; if (!clip) return;
+    { const s0 = S(); const t0 = A.eff(s0.sel); const H0 = clip.range.r1 - clip.range.r0, W0 = clip.range.c1 - clip.range.c0; if (guard(mode === 'formats' ? 'formatCells' : null, [{ r0: t0.r0, c0: t0.c0, r1: Math.max(t0.r1, t0.r0 + H0), c1: Math.max(t0.c1, t0.c0 + W0) }])) return; }
     const s = S(); const transpose = mode === 'transpose' || opts.transpose;
     const H = clip.range.r1 - clip.range.r0 + 1, W = clip.range.c1 - clip.range.c0 + 1;
     const tH = transpose ? W : H, tW = transpose ? H : W;
@@ -475,7 +493,7 @@
     }));
   };
   A.pasteExternal = (html, text, mode = 'all') => {
-    if (guard()) return;
+    if (guard(null, [{ ...S().sel }])) return;
     const s = S(); let grid = null, styles = null;
     if (html && /<table/i.test(html)) {
       try {
@@ -582,7 +600,7 @@
     return null;
   }
   A.fill = (src, target, opts = {}) => {
-    if (guard()) return;
+    if (guard(null, [SU.norm({ r0: Math.min(src.r0, target.r0), c0: Math.min(src.c0, target.c0), r1: Math.max(src.r1, target.r1), c1: Math.max(src.c1, target.c1) })])) return;
     const s = S();
     if (target.shrink) { const cl = { r0: target.r1 + 1, c0: src.c0, r1: src.r1, c1: src.c1 }; wb.run('Clear', () => { const cells = []; for (let r = cl.r0; r <= cl.r1; r++) for (let c = cl.c0; c <= cl.c1; c++) cells.push({ r, c, v: null }); wb.setContents(s, cells); }); s.sel = { ...src, r1: target.r1 }; Grid.notify(); return; }
     const vertical = target.r0 !== src.r0 || target.r1 !== src.r1;
@@ -644,7 +662,7 @@
 
   /* ---------- AutoSum ---------- */
   A.autoSum = (fn = 'SUM') => {
-    if (guard()) return;
+    if (A.protectedCheck()) return;
     const s = S(); const g = s.sel;
     const isNum = (r, c) => typeof s.value(r, c) === 'number' && !(s.raw(r, c) + '').match(/^=.*(SUM|SUBTOTAL)\(/i);
     if (g.r0 === g.r1 && g.c0 === g.c1) {
@@ -719,7 +737,7 @@
   };
   function shiftRowRelativeWithin(f, dr) { return SU.mapRefs(f, (ref) => { if (ref.sheet) return undefined; if (ref.kind === 'cell') { if (!ref.a.ar) ref.a.r += dr; if (ref.b && !ref.b.ar) ref.b.r += dr; if (ref.a.r < 0 || (ref.b && ref.b.r < 0)) return '#REF!'; return SU.refToString(ref); } return undefined; }); }
   A.quickSort = (desc) => {
-    if (guard()) return;
+    if (guard('sort')) return;
     const s = S(); let g = A.dataRange(); let header;
     const t = s.tableAt(s.active.r, s.active.c); const fl = s.filter && SU.inRange(s.filter.range, s.active.r, s.active.c) ? s.filter : null;
     if (t) { g = t.range; header = t.header !== false; if (t.total) g = { ...g, r1: g.r1 - 1 }; }
@@ -732,6 +750,7 @@
 
   /* ---------- filter ---------- */
   A.toggleFilter = () => {
+    if (guard('autoFilter')) return;
     const s = S();
     if (s.filter) { wb.run('Filter', () => { wb.setProp(s, 'filter', null); wb.setProp(s, 'filterHidden', new Set()); }); Grid.updateSpacer(); return; }
     const t = s.tableAt(s.active.r, s.active.c);
@@ -784,32 +803,32 @@
 
   /* ---------- structure ---------- */
   A.insertRows = (above = true) => {
-    if (guard()) return; const s = S(); const g = s.sel; const n = Grid.isWholeRows(g) || g.r1 - g.r0 < 1000 ? g.r1 - g.r0 + 1 : 1;
+    if (guard('insertRows')) return; const s = S(); const g = s.sel; const n = Grid.isWholeRows(g) || g.r1 - g.r0 < 1000 ? g.r1 - g.r0 + 1 : 1;
     wb.run('Insert rows', () => wb.insertRows(s, above ? g.r0 : g.r1 + 1, Math.min(n, 5000)));
     Grid.updateSpacer(); Grid.notify();
   };
   A.insertCols = (left = true) => {
-    if (guard()) return; const s = S(); const g = s.sel; const n = Grid.isWholeCols(g) || g.c1 - g.c0 < 200 ? Math.min(g.c1 - g.c0 + 1, 200) : 1;
+    if (guard('insertColumns')) return; const s = S(); const g = s.sel; const n = Grid.isWholeCols(g) || g.c1 - g.c0 < 200 ? Math.min(g.c1 - g.c0 + 1, 200) : 1;
     wb.run('Insert columns', () => wb.insertCols(s, left ? g.c0 : g.c1 + 1, n));
     Grid.updateSpacer(); Grid.notify();
   };
   A.deleteRows = () => {
-    if (guard()) return; const s = S(); const ranges = A.sels().map(g => ({ a: g.r0, b: Math.min(g.r1, Math.max(s.rowCount, s.usedRangeAll().r1 + 1)) })).sort((x, y) => y.a - x.a);
+    if (guard('deleteRows')) return; const s = S(); const ranges = A.sels().map(g => ({ a: g.r0, b: Math.min(g.r1, Math.max(s.rowCount, s.usedRangeAll().r1 + 1)) })).sort((x, y) => y.a - x.a);
     wb.run('Delete rows', () => ranges.forEach(x => wb.deleteRows(s, x.a, x.b - x.a + 1)));
     s.sel = { r0: ranges[ranges.length - 1].a, r1: ranges[ranges.length - 1].a, c0: s.sel.c0, c1: s.sel.c1 }; if (Grid.isWholeRows(s.sel)) {} s.active = { r: s.sel.r0, c: s.active.c };
     if (!Grid.isWholeRows(s.sel)) s.sel = { r0: s.active.r, c0: s.active.c, r1: s.active.r, c1: s.active.c };
     Grid.updateSpacer(); Grid.notify();
   };
   A.deleteCols = () => {
-    if (guard()) return; const s = S(); const ranges = A.sels().map(g => ({ a: g.c0, b: Math.min(g.c1, Math.max(s.colCount, s.usedRangeAll().c1 + 1)) })).sort((x, y) => y.a - x.a);
+    if (guard('deleteColumns')) return; const s = S(); const ranges = A.sels().map(g => ({ a: g.c0, b: Math.min(g.c1, Math.max(s.colCount, s.usedRangeAll().c1 + 1)) })).sort((x, y) => y.a - x.a);
     wb.run('Delete columns', () => ranges.forEach(x => wb.deleteCols(s, x.a, x.b - x.a + 1)));
     s.active = { r: s.active.r, c: ranges[ranges.length - 1].a }; s.sel = { r0: s.active.r, c0: s.active.c, r1: s.active.r, c1: s.active.c };
     Grid.updateSpacer(); Grid.notify();
   };
-  A.insertCells = (dir) => { if (guard()) return; const s = S(); const g = A.eff(s.sel); wb.run('Insert cells', () => wb.shiftCells(s, g, dir)); Grid.notify(); };
-  A.deleteCells = (dir) => { if (guard()) return; const s = S(); const g = A.eff(s.sel); wb.run('Delete cells', () => wb.shiftCells(s, g, dir)); Grid.notify(); };
+  A.insertCells = (dir) => { if (guard(dir === 'down' ? 'insertRows' : 'insertColumns') || guard()) return; const s = S(); const g = A.eff(s.sel); wb.run('Insert cells', () => wb.shiftCells(s, g, dir)); Grid.notify(); };
+  A.deleteCells = (dir) => { if (guard(dir === 'up' ? 'deleteRows' : 'deleteColumns') || guard()) return; const s = S(); const g = A.eff(s.sel); wb.run('Delete cells', () => wb.shiftCells(s, g, dir)); Grid.notify(); };
   A.setHidden = (axis, hide) => {
-    if (guard()) return; const s = S(); const prop = axis === 'r' ? 'hiddenR' : 'hiddenC';
+    if (guard(axis === 'r' ? 'formatRows' : 'formatColumns')) return; const s = S(); const prop = axis === 'r' ? 'hiddenR' : 'hiddenC';
     const set = new Set(s[prop]);
     for (const g of A.sels()) { const a = axis === 'r' ? g.r0 : g.c0, b = axis === 'r' ? Math.min(g.r1, s.rowCount - 1) : Math.min(g.c1, s.colCount - 1); for (let i = (hide ? a : Math.max(0, a - (a === b ? 1 : 0))); i <= (hide ? b : b + (a === b ? 1 : 0)); i++) hide ? set.add(i) : set.delete(i); if (!hide && a === 0) for (let i = 0; i <= b; i++) set.delete(i); }
     if (hide && axis === 'r' && set.size >= s.rowCount) return;
@@ -818,6 +837,7 @@
     Grid.updateSpacer(); Grid.notify();
   };
   A.setSize = (axis, idx, size, label) => {
+    if (guard(axis === 'col' ? 'formatColumns' : 'formatRows')) return;
     const s = S(); const prop = axis === 'col' ? 'colW' : 'rowH';
     const g = A.sels().find(x => axis === 'col' ? (Grid.isWholeCols(x) && idx >= x.c0 && idx <= x.c1) : (Grid.isWholeRows(x) && idx >= x.r0 && idx <= x.r1));
     const list = g ? (axis === 'col' ? range(g.c0, g.c1) : range(g.r0, Math.min(g.r1, s.rowCount - 1))) : [idx];
@@ -868,69 +888,107 @@
     { label: 'Bold blue text', fmt: { color: '#1F4E9E', b: true } },
   ];
   A.addCF = (rule) => {
+    if (guard('formatCells')) return;
     const s = S(); const g = A.eff(s.sel);
     rule = { id: 'cf' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), range: g, ...rule };
     wb.run('Conditional formatting', () => wb.setProp(s, 'cf', [...s.cf, rule]));
   };
   A.clearCF = (scope) => { const s = S(); const g = A.eff(s.sel); wb.run('Clear rules', () => wb.setProp(s, 'cf', scope === 'sheet' ? [] : s.cf.filter(r => !SU.intersects(r.range, g)))); };
-  A.TABLE_THEMES = [
-    { name: 'Teal', head: '#0F8A6A', band: '#E3F3EE', band2: null, line: '#9CD3C3' },
-    { name: 'Blue', head: '#2F5597', band: '#DCE6F4', band2: null },
-    { name: 'Orange', head: '#C55A11', band: '#FBE4D5', band2: null },
-    { name: 'Grey', head: '#404040', band: '#EDEDED', band2: null },
-    { name: 'Gold', head: '#BF8F00', band: '#FFF2CC', band2: null },
-    { name: 'Green', head: '#548235', band: '#E2EFDA', band2: null },
-    { name: 'Purple', head: '#7030A0', band: '#EADCF4', band2: null },
-    { name: 'Red', head: '#C00000', band: '#F8D7D7', band2: null },
-    { name: 'Navy', head: '#1F3864', band: '#D9E1F2', band2: null },
-    { name: 'Light teal', head: '#7CC4AF', headText: '#06392c', band: '#F1F9F6', band2: null },
-    { name: 'Light blue', head: '#9DC3E6', headText: '#10305a', band: '#EEF4FB', band2: null },
-    { name: 'Light grey', head: '#D0D0D0', headText: '#222', band: '#F5F5F5', band2: null },
-  ];
-  A.formatAsTable = async (theme) => {
-    if (guard()) return;
+  A.TABLE_THEMES = STheme.TABLE_STYLES; // ids like 'Medium 2' — colours come from the workbook theme
+  A.TOTAL_FNS = [['none', 'None', 0], ['average', 'Average', 101], ['count', 'Count', 103], ['countNums', 'Count Numbers', 102], ['max', 'Max', 104], ['min', 'Min', 105], ['sum', 'Sum', 109], ['stdev', 'StdDev', 107], ['var', 'Var', 110]];
+  A.totalFormula = (t, c, fn) => { const f = A.TOTAL_FNS.find(x => x[0] === fn); if (!f || !f[2]) return null; const g = t.range; return `=SUBTOTAL(${f[2]},${SU.rangeStr({ r0: g.r0 + (t.header !== false ? 1 : 0), c0: c, r1: g.r1 - (t.total ? 1 : 0), c1: c })})`; };
+  A.formatAsTable = async (styleId, opts = {}) => {
+    if (guard('formatCells')) return;
+    styleId = typeof styleId === 'string' ? styleId : 'Medium 2';
     const s = S(); let g = A.dataRange();
-    if (s.tables.some(t => SU.intersects(t.range, g))) { const t = s.tables.find(t => SU.intersects(t.range, g)); wb.run('Table style', () => wb.setProp(s, 'tables', s.tables.map(x => x === t ? { ...x, theme } : x))); return; }
+    if (s.tables.some(t => SU.intersects(t.range, g))) { const t = s.tables.find(t => SU.intersects(t.range, g)); A.setTableProps(t, { styleId, theme: undefined }, 'Table style'); return; }
     if (s.merges.some(m => SU.intersects(m, g))) { BTS.toast('Tables can’t overlap merged cells.', { error: true }); return; }
-    const ok = await BTS.dialog({ title: 'Create table', width: 380, body: `<div class="field"><label>Where is the data for your table?</label><input id="tb-range" value="${SU.absRangeStr(g)}"></div><label class="check"><input type="checkbox" id="tb-head" ${hasHeader(s, g) || typeof s.value(g.r0, g.c0) === 'string' ? 'checked' : ''}> My table has headers</label>`, buttons: [{ label: 'Cancel', value: null }, { label: 'OK', primary: true, value: (r) => ({ range: r.querySelector('#tb-range').value, head: r.querySelector('#tb-head').checked }) }] });
-    if (!ok) return; const rg = SU.parseRange(ok.range); if (!rg) { BTS.toast('That reference isn’t valid.', { error: true }); return; } g = rg;
+    let ok = opts.range ? { range: opts.range, head: opts.head !== false } : null;
+    if (!ok) ok = await BTS.dialog({ title: 'Create table', width: 380, body: `<div class="field"><label>Where is the data for your table?</label><input id="tb-range" value="${SU.absRangeStr(g)}"></div><label class="check"><input type="checkbox" id="tb-head" ${hasHeader(s, g) || typeof s.value(g.r0, g.c0) === 'string' ? 'checked' : ''}> My table has headers</label>`, buttons: [{ label: 'Cancel', value: null }, { label: 'OK', primary: true, value: (r) => ({ range: r.querySelector('#tb-range').value, head: r.querySelector('#tb-head').checked }) }] });
+    if (!ok) return; const rg = typeof ok.range === 'string' ? SU.parseRange(ok.range) : ok.range; if (!rg) { BTS.toast('That reference isn’t valid.', { error: true }); return; } g = rg;
     let n = 1; while (s.wb.sheets.some(sh => sh.tables.some(t => t.name === 'Table' + n))) n++;
+    let made;
     wb.run('Format as table', () => {
       if (!ok.head) { wb.insertRows(s, g.r0, 1); const cells = []; for (let c = g.c0; c <= g.c1; c++) cells.push({ r: g.r0, c, v: 'Column' + (c - g.c0 + 1) }); wb.setContents(s, cells); g = { ...g, r1: g.r1 + 1 }; }
-      const t = { id: 't' + Date.now().toString(36), name: 'Table' + n, range: g, theme, header: true, banded: true, total: false, filterBtn: true };
-      wb.setProp(s, 'tables', [...s.tables, t]);
-      if (!s.filter) wb.setProp(s, 'filter', { range: g, cols: {}, tableId: t.id });
+      // header cells must be unique text
+      const seen = new Set(); const fix = [];
+      for (let c = g.c0; c <= g.c1; c++) { let t = String(s.displayText(g.r0, c)).trim() || 'Column' + (c - g.c0 + 1); const base = t; let i = 2; while (seen.has(t.toLowerCase())) t = base + i++; seen.add(t.toLowerCase()); if (t !== s.displayText(g.r0, c) || typeof s.value(g.r0, c) !== 'string') fix.push({ r: g.r0, c, v: t }); }
+      if (fix.length) wb.setContents(s, fix);
+      made = { id: 't' + Date.now().toString(36), name: opts.name || 'Table' + n, range: g, styleId, header: true, banded: true, bandedCols: false, firstCol: false, lastCol: false, total: false, filterBtn: true, totals: {} };
+      wb.setProp(s, 'tables', [...s.tables, made]);
+      if (!s.filter) wb.setProp(s, 'filter', { range: g, cols: {}, tableId: made.id });
       // clear explicit fills so the banding shows
       for (let r = g.r0; r <= g.r1; r++) for (let c = g.c0; c <= g.c1; c++) { const st = s.style(r, c); if (st.fill) wb.setStyle(s, r, c, SU.mergeStyle(st, { fill: undefined })); }
     });
-    A.autofit('col', undefined);
+    if (!opts.noFit) A.autofit('col', undefined);
+    App.refreshContext && App.refreshContext();
+    return made;
+  };
+  /** change table options (undoable). Handles the total row cells. */
+  A.setTableProps = (t, patch, label = 'Table') => {
+    const s = S(); if (guard('formatCells')) return;
+    wb.run(label, () => {
+      let nt = { ...t, ...patch };
+      if (patch.total !== undefined && patch.total !== !!t.total) {
+        const g = t.range;
+        if (patch.total) {
+          const r = g.r1 + 1; const totals = { ...(t.totals || {}) }; const cells = [{ r, c: g.c0, v: 'Total' }];
+          nt = { ...nt, range: { ...g, r1: r }, total: true };
+          for (let c = g.c0 + 1; c <= g.c1; c++) { if (!totals[c]) { let num = false; for (let rr = g.r0 + 1; rr <= g.r1; rr++) if (typeof s.value(rr, c) === 'number') { num = true; break; } totals[c] = c === g.c1 && num ? 'sum' : (num ? 'none' : 'none'); if (num) totals[c] = 'sum'; } const f = A.totalFormula(nt, c, totals[c]); cells.push({ r, c, v: f }); }
+          nt.totals = totals; if (r >= s.rowCount - 1) s.ensureSize(r + 1, g.c1);
+          // push the next row down when it isn't empty
+          let empty = true; for (let c = g.c0; c <= g.c1; c++) if (!s.isEmpty(r, c)) { empty = false; break; }
+          if (!empty) wb.insertRows(s, r, 1);
+          wb.setContents(s, cells);
+        } else {
+          const cells = []; for (let c = g.c0; c <= g.c1; c++) cells.push({ r: g.r1, c, v: null }); wb.setContents(s, cells);
+          nt = { ...nt, total: false, range: { ...g, r1: g.r1 - 1 } };
+        }
+        if (s.filter && s.filter.tableId === t.id) wb.setProp(s, 'filter', { ...s.filter, range: { ...nt.range, r1: nt.total ? nt.range.r1 - 1 : nt.range.r1 } });
+      }
+      if (patch.filterBtn !== undefined) { if (!patch.filterBtn && s.filter && s.filter.tableId === t.id) { wb.setProp(s, 'filter', null); wb.setProp(s, 'filterHidden', new Set()); } }
+      wb.setProp(s, 'tables', s.tables.map(x => x.id === t.id ? nt : x));
+    });
+    Grid.updateSpacer(); Grid.notify(); App.refreshContext && App.refreshContext();
+  };
+  A.setTotalFn = (t, c, fn) => {
+    const s = S(); const totals = { ...(t.totals || {}), [c]: fn };
+    wb.run('Total row', () => { wb.setContents(s, [{ r: t.range.r1, c, v: A.totalFormula(t, c, fn) }]); wb.setProp(s, 'tables', s.tables.map(x => x.id === t.id ? { ...x, totals } : x)); });
   };
   A.convertTableToRange = (t) => { const s = S(); wb.run('Convert to range', () => { // bake styles
-    const g = t.range; for (let r = g.r0; r <= g.r1; r++) for (let c = g.c0; c <= g.c1; c++) { const i = r - g.r0 - 1; const p = r === g.r0 ? { fill: t.theme.head, color: t.theme.headText || '#FFFFFF', b: true } : (i % 2 === 0 ? { fill: t.theme.band } : {}); if (Object.keys(p).length) wb.setStyle(s, r, c, SU.mergeStyle(s.style(r, c), p)); }
-    wb.setProp(s, 'tables', s.tables.filter(x => x !== t)); if (s.filter && s.filter.tableId === t.id) { wb.setProp(s, 'filter', null); wb.setProp(s, 'filterHidden', new Set()); } }); };
-  A.toggleTotalRow = (t) => {
-    const s = S(); const g = t.range;
-    wb.run('Total row', () => {
-      if (!t.total) {
-        const r = g.r1 + 1; const cells = [{ r, c: g.c0, v: 'Total' }];
-        for (let c = g.c0 + 1; c <= g.c1; c++) { let num = false; for (let rr = g.r0 + 1; rr <= g.r1; rr++) if (typeof s.value(rr, c) === 'number') { num = true; break; } if (num) cells.push({ r, c, v: `=SUBTOTAL(109,${SU.rangeStr({ r0: g.r0 + 1, c0: c, r1: g.r1, c1: c })})` }); }
-        wb.setContents(s, cells);
-        wb.setProp(s, 'tables', s.tables.map(x => x === t ? { ...x, total: true, range: { ...g, r1: r } } : x));
-      } else {
-        const cells = []; for (let c = g.c0; c <= g.c1; c++) cells.push({ r: g.r1, c, v: null }); wb.setContents(s, cells);
-        wb.setProp(s, 'tables', s.tables.map(x => x === t ? { ...x, total: false, range: { ...g, r1: g.r1 - 1 } } : x));
-      }
-    });
+    const g = t.range; for (let r = g.r0; r <= g.r1; r++) for (let c = g.c0; c <= g.c1; c++) { const p = STheme.tableCell(t, r, c); for (const k of ['bT', 'bB', 'bL', 'bR']) if (s.style(r, c)[k]) delete p[k]; if (Object.keys(p).length) wb.setStyle(s, r, c, SU.mergeStyle(s.style(r, c), p)); }
+    wb.setProp(s, 'tables', s.tables.filter(x => x !== t)); if (s.filter && s.filter.tableId === t.id) { wb.setProp(s, 'filter', null); wb.setProp(s, 'filterHidden', new Set()); } }); App.refreshContext && App.refreshContext(); };
+  A.toggleTotalRow = (t) => A.setTableProps(t, { total: !t.total }, 'Total row');
+  A.resizeTable = async (t) => {
+    const v = await BTS.prompt('Resize table', 'Select the new data range for your table', SU.absRangeStr(t.range)); if (!v) return;
+    const g = SU.parseRange(v); if (!g || g.r0 !== t.range.r0 || g.c1 < g.c0) { BTS.toast('The header row must stay in the same row and the range must be valid.', { error: true, ms: 4000 }); return; }
+    A.setTableProps(t, { range: g }, 'Resize table');
   };
-  A.CELL_STYLES = [
-    { group: 'Good, Bad and Neutral', items: [['Normal', null], ['Bad', { fill: '#FFC7CE', color: '#9C0006' }], ['Good', { fill: '#C6EFCE', color: '#006100' }], ['Neutral', { fill: '#FFEB9C', color: '#9C5700' }]] },
-    { group: 'Data and Model', items: [['Calculation', { fill: '#F2F2F2', color: '#FA7D00', b: true, bT: { style: 'thin', color: '#7F7F7F' }, bB: { style: 'thin', color: '#7F7F7F' }, bL: { style: 'thin', color: '#7F7F7F' }, bR: { style: 'thin', color: '#7F7F7F' } }], ['Check Cell', { fill: '#A5A5A5', color: '#FFFFFF', b: true, bT: { style: 'double', color: '#3F3F3F' }, bB: { style: 'double', color: '#3F3F3F' }, bL: { style: 'double', color: '#3F3F3F' }, bR: { style: 'double', color: '#3F3F3F' } }], ['Input', { fill: '#FFCC99', color: '#3F3F76', bT: { style: 'thin', color: '#7F7F7F' }, bB: { style: 'thin', color: '#7F7F7F' }, bL: { style: 'thin', color: '#7F7F7F' }, bR: { style: 'thin', color: '#7F7F7F' } }], ['Output', { fill: '#F2F2F2', color: '#3F3F3F', b: true, bT: { style: 'thin', color: '#3F3F3F' }, bB: { style: 'thin', color: '#3F3F3F' }, bL: { style: 'thin', color: '#3F3F3F' }, bR: { style: 'thin', color: '#3F3F3F' } }], ['Note', { fill: '#FFFFCC', bT: { style: 'thin', color: '#B2B2B2' }, bB: { style: 'thin', color: '#B2B2B2' }, bL: { style: 'thin', color: '#B2B2B2' }, bR: { style: 'thin', color: '#B2B2B2' } }], ['Warning Text', { color: '#FF0000' }], ['Explanatory', { color: '#7F7F7F', i: true }], ['Linked Cell', { color: '#FA7D00', bB: { style: 'double', color: '#FF8001' } }]] },
-    { group: 'Titles and Headings', items: [['Title', { sz: 18, color: '#0B4F3E', font: 'Cambria' }], ['Heading 1', { sz: 15, b: true, color: '#0B4F3E', bB: { style: 'thick', color: '#0F8A6A' } }], ['Heading 2', { sz: 13, b: true, color: '#0B4F3E', bB: { style: 'thick', color: '#87C5B4' } }], ['Heading 3', { b: true, color: '#0B4F3E', bB: { style: 'medium', color: '#A9D6C9' } }], ['Heading 4', { b: true, color: '#0B4F3E' }], ['Total', { b: true, bT: { style: 'thin', color: '#0F8A6A' }, bB: { style: 'double', color: '#0F8A6A' } }]] },
-    { group: 'Themed Cell Styles', items: [['Accent 1', { fill: '#0F8A6A', color: '#FFFFFF' }], ['Accent 2', { fill: '#2F5597', color: '#FFFFFF' }], ['Accent 3', { fill: '#C55A11', color: '#FFFFFF' }], ['Accent 4', { fill: '#7030A0', color: '#FFFFFF' }], ['20% Accent 1', { fill: '#CFE8E1' }], ['20% Accent 2', { fill: '#D6DCE4' }], ['20% Accent 3', { fill: '#FBE4D5' }], ['20% Accent 4', { fill: '#E4D4F0' }]] },
-  ];
-  A.applyCellStyle = (st) => {
-    const keep = ['nf', 'h', 'v', 'wrap', 'indent', 'locked'];
-    A.applyStyle((cur) => { const o = {}; Object.keys(cur).forEach(k => { if (!keep.includes(k)) o[k] = undefined; }); return Object.assign(o, st || {}); }, 'Cell style');
+  A.renameTable = (t, name) => {
+    name = String(name || '').trim(); if (!/^[A-Za-z_\\][A-Za-z0-9_.]*$/.test(name) || /^[A-Za-z]{1,3}\d+$/.test(name)) { BTS.toast('Table names must start with a letter and contain no spaces.', { error: true }); return false; }
+    if (wb.sheets.some(sh => sh.tables.some(x => x !== t && x.name.toLowerCase() === name.toLowerCase()))) { BTS.toast('That table name is already used.', { error: true }); return false; }
+    A.setTableProps(t, { name }, 'Rename table'); return true;
+  };
+  /** apply a named cell style (themed). Tagged with cs so theme changes and Modify update it. */
+  A.applyCellStyle = (name) => {
+    const st = STheme.cellStyle(name); if (!st) return;
+    if (STheme.NUMBER_STYLES.includes(name)) return A.applyStyle({ nf: st.nf, cs: undefined }, 'Cell style');
+    const keep = ['nf', 'h', 'v', 'wrap', 'indent', 'locked', 'fh'];
+    A.applyStyle((cur) => { const o = {}; Object.keys(cur).forEach(k => { if (!keep.includes(k)) o[k] = undefined; }); return Object.assign(o, st, { cs: name === 'Normal' ? undefined : name }); }, 'Cell style');
+  };
+  /** re-apply every tagged cell style (after a theme change or Modify) — call inside a transaction */
+  A.restyleTagged = (onlyName) => {
+    for (const s of wb.sheets) for (const [k, cur] of [...s.styles]) {
+      if (!cur.cs || (onlyName && cur.cs !== onlyName)) continue; const st = STheme.cellStyle(cur.cs); if (!st) continue;
+      const { r, c } = unkey(k); const o = {}; ['nf', 'h', 'v', 'wrap', 'indent', 'locked', 'fh'].forEach(p => { if (cur[p] !== undefined) o[p] = cur[p]; });
+      wb.setStyle(s, r, c, { ...o, ...st, cs: cur.cs });
+    }
+  };
+  A.setTheme = (id) => {
+    if (id === wb.theme) return; const th = STheme.get(id);
+    STheme.loadFont(th.head, true).then(() => STheme.loadFont(th.body)).then(() => STheme.loadFont(th.body, true)).then(() => { Grid.render(); Charts.onFonts && Charts.onFonts(); });
+    wb.run('Theme: ' + th.name, () => { wb.setProp(wb, 'theme', id); A.restyleTagged(); if (window.Pivot) Pivot.restyleAll(); });
+    Grid.render(); Charts.renderSheet(); App.refreshRibbon(); BTS.toast('Theme: ' + th.name + ' (' + th.desc + ')');
   };
 
   /* ---------- misc ---------- */
@@ -979,6 +1037,8 @@
     // skip header row if it's text and the next row example doesn't come from it
     const srcCols = []; for (let cc = c - 1; cc >= 0 && srcCols.length < 4; cc--) { if (!s.isEmpty(examples.length ? examples[examples.length - 1].r : r0, cc)) srcCols.push(cc); else if (srcCols.length) break; }
     for (let cc = c + 1; srcCols.length < 4 && cc < c + 4; cc++) if (!s.isEmpty(examples.length ? examples[examples.length - 1].r : r0, cc)) srcCols.push(cc);
+    // only columns that also have data in the rows we are about to fill can be sources
+    if (examples.length) { const nr = examples[examples.length - 1].r + 1; const keep = srcCols.filter(cc => !s.isEmpty(nr, cc)); if (keep.length) srcCols.splice(0, srcCols.length, ...keep); }
     if (!examples.length || !srcCols.length) { BTS.toast('Type an example of the result in the first cell, then try Flash Fill again.', { error: true, ms: 3500 }); return; }
     const cands = [];
     const cases = [(x) => x, (x) => x.toUpperCase(), (x) => x.toLowerCase(), (x) => x.replace(/\w\S*/g, w => w[0].toUpperCase() + w.slice(1).toLowerCase())];
@@ -990,14 +1050,35 @@
       }
     }
     // two-part combos from different/same columns with separator from example
-    const ex0 = examples.find(e => e.t !== '');
-    const sepMatch = ex0 && /([ ,.\-_@/]+)/.exec(ex0.t);
-    if (sepMatch) { const sep = sepMatch[1]; const singles = cands.slice(); for (let i = 0; i < Math.min(singles.length, 120); i++) for (let j = 0; j < Math.min(singles.length, 120); j++) if (i !== j) cands.push((row) => { const a = singles[i](row), b = singles[j](row); return a && b ? a + sep + b : null; }); }
+    const seps = [...new Set(examples.slice(-3).map(e => (/([ ,.\-_@/]+)/.exec(e.t) || [])[1]).filter(Boolean))];
+    if (seps.length) { const singles = cands.slice(); const N = Math.min(singles.length, 120); for (const sep of seps) for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) if (i !== j) cands.push((row) => { const a = singles[i](row), b = singles[j](row); return a && b ? a + sep + b : null; }); }
     const rowOf = (r) => { const o = {}; for (const sc of srcCols) o[sc] = SU.valueText(s.value(r, sc)); return o; };
     let headerSkip = 0;
     const fits = (fn, exs) => exs.every(e => { try { return fn(rowOf(e.r)) === e.t; } catch { return false; } });
     let best = cands.find(fn => fits(fn, examples));
     if (!best && examples.length > 1) { best = cands.find(fn => fits(fn, examples.slice(1))); if (best) headerSkip = 1; }
+    // pattern synthesis: output = literals + (case-changed) tokens / first letters — e.g. initials "AS", emails "aarav.sharma@college.edu"
+    if (!best) {
+      const atoms = []; const toks = (x) => String(x).split(/[^A-Za-z0-9\u0900-\u097F]+/).filter(Boolean);
+      for (const sc of srcCols) for (const [ci, cf] of cases.entries()) {
+        atoms.push({ len: 9, f: (row) => cf(row[sc]) });
+        for (let i = 0; i < 6; i++) { atoms.push({ len: 5, f: (row) => { const t = toks(row[sc]); return t[i] !== undefined ? cf(t[i]) : null; } }); atoms.push({ len: 4, f: (row) => { const t = toks(row[sc]); return t.length > i ? cf(t[t.length - 1 - i]) : null; } }); atoms.push({ len: 1, first: true, f: (row) => { const t = toks(row[sc]); return t[i] !== undefined ? cf(t[i][0]) : null; } }); }
+        void ci;
+      }
+      const synth = (o, row) => {
+        const segs = []; let p = 0, lit = '';
+        while (p < o.length) {
+          let pick = null, plen = 0;
+          for (const a of atoms) { let v; try { v = a.f(row); } catch { v = null; } if (!v || !o.startsWith(v, p)) continue; const okFirst = !a.first || p === 0 || !/[A-Za-z0-9]/.test(o[p - 1]) || (segs.length && segs[segs.length - 1].first && !lit); if (!okFirst) continue; if (v.length > plen || (v.length === plen && pick && pick.first && !a.first)) { pick = a; plen = v.length; } }
+          if (pick) { if (lit) { segs.push({ lit }); lit = ''; } segs.push(pick); p += plen; } else lit += o[p++];
+        }
+        if (lit) segs.push({ lit });
+        if (!segs.some(x => x.f)) return null;
+        return (r2) => { let out = ''; for (const sg of segs) { if (sg.lit !== undefined) out += sg.lit; else { const v = sg.f(r2); if (v === null || v === undefined) return null; out += v; } } return out; };
+      };
+      const exs = examples.filter(e => e.t !== '');
+      for (let k = exs.length - 1; k >= 0 && !best; k--) { const fn = synth(exs[k].t, rowOf(exs[k].r)); if (!fn) continue; if (fits(fn, exs)) best = fn; else if (exs.length > 1 && fits(fn, exs.slice(1))) { best = fn; headerSkip = 1; } }
+    }
     if (!best) { BTS.toast('Flash Fill couldn’t find a pattern. Add another example.', { error: true }); return; }
     const start = examples[examples.length - 1].r + 1; const cells = [];
     for (let rr = start; rr < start + 100000; rr++) { if (srcCols.every(sc => s.isEmpty(rr, sc))) break; if (!s.isEmpty(rr, c)) break; const v = best(rowOf(rr)); cells.push({ r: rr, c, v: v === null ? null : v }); }

@@ -10,11 +10,13 @@
   function init() {
     wb = new SheetModel.Workbook(); App.wb = wb; window.WB = wb;
     newWorkbook();
-    A.init(wb); Dlg.init(wb);
+    A.init(wb); Dlg.init(wb); Spark.init(wb); Pivot.init(wb); WhatIf.init(wb); DT.init(wb); Prot.init(wb); Threads.init(wb);
     Grid.init(wb, $('#grid-host'));
     Ed.init(wb); Charts.init(wb);
-    wb.on((what) => { Grid.render(); App.refreshFormulaBar(); App.refreshStatus(); App.refreshRibbon(); if (what !== 'change') { Grid.updateSpacer(); renderTabs(); Charts.renderSheet(); } refreshUndo(); });
-    Grid.onSelect = () => { App.refreshFormulaBar(); App.refreshStatus(); App.refreshRibbon(); App.refreshValidationUI(); if (A.painter && !Grid.dragging) A.applyPainter(); Charts.selected && Charts.select(null); hideNote(); };
+    wb.on((what) => { Grid.render(); App.refreshFormulaBar(); App.refreshStatus(); App.refreshRibbon(); if (what !== 'change') { Grid.updateSpacer(); renderTabs(); Charts.renderSheet(); } refreshUndo(); DT.afterChange(); Threads.render(); App.refreshContext(); Pivot.refreshPane(); });
+    Grid.onSelect = () => { hideNote(); App.refreshFormulaBar(); App.refreshStatus(); App.refreshRibbon(); App.refreshValidationUI(); if (A.painter && !Grid.dragging) A.applyPainter(); Charts.selected && Charts.select(null); App.refreshContext(); Pivot.refreshPane(); Threads.render(); };
+    Grid.onOutline = (o) => DT.onOutline(o);
+    Grid.onFontsLoaded = () => { Charts.onFonts(); App.refreshFormulaBar(); };
     Grid.onSelectionEnd = () => { if (A.painter) A.applyPainter(); };
     Grid.onScroll = () => { Ed.reposition(); App.refreshValidationUI(); hideNote(); persistNotes(); };
     Grid.afterRender = () => { };
@@ -48,7 +50,7 @@
       ],
       openAccept: '.xlsx,.xls,.csv,.tsv,.ods,.txt',
       onCommand: (cmd, el, ev) => App.cmd(cmd, el, ev),
-      load: async (f) => { await IO.load(wb, f); afterLoad(); },
+      load: async (f) => { await IO.load(wb, f); await Promise.race([STheme.preloadWorkbook(wb), new Promise(r => setTimeout(r, 1500))]); afterLoad(); },
       save: async (ext) => {
         if (Ed.isEditing()) Ed.commit();
         if (ext === 'csv') return IO.toCSV(wb.active);
@@ -61,12 +63,12 @@
       afterExportPDF: () => IO.endPrint(),
       onZoom: (z) => { Grid.setZoom(z); Ed.reposition(); },
       zoom: 100, minZoom: 25, maxZoom: 400,
-      templates: STemplates.list.map(t => ({ name: t.name, thumbHTML: t.thumbHTML, apply: () => { const d = t.build(); IO.buildWorkbook(wb, d.sheets, d.names || []); afterLoad(); } })),
+      templates: STemplates.list.map(t => ({ name: t.name, thumbHTML: t.thumbHTML, apply: () => { BTS.resetProps(); wb.resetBook(); const d = t.build(); IO.buildWorkbook(wb, d.sheets, d.names || []); if (d.theme) wb.theme = d.theme; if (d.after) d.after(wb); wb.undoStack = []; wb.redoStack = []; STheme.preloadWorkbook(wb).then(() => { Grid.render(); Charts.onFonts(); }); afterLoad(); } })),
       blankThumb: `<div style="width:100%;height:100%;background:#fff;display:grid;grid-template-columns:18px repeat(4,1fr);grid-auto-rows:16px;font:9px Carlito,sans-serif;color:#7a8499">${Array.from({ length: 55 }, (_, i) => { const r = Math.floor(i / 5), c = i % 5; return `<div style="border-right:1px solid #e1e4e8;border-bottom:1px solid #e1e4e8;${r === 0 || c === 0 ? 'background:#f4f6f8;text-align:center' : ''}${r === 1 && c === 1 ? ';outline:2px solid #0F8A6A;outline-offset:-2px' : ''}">${r === 0 && c ? 'ABCD'[c - 1] : c === 0 && r ? r : ''}</div>`; }).join('')}</div>`,
       search: (q) => Dlg.searchFromTitlebar(q),
       infoHTML: () => infoHTML(),
       focus: () => Grid.focus(),
-      shortcuts: [['Ctrl+Arrow', 'Jump to edge of data'], ['Shift+Arrow', 'Extend selection'], ['F2', 'Edit cell'], ['F4', 'Toggle $ in formula / repeat'], ['Ctrl+D / Ctrl+R', 'Fill down / right'], ['Ctrl+;', 'Insert today’s date'], ['Ctrl+`', 'Show formulas'], ['Alt+=', 'AutoSum'], ['Ctrl+Shift+L', 'Filter'], ['Ctrl+G', 'Go to'], ['Ctrl+PgUp / PgDn', 'Previous / next sheet'], ['Shift+F11', 'New sheet'], ['Ctrl+E', 'Flash fill'], ['Alt+Enter', 'New line in cell']],
+      shortcuts: [['Ctrl+Alt+M', 'New comment'], ['Ctrl+Shift+F', 'Font picker'], ['Alt+Shift+→ / ←', 'Group / ungroup'], ['Ctrl+Arrow', 'Jump to edge of data'], ['Shift+Arrow', 'Extend selection'], ['F2', 'Edit cell'], ['F4', 'Toggle $ in formula / repeat'], ['Ctrl+D / Ctrl+R', 'Fill down / right'], ['Ctrl+;', 'Insert today’s date'], ['Ctrl+`', 'Show formulas'], ['Alt+=', 'AutoSum'], ['Ctrl+Shift+L', 'Filter'], ['Ctrl+G', 'Go to'], ['Ctrl+PgUp / PgDn', 'Previous / next sheet'], ['Shift+F11', 'New sheet'], ['Ctrl+E', 'Flash fill'], ['Alt+Enter', 'New line in cell']],
     });
     BTS.hasContent = () => wb.sheets.length > 1 || wb.sheets.some(s => s.usedRange().r1 >= 0 || s.charts.length || s.images.length) || wb.undoStack.length > 0;
     A.setMode('Ready');
@@ -82,14 +84,18 @@
     });
     document.addEventListener('mousedown', (e) => { if (Charts.selected && !e.target.closest('.fobj') && !e.target.closest('#ribbon') && !e.target.closest('#ribbon-tabs') && !e.target.closest('.pop') && !e.target.closest('.modal-back')) Charts.select(null); }, true);
     window.addEventListener('beforeprint', () => { if (!document.body.classList.contains('printing')) IO.preparePrint(wb, printSheets()); });
+    $('#statusbar').addEventListener('contextmenu', (e) => { e.preventDefault(); statusMenu(e); });
+    $('#tbl-gallery').addEventListener('mousedown', (e) => e.preventDefault());
+    $('#tbl-gallery').addEventListener('click', (e) => { const b = e.target.closest('[data-id]'); if (b) A.formatAsTable(b.dataset.id); });
+    $('#tbl-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); Grid.focus(); } if (e.key === 'Escape') { App.refreshContext(); Grid.focus(); } });
   }
   function printSheets() { return [wb.active]; }
 
   function afterLoad(first) {
     if (Ed.isEditing()) Ed.cancel();
-    Charts.select(null); Grid.copyRange = null; A.clip = null;
+    Charts.select(null); Grid.copyRange = null; A.clip = null; Threads.close(true); Pivot.paneClosed = false;
     const s = wb.active; Grid.updateSpacer(); Grid.restoreScroll(); renderTabs(); Charts.renderSheet();
-    App.refreshFormulaBar(); App.refreshStatus(); App.refreshRibbon(); refreshUndo(); App.refreshValidationUI();
+    App.refreshFormulaBar(); App.refreshStatus(); App.refreshRibbon(); refreshUndo(); App.refreshValidationUI(); App.refreshContext(); Pivot.refreshPane(); App.layoutPanes();
     Grid.focus();
   }
   App.afterLoad = afterLoad;
@@ -101,7 +107,7 @@
     Charts.select(null);
     wb.active.scroll = { x: Grid.scroller.scrollLeft, y: Grid.scroller.scrollTop };
     wb.activeIndex = i; Grid.restoreScroll(); renderTabs(); Charts.renderSheet();
-    App.refreshFormulaBar(); App.refreshStatus(); App.refreshRibbon(); App.refreshValidationUI();
+    App.refreshFormulaBar(); App.refreshStatus(); App.refreshRibbon(); App.refreshValidationUI(); App.refreshContext(); Pivot.refreshPane(); Threads.render();
     const t = $('#tabs .stab.active'); t && t.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   };
   function renderTabs() {
@@ -116,11 +122,11 @@
     $('#add-sheet').addEventListener('click', () => App.cmd('sheet-add'));
     $('.sb-nav').addEventListener('click', (e) => { const b = e.target.closest('[data-sbnav]'); if (b) App.switchSheet(SU.clamp(wb.activeIndex + (b.dataset.sbnav === 'next' ? 1 : -1), 0, wb.sheets.length - 1)); });
     el.addEventListener('mousedown', (e) => { const t = e.target.closest('.stab'); if (!t || e.target.tagName === 'INPUT') return; if (Ed.isEditing()) e.preventDefault(); App.switchSheet(+t.dataset.i); });
-    el.addEventListener('dblclick', (e) => { const t = e.target.closest('.stab'); if (t) renameTab(+t.dataset.i); });
+    el.addEventListener('dblclick', (e) => { const t = e.target.closest('.stab'); if (t && !Prot.structureCheck()) renameTab(+t.dataset.i); });
     el.addEventListener('contextmenu', (e) => { e.preventDefault(); const t = e.target.closest('.stab'); if (!t) return; App.switchSheet(+t.dataset.i); tabMenu(e); });
     el.addEventListener('wheel', (e) => { el.scrollLeft += e.deltaY; }, { passive: true });
     let dragI = null;
-    el.addEventListener('dragstart', (e) => { const t = e.target.closest('.stab'); if (!t) return; dragI = +t.dataset.i; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/x-bts-sheet', String(dragI)); });
+    el.addEventListener('dragstart', (e) => { const t = e.target.closest('.stab'); if (!t) return; if (wb.protectStructure) { e.preventDefault(); return; } dragI = +t.dataset.i; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/x-bts-sheet', String(dragI)); });
     el.addEventListener('dragover', (e) => { if (dragI === null) return; e.preventDefault(); const t = e.target.closest('.stab'); $$('.stab', el).forEach(x => x.classList.remove('drop-before', 'drop-after')); if (t) { const r = t.getBoundingClientRect(); t.classList.add(e.clientX < r.left + r.width / 2 ? 'drop-before' : 'drop-after'); } });
     el.addEventListener('drop', (e) => { if (dragI === null) return; e.preventDefault(); e.stopPropagation(); const t = e.target.closest('.stab'); if (t) { const r = t.getBoundingClientRect(); let to = +t.dataset.i + (e.clientX < r.left + r.width / 2 ? 0 : 1); if (to > dragI) to--; if (to !== dragI) { wb.run('Move sheet', () => wb.moveSheet(wb.sheets[dragI], to)); renderTabs(); } } dragI = null; });
     el.addEventListener('dragend', () => { dragI = null; $$('.stab', el).forEach(x => x.classList.remove('drop-before', 'drop-after')); });
@@ -135,8 +141,8 @@
     inp.addEventListener('blur', () => finish(true));
   }
   function tabMenu(e) {
-    const s = wb.active; const i = wb.activeIndex;
-    BTS.menu({ x: e.clientX, y: e.clientY - 10 }, [
+    const s = wb.active; const i = wb.activeIndex; const lockS = !!wb.protectStructure;
+    BTS.menu({ x: e.clientX, y: e.clientY - 10 }, lockS ? [{ head: 'Workbook structure is protected' }, { label: s.protected ? 'Unprotect sheet' : 'Protect sheet', icon: 'lock', action: () => App.cmd('protect') }, { label: 'Unprotect workbook…', icon: 'book-lock', action: () => App.cmd('protect-workbook') }] : [
       { label: 'Insert sheet', icon: 'plus', action: () => App.cmd('sheet-add') },
       { label: 'Rename', icon: 'pencil', action: () => renameTab(i) },
       { label: 'Duplicate', icon: 'copy', action: () => App.cmd('sheet-dup') },
@@ -174,7 +180,7 @@
       else { label = SU.addr(a.r, a.c); const nm = wb.listNames().find(n => { const r = SU.parseRef(SU.fromHF(n.expr)); return r && (!r.sheet || r.sheet === s.name) && r.range.r0 === g.r0 && r.range.c0 === g.c0 && r.range.r1 === g.r1 && r.range.c1 === g.c1; }); if (nm) label = nm.name; }
       $('#namebox').value = label;
     }
-    if (!Ed.isEditing()) { const fx = $('#fx'); fx.value = s.editText(a.r, a.c); fx.style.height = '26px'; }
+    if (!Ed.isEditing()) { const fx = $('#fx'); fx.value = s.protected && s.style(a.r, a.c).fh ? '' : s.editText(a.r, a.c); fx.style.height = '26px'; }
   };
   App.refreshStatus = () => {
     const s = wb.active; const g = s.sel; const single = A.sels().length === 1 && g.r0 === g.r1 && g.c0 === g.c1 || (s.mergeAt(g.r0, g.c0) && s.expandMerges({ r0: g.r0, c0: g.c0, r1: g.r0, c1: g.c0 }).r1 === g.r1 && s.expandMerges({ r0: g.r0, c0: g.c0, r1: g.r0, c1: g.c0 }).c1 === g.c1);
@@ -182,19 +188,22 @@
     if (!single) {
       const st = A.selectionStats(); const f = (v) => SU.format(v, s.style(s.active.r, s.active.c).nf && !/[@]/.test(s.style(s.active.r, s.active.c).nf) ? s.style(s.active.r, s.active.c).nf : 'General').text;
       const fmt = (v) => { const t = f(+v.toPrecision(12)); return t; };
-      if (st.ncount) html = `<span class="sb-stat">Average: <b>${SU.esc(fmt(st.avg))}</b></span><span class="sb-stat">Count: <b>${st.count}</b></span><span class="sb-stat">Sum: <b>${SU.esc(fmt(st.sum))}</b></span>${st.ncount > 1 ? `<span class="sb-stat">Min: <b>${SU.esc(fmt(st.min))}</b></span><span class="sb-stat">Max: <b>${SU.esc(fmt(st.max))}</b></span>` : ''}`;
-      else if (st.count) html = `<span class="sb-stat">Count: <b>${st.count}</b></span>`;
+      const on = App.statusOpts(); const parts = [];
+      const stat = (k, label, v) => { if (on[k]) parts.push(`<span class="sb-stat" data-stat="${k}" title="Right-click the status bar to choose what to show">${label}: <b>${SU.esc(v)}</b></span>`); };
+      if (st.ncount) { stat('average', 'Average', fmt(st.avg)); stat('count', 'Count', String(st.count)); stat('ncount', 'Numerical Count', String(st.ncount)); stat('min', 'Min', fmt(st.min)); stat('max', 'Max', fmt(st.max)); stat('sum', 'Sum', fmt(st.sum)); }
+      else if (st.count) stat('count', 'Count', String(st.count));
+      html = parts.join('');
     }
     BTS.setStatus('stats', html);
     const fl = s.filter && Object.keys(s.filter.cols || {}).length ? `<span>${icon('funnel', 13)} Filter mode: ${s.filter.range.r1 - s.filter.range.r0 - s.filterHidden.size} of ${s.filter.range.r1 - s.filter.range.r0} records</span>` : '';
     BTS.setStatus('filter', fl);
-    BTS.setStatusRight(`${s.protected ? icon('lock', 13) + ' Protected · ' : ''}${Grid.showFormulas ? 'Showing formulas · ' : ''}${wb.sheets.length > 1 ? `Sheet ${wb.activeIndex + 1} of ${wb.sheets.length}` : ''}`);
+    BTS.setStatusRight([wb.protectStructure ? icon('book-lock', 13) + ' Structure locked' : '', s.protected ? icon('lock', 13) + ' Protected' : '', STheme.cur().name !== 'BTS' ? 'Theme: ' + SU.esc(STheme.cur().name) : '', Grid.showFormulas ? 'Showing formulas' : '', wb.sheets.length > 1 ? `Sheet ${wb.activeIndex + 1} of ${wb.sheets.length}` : ''].filter(Boolean).join(' · '));
   };
   function refreshUndo() { const tb = $('#titlebar'); if (!tb) return; const u = tb.querySelector('[data-cmd="undo"]'), r = tb.querySelector('[data-cmd="redo"]'); if (u) { u.style.opacity = wb.canUndo() ? 1 : .45; u.title = wb.canUndo() ? 'Undo ' + wb.undoStack[wb.undoStack.length - 1].label + ' (Ctrl+Z)' : 'Undo (Ctrl+Z)'; } if (r) { r.style.opacity = wb.canRedo() ? 1 : .45; r.title = wb.canRedo() ? 'Redo ' + wb.redoStack[wb.redoStack.length - 1].label + ' (Ctrl+Y)' : 'Redo (Ctrl+Y)'; } }
 
   /* ---------- ribbon controls state ---------- */
   function buildRibbonControls() {
-    $('#sel-font').innerHTML = SU.FONTS.map(f => `<option value="${f}" style="font-family:${SU.cssFont(f).replace(/"/g, "'")}">${f}</option>`).join('');
+    /* the font box opens BTS.fontPicker (search, categories, previews, recent, theme fonts) */
     $('#sel-size').innerHTML = SU.SIZES.map(s => `<option>${s}</option>`).join('');
     $('#sel-numfmt').innerHTML = SU.FORMATS.map(f => `<option value="${f.id}">${f.label}</option>`).join('') + '<option value="custom" disabled>Custom</option><option value="more">More formats…</option>';
   }
@@ -206,8 +215,8 @@
     tog('btn-left', h === 'left'); tog('btn-center', h === 'center'); tog('btn-right', h === 'right');
     tog('btn-vtop', st.v === 'top'); tog('btn-vmiddle', st.v === 'middle'); tog('btn-vbottom', !st.v || st.v === 'bottom');
     tog('btn-merge', !!s.mergeAt(a.r, a.c)); tog('btn-showf', Grid.showFormulas); tog('btn-filter', !!s.filter); tog('btn-protect', s.protected);
-    tog('btn-freeze', s.freeze.r || s.freeze.c); tog('btn-showcomments', App.notesShown);
-    const sf = $('#sel-font'); if (document.activeElement !== sf) sf.value = st.font || 'Calibri';
+    tog('btn-freeze', s.freeze.r || s.freeze.c); tog('btn-showcomments', App.notesShown); tog('btn-protectwb', !!wb.protectStructure); tog('btn-cmpane', Threads.isOpen());
+    const sf = $('#sel-font span'); const fname = st.font || SU.defFont; if (sf.textContent !== fname) { sf.textContent = fname; sf.style.fontFamily = SU.cssFont(fname).replace(/"/g, "'"); }
     const sz = $('#sel-size'); if (document.activeElement !== sz) { const val = String(st.sz || 11); if (![...sz.options].some(o => o.value === val)) sz.insertAdjacentHTML('beforeend', `<option>${val}</option>`); sz.value = val; }
     const nf = $('#sel-numfmt'); if (document.activeElement !== nf) nf.value = SU.formatId(st.nf);
     $('#chk-vgrid').checked = s.showGrid; $('#chk-vgrid2').checked = s.showGrid; $('#chk-vhead').checked = s.showHeadings; $('#chk-vfbar').checked = !document.body.classList.contains('no-fbar');
@@ -216,7 +225,12 @@
   };
 
   /* ---------- validation dropdown button ---------- */
-  let dvBtn = null;
+  let dvBtn = null, tlBtn = null;
+  App.totalMenu = () => {
+    const s = wb.active; const a = s.active; const t = s.tableAt(a.r, a.c); if (!t || !t.total) return; const cur = (t.totals || {})[a.c] || 'none';
+    const rc = Grid.cellRect(a.r, a.c); const hr = $('#grid-host').getBoundingClientRect();
+    BTS.menu({ x: hr.left + rc.x, y: hr.top + rc.y + rc.h + 1 }, A.TOTAL_FNS.map(([k, l]) => ({ label: l, checked: k === cur, action: () => A.setTotalFn(t, a.c, k) })).concat([{ sep: true }, { label: 'More functions…', icon: 'square-function', action: () => Dlg.insertFunction('SUBTOTAL') }]));
+  };
   App.refreshValidationUI = () => {
     const s = wb.active; const a = s.active; const dv = s.validationAt(a.r, a.c);
     if (!dvBtn) { dvBtn = document.createElement('button'); dvBtn.className = 'dv-btn'; dvBtn.innerHTML = icon('chevron-down', 12); dvBtn.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); App.openValidationList(); }); Grid.objLayer.parentElement.appendChild(dvBtn); }
@@ -225,7 +239,11 @@
       if (rc.x + rc.w < Grid.hw() || rc.y < Grid.hh()) dvBtn.style.display = 'none';
     }
     // input prompt
-    if (dv && dv.prompt && !Ed.isEditing()) showNote(a.r, a.c, dv.prompt, 'Input');
+    if (dv && dv.prompt && !Ed.isEditing()) showNote(a.r, a.c, dv.prompt, dv.promptTitle || '');
+    // table total row: function picker button
+    const t = s.tableAt(a.r, a.c);
+    if (!tlBtn) { tlBtn = document.createElement('button'); tlBtn.className = 'dv-btn'; tlBtn.title = 'Choose the total function'; tlBtn.innerHTML = icon('chevron-down', 12); tlBtn.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); App.totalMenu(); }); Grid.objLayer.parentElement.appendChild(tlBtn); }
+    if (t && t.total && a.r === t.range.r1 && a.c > t.range.c0 && !Ed.isEditing() && !(dv && dv.type === 'list')) { const rc = Grid.cellRect(a.r, a.c); tlBtn.style.display = ''; tlBtn.style.left = rc.x + rc.w + 1 + 'px'; tlBtn.style.top = rc.y + rc.h - 18 + 'px'; } else tlBtn.style.display = 'none';
   };
   App.openValidationList = () => {
     const s = wb.active; const a = s.active; const dv = s.validationAt(a.r, a.c); if (!dv || dv.type !== 'list') return;
@@ -254,7 +272,8 @@
     const s = wb.active;
     if (!cell) { if (noteKey !== null && !(s.validationAt(s.active.r, s.active.c) || {}).prompt) hideNote(); return; }
     const k = key(cell.r, cell.c);
-    if (s.comments.has(k) && !App.notesShown) { if (noteKey !== k) showNote(cell.r, cell.c, s.comments.get(k), 'Note'); }
+    if (s.threads.has(k)) { if (noteKey !== k) { const p = Threads.preview(s, cell.r, cell.c); showNote(cell.r, cell.c, p.text, p.title); noteEl.classList.add('thread'); } }
+    else if (s.comments.has(k) && !App.notesShown) { if (noteKey !== k) { showNote(cell.r, cell.c, s.comments.get(k), 'Note'); noteEl.classList.remove('thread'); } }
     else if (s.links.has(k)) { if (noteKey !== k) showNote(cell.r, cell.c, s.links.get(k) + '\nClick to follow the link.', ''); }
     else if (noteKey !== null && noteKey !== key(s.active.r, s.active.c)) hideNote();
   }
@@ -277,12 +296,16 @@
     else {
       items.push({ label: 'Insert…', icon: 'square-plus', action: () => Dlg.insertCells() }, { label: 'Delete…', icon: 'square-minus', action: () => Dlg.deleteCells() }, { label: 'Clear contents', icon: 'eraser', kbd: 'Del', action: () => A.clear('contents') }, { sep: true },
         { label: 'Sort A to Z', icon: 'arrow-down-a-z', action: () => A.quickSort(false) }, { label: 'Sort Z to A', icon: 'arrow-down-z-a', action: () => A.quickSort(true) }, { label: s.filter ? 'Remove filter' : 'Filter', icon: 'funnel', action: () => A.toggleFilter() }, { sep: true },
-        { label: hasNote ? 'Edit note' : 'New note', icon: 'message-square-plus', action: () => Dlg.note() }, ...(hasNote ? [{ label: 'Delete note', icon: 'message-square-x', action: () => App.cmd('comment-delete') }] : []),
+        { label: s.threads.has(k) ? 'Reply to comment' : 'New comment', icon: 'message-square-plus', kbd: 'Ctrl+Alt+M', action: () => Threads.newComment() }, ...(s.threads.has(k) ? [{ label: 'Delete comment', icon: 'message-square-x', action: () => Threads.deleteAtActive() }] : []),
+        { label: hasNote ? 'Edit note' : 'New note', icon: 'sticky-note', action: () => Dlg.note() }, ...(hasNote ? [{ label: 'Delete note', icon: 'eraser', action: () => App.cmd('comment-delete') }] : []),
         { label: 'Format cells…', icon: 'paintbrush', kbd: 'Ctrl+1', action: () => Dlg.formatCells() },
         ...(s.validationAt(s.active.r, s.active.c)?.type === 'list' ? [{ label: 'Pick from drop-down list', icon: 'list', kbd: 'Alt+↓', action: () => App.openValidationList() }] : []),
         { label: 'Define name…', icon: 'tag', action: () => Dlg.defineName() },
         { label: hasLink ? 'Edit link…' : 'Link…', icon: 'link', kbd: 'Ctrl+K', action: () => Dlg.hyperlink() }, ...(hasLink ? [{ label: 'Open link', icon: 'external-link', action: () => Dlg.followLink(s.links.get(k)) }] : []));
-      if (t) items.push({ sep: true }, { head: 'Table: ' + t.name }, { label: t.total ? 'Remove total row' : 'Add total row', icon: 'sigma', action: () => A.toggleTotalRow(t) }, { label: 'Convert to range', icon: 'table-2', action: () => A.convertTableToRange(t) });
+      if (t) items.push({ sep: true }, { head: 'Table: ' + t.name }, { label: t.total ? 'Remove total row' : 'Add total row', icon: 'sigma', action: () => A.toggleTotalRow(t) }, { label: 'Summarize with PivotTable…', icon: 'table-properties', action: () => Pivot.createDialog(t) }, { label: 'Convert to range', icon: 'table-2', action: () => A.convertTableToRange(t) });
+      const pv = Pivot.at(s, s.active.r, s.active.c);
+      if (pv) items.splice(0, items.length, { head: 'PivotTable: ' + pv.name }, { label: 'Copy', icon: 'copy', kbd: 'Ctrl+C', action: () => A.cutCopyCmd(false) }, { label: 'Refresh', icon: 'refresh-cw', action: () => Pivot.refresh(s, pv) }, { label: 'Show field list', icon: 'panel-right', action: () => { Pivot.paneClosed = false; Pivot.refreshPane(); } }, { label: 'Value field settings…', icon: 'settings-2', disabled: !pv.values.length, action: () => Pivot.valueSettings(s, pv, Math.max(0, Math.min(pv.values.length - 1, (s.active.c - pv.out.c0 - Math.max(pv.rows.length, 1)) % Math.max(1, pv.values.length)))) }, { label: 'PivotTable options…', icon: 'settings-2', action: () => Pivot.options() }, { label: 'PivotChart', icon: 'chart-column-big', action: () => Pivot.createChart() }, { sep: true }, { label: 'Delete PivotTable', icon: 'trash-2', action: () => Pivot.remove(pv) });
+      if (Grid.sparkAt(s, s.active.r, s.active.c)) items.push({ sep: true }, { label: 'Clear sparklines', icon: 'eraser', action: () => Spark.clear(false) }, { label: 'Edit sparkline data…', icon: 'table-2', action: () => Spark.editData() });
     }
     BTS.menu({ x: e.clientX, y: e.clientY }, items);
   };
@@ -295,8 +318,10 @@
       <span>Sheets</span><b style="color:var(--ink)">${wb.sheets.length} (${wb.sheets.map(s => SU.esc(s.name)).join(', ')})</b>
       <span>Cells with data</span><b style="color:var(--ink)">${cells}</b><span>Formulas</span><b style="color:var(--ink)">${formulas}</b>
       <span>Charts</span><b style="color:var(--ink)">${wb.sheets.reduce((a, s) => a + s.charts.length, 0)}</b><span>Defined names</span><b style="color:var(--ink)">${wb.listNames().length}</b>
+      <span>PivotTables</span><b style="color:var(--ink)">${wb.sheets.reduce((a, s) => a + s.pivots.length, 0)}</b><span>Comments</span><b style="color:var(--ink)">${wb.sheets.reduce((a, s) => a + s.threads.size, 0)}</b>
+      <span>Theme</span><b style="color:var(--ink)">${SU.esc(STheme.cur().name)} (${SU.esc(STheme.cur().head)} / ${SU.esc(STheme.cur().body)})</b>
       <span>Calculation</span><b style="color:var(--ink)">Automatic</b></div>
-      <h2>Protect</h2><div class="bs-actions"><button class="bs-action" onclick="BTS.closeBackstage();App.cmd('protect')">${icon('lock')}<div><b>${wb.active.protected ? 'Unprotect' : 'Protect'} current sheet</b><small>Prevent accidental changes to cells</small></div></button></div>`;
+      <h2>Protect</h2><div class="bs-actions"><button class="bs-action" onclick="BTS.closeBackstage();App.cmd('protect')">${icon('lock')}<div><b>${wb.active.protected ? 'Unprotect' : 'Protect'} current sheet</b><small>Control what people can change, with an optional password</small></div></button><button class="bs-action" onclick="BTS.closeBackstage();App.cmd('protect-workbook')">${icon('book-lock')}<div><b>${wb.protectStructure ? 'Unprotect' : 'Protect'} workbook structure</b><small>Stop sheets being added, deleted, renamed or moved</small></div></button></div>`;
   }
 
   /* ---------- menus ---------- */
@@ -329,27 +354,88 @@
     ]);
   }
   function tableMenu(el) {
-    const pop = document.createElement('div');
-    pop.innerHTML = `<div class="gal-head">Table styles</div><div class="gal tables">${A.TABLE_THEMES.map((t, i) => `<button title="${t.name}" data-i="${i}"><i style="background:${t.head}"></i><i style="background:${t.band}"></i><i style="background:#fff"></i><i style="background:${t.band}"></i></button>`).join('')}</div>`;
+    const pop = document.createElement('div'); const th = STheme.cur(); const t = wb.active.tableAt(wb.active.active.r, wb.active.active.c);
+    pop.innerHTML = ['Light', 'Medium', 'Dark'].map(fam => `<div class="gal-head">${fam}</div><div class="gal tables">${STheme.TABLE_STYLES.filter(x => x.startsWith(fam)).map(id => `<button title="Table style ${id}" data-id="${id}" class="${t && t.styleId === id ? 'on' : ''}">${STheme.swatchHTML(id, th)}</button>`).join('')}</div>`).join('') + `<div class="gal-foot">${t ? 'Click a style to restyle ' + SU.esc(t.name) : 'Select a cell in your data, then pick a style'}</div>`;
     pop.addEventListener('mousedown', e => e.preventDefault());
-    pop.addEventListener('click', e => { const b = e.target.closest('[data-i]'); if (b) { BTS.closePopover(); A.formatAsTable(A.TABLE_THEMES[+b.dataset.i]); } });
+    pop.addEventListener('click', e => { const b = e.target.closest('[data-id]'); if (b) { BTS.closePopover(); A.formatAsTable(b.dataset.id); } });
     BTS.popover(el, pop);
   }
   function stylesMenu(el) {
-    const pop = document.createElement('div');
-    pop.innerHTML = A.CELL_STYLES.map((g, gi) => `<div class="gal-head">${g.group}</div><div class="gal styles">${g.items.map(([n, st], i) => { const css = st ? A.cssOfStyle(st).replace(/font-size:[^;]+/, '') : 'background:#fff'; return `<button data-g="${gi}" data-i="${i}" style="${css || 'background:#fff'};color:${(st && st.color) || '#000'}">${n}</button>`; }).join('')}</div>`).join('');
+    const pop = document.createElement('div'); pop.className = 'styles-pop';
+    const groups = STheme.cellStyleGroups(STheme.cur()).map(g => ({ ...g, items: g.items.map(([n]) => [n, STheme.cellStyle(n)]) }));
+    if (wb.customStyles.length) groups.unshift({ group: 'Custom', items: wb.customStyles.map(c => [c.name, c.st]) });
+    const css = (st, num) => { if (num) return 'background:#fff'; const c = A.cssOfStyle(st).replace(/font-size:[^;]+;?/, '').replace(/font-family:([^;]+)/, (m, f) => 'font-family:' + SU.cssFont(f.trim()).replace(/"/g, "'")); return (c || 'background:#fff') + (st.fill ? '' : ';background:#fff'); };
+    pop.innerHTML = groups.map((g, gi) => `<div class="gal-head">${g.group}</div><div class="gal styles ${g.cols === 6 ? 'six' : ''}">${g.items.map(([n, st], i) => `<button data-g="${gi}" data-i="${i}" title="${SU.esc(n)} — right-click to modify" style="${css(st || {}, g.numOnly)};color:${(st && st.color) || '#000'}">${SU.esc(n)}</button>`).join('')}</div>`).join('') +
+      `<div class="menu-sep"></div><div class="menu-item" data-a="new">${icon('plus', 16)}<span>New cell style…</span></div><div class="menu-item" data-a="modify">${icon('pencil', 16)}<span>Modify a style…</span></div>`;
     pop.addEventListener('mousedown', e => e.preventDefault());
-    pop.addEventListener('click', e => { const b = e.target.closest('[data-i]'); if (b) { BTS.closePopover(); A.applyCellStyle(A.CELL_STYLES[+b.dataset.g].items[+b.dataset.i][1]); } });
+    pop.addEventListener('click', e => { const b = e.target.closest('[data-i]'); if (b) { BTS.closePopover(); A.applyCellStyle(groups[+b.dataset.g].items[+b.dataset.i][0]); return; } const a = e.target.closest('[data-a]'); if (a) { BTS.closePopover(); if (a.dataset.a === 'new') App.newCellStyle(); else App.modifyCellStyle(); } });
+    pop.addEventListener('contextmenu', e => { const b = e.target.closest('[data-i]'); if (!b) return; e.preventDefault(); const name = groups[+b.dataset.g].items[+b.dataset.i][0]; BTS.closePopover(); App.modifyCellStyle(name); });
     BTS.popover(el, pop);
   }
-  function chartTypeMenu(el) { BTS.menu(el, [['column', 'Column', 'chart-column'], ['bar', 'Bar', 'chart-bar'], ['line', 'Line', 'chart-line'], ['area', 'Area', 'chart-area'], ['pie', 'Pie', 'chart-pie'], ['doughnut', 'Doughnut', 'circle-dot'], ['scatter', 'Scatter', 'chart-scatter']].map(([k, l, ic]) => ({ label: l, icon: ic, action: () => Charts.update({ type: k }, 'Chart type') }))); }
+  /** style editor shared by New and Modify */
+  async function styleEditor(title, name, st, nameEditable) {
+    const body = document.createElement('div'); let cur = { ...st };
+    const fonts = ['', ...STheme.fontNames()];
+    body.innerHTML = `<div class="dlg-grid" style="grid-template-columns:110px 1fr">
+      <label>Style name</label><input id="cs-name" value="${SU.esc(name)}" ${nameEditable ? '' : 'disabled'}>
+      <label>Font</label><select id="cs-font">${fonts.map(f => `<option value="${SU.esc(f)}" ${(cur.font || '') === f ? 'selected' : ''}>${f || '(Body font)'}</option>`).join('')}</select>
+      <label>Size</label><input id="cs-sz" type="number" min="6" max="96" value="${cur.sz || 11}">
+      <label>Font style</label><div><label class="check" style="display:inline-flex;margin-right:10px"><input type="checkbox" id="cs-b" ${cur.b ? 'checked' : ''}> Bold</label><label class="check" style="display:inline-flex;margin-right:10px"><input type="checkbox" id="cs-i" ${cur.i ? 'checked' : ''}> Italic</label><label class="check" style="display:inline-flex"><input type="checkbox" id="cs-u" ${cur.u ? 'checked' : ''}> Underline</label></div>
+      <label>Font colour</label><input id="cs-color" type="color" value="${cur.color || '#000000'}">
+      <label>Fill</label><div style="display:flex;gap:8px;align-items:center"><input id="cs-fill" type="color" value="${cur.fill || '#ffffff'}"><label class="check"><input type="checkbox" id="cs-nofill" ${cur.fill ? '' : 'checked'}> No fill</label></div>
+      <label>Number format</label><input id="cs-nf" value="${SU.esc(cur.nf || 'General')}">
+      <label>Preview</label><div id="cs-prev" class="cs-prev">AaBbCc 1,234</div></div>`;
+    const read = () => { const q = (x) => body.querySelector(x); const o = { ...cur }; o.font = q('#cs-font').value || undefined; o.sz = +q('#cs-sz').value === 11 ? undefined : +q('#cs-sz').value || undefined; o.b = q('#cs-b').checked || undefined; o.i = q('#cs-i').checked || undefined; o.u = q('#cs-u').checked || undefined; o.color = q('#cs-color').value.toUpperCase() === '#000000' ? undefined : q('#cs-color').value; o.fill = q('#cs-nofill').checked ? undefined : q('#cs-fill').value; o.nf = q('#cs-nf').value === 'General' ? undefined : q('#cs-nf').value; Object.keys(o).forEach(k => o[k] === undefined && delete o[k]); return o; };
+    const prev = () => { const o = read(); const el = body.querySelector('#cs-prev'); el.style.cssText = A.cssOfStyle(o).replace(/font-family:([^;]+)/, (m, f) => 'font-family:' + SU.cssFont(f.trim()).replace(/"/g, "'")); };
+    body.addEventListener('input', prev); body.addEventListener('change', prev); setTimeout(prev, 0);
+    const res = await BTS.dialog({ title, width: 440, body, buttons: [{ label: 'Cancel', value: null }, { label: 'OK', primary: true, value: () => ({ name: body.querySelector('#cs-name').value.trim(), st: read() }) }] });
+    return res;
+  }
+  App.newCellStyle = async () => {
+    const s = wb.active; const base = { ...s.style(s.active.r, s.active.c) }; ['h', 'v', 'wrap', 'indent', 'locked', 'fh', 'cs', 'pv'].forEach(k => delete base[k]);
+    let n = 1; while (wb.customStyles.some(c => c.name === 'Style ' + n)) n++;
+    const res = await styleEditor('New cell style', 'Style ' + n, base, true); if (!res) return;
+    if (!res.name) { BTS.toast('Enter a style name.', { error: true }); return; }
+    if (STheme.cellStyle(res.name) && !wb.customStyles.some(c => c.name === res.name)) { BTS.toast('A built-in style already has that name.', { error: true }); return; }
+    wb.run('New cell style', () => wb.setProp(wb, 'customStyles', [...wb.customStyles.filter(c => c.name !== res.name), { name: res.name, st: res.st }]));
+    A.applyCellStyle(res.name); BTS.toast('Created cell style “' + res.name + '”');
+  };
+  App.modifyCellStyle = async (name) => {
+    if (!name) { const all = [...wb.customStyles.map(c => c.name), ...STheme.cellStyleGroups().flatMap(g => g.items.map(i => i[0]))].filter((x, i, a) => a.indexOf(x) === i); name = await BTS.dialog({ title: 'Modify cell style', width: 340, body: `<div class="field"><label>Style</label><select id="ms-n">${all.map(n => `<option>${SU.esc(n)}</option>`).join('')}</select></div>`, buttons: [{ label: 'Cancel', value: null }, { label: 'Next', primary: true, value: (r) => r.querySelector('#ms-n').value }] }); if (!name) return; }
+    const res = await styleEditor('Modify style: ' + name, name, STheme.cellStyle(name) || {}, false); if (!res) return;
+    const custom = wb.customStyles.some(c => c.name === name);
+    wb.run('Modify cell style', () => { if (custom) wb.setProp(wb, 'customStyles', wb.customStyles.map(c => c.name === name ? { name, st: res.st } : c)); else wb.setProp(wb, 'styleMods', { ...wb.styleMods, [name]: res.st }); A.restyleTagged(name); });
+    BTS.toast('Updated “' + name + '” and every cell that uses it');
+  };
+  function themeMenu(el, mode) {
+    const pop = document.createElement('div'); pop.className = 'theme-pop';
+    const cur = STheme.cur();
+    pop.innerHTML = `<div class="gal-head">${mode === 'colors' ? 'Theme colours' : mode === 'fonts' ? 'Theme fonts' : 'Workbook themes'}</div><div class="theme-grid ${mode === 'fonts' ? 'fonts' : ''}">${STheme.THEMES.map(t => {
+      const sw = `<div class="th-sw">${t.accents.map(a => `<i style="background:${a}"></i>`).join('')}</div>`;
+      const on = mode === 'colors' ? t.accents.join() === cur.accents.join() : mode === 'fonts' ? (t.head === cur.head && t.body === cur.body) : t.id === wb.theme && !wb.themeOver;
+      if (mode === 'fonts') return `<button data-id="${t.id}" class="${on ? 'on' : ''}" title="${SU.esc(t.head)} / ${SU.esc(t.body)}"><b style="font-family:${SU.cssFont(t.head).replace(/"/g, "'")}">${SU.esc(t.head)}</b><span style="font-family:${SU.cssFont(t.body).replace(/"/g, "'")}">${SU.esc(t.body)}${t.num ? ' · ' + SU.esc(t.num) : ''}</span></button>`;
+      return `<button data-id="${t.id}" class="${on ? 'on' : ''}" title="${SU.esc(t.name)} — ${SU.esc(t.desc)}"><div class="th-prev" style="font-family:${SU.cssFont(t.head).replace(/"/g, "'")}"><span style="color:${t.dk2}">Aa</span>${sw}</div><small>${SU.esc(t.name)}</small></button>`;
+    }).join('')}</div><div class="gal-foot">Themes set the fonts and colours used by cell styles, tables, charts and PivotTables.</div>`;
+    pop.addEventListener('mousedown', e => e.preventDefault());
+    pop.addEventListener('click', e => { const b = e.target.closest('[data-id]'); if (!b) return; BTS.closePopover(); const t = STheme.get(b.dataset.id);
+      if (!mode) return A.setTheme(t.id);
+      const over = { ...(wb.themeOver || {}) }; if (mode === 'colors') Object.assign(over, { accents: t.accents, dk2: t.dk2, lt2: t.lt2 }); else Object.assign(over, { head: t.head, body: t.body, num: t.num || null });
+      [over.head, over.body].filter(Boolean).forEach(f => STheme.loadFont(f, true));
+      wb.run(mode === 'colors' ? 'Theme colours' : 'Theme fonts', () => { wb.setProp(wb, 'themeOver', over); A.restyleTagged(); Pivot.restyleAll(); }); Grid.render(); Charts.renderSheet(); App.refreshStatus();
+    });
+    pop.addEventListener('mouseover', e => { const b = e.target.closest('[data-id]'); if (b && !mode) { /* live preview via status */ } });
+    BTS.popover(el, pop);
+  }
+  function chartMenu(el, list) { BTS.menu(el, list.map(k => { const t = Charts.TYPES.find(x => x[0] === k); return { label: t[1], icon: t[2], action: () => App.cmd('chart-' + k) }; })); }
+  function chartTypeMenu(el) { const f = Charts.find(Charts.selected); BTS.menu(el, Charts.TYPES.map(([k, l, ic]) => ({ label: l, icon: ic, checked: f && f.obj.type === k ? true : undefined, action: () => Charts.update({ type: k }, 'Chart type') }))); }
 
   /* ---------- command dispatcher ---------- */
   App.cmd = async (cmd, el, ev) => {
     const s = wb.active; const editing = Ed.isEditing();
-    const needsCommit = !['undo', 'redo', 'insert-function', 'fn-cat', 'symbol', 'use-name', 'zoom-dialog', 'zoom-sel', 'new-window', 'show-formulas', 'view-gridlines', 'view-headings', 'view-fbar', 'font', 'size'].includes(cmd);
+    const needsCommit = !['undo', 'redo', 'insert-function', 'fn-cat', 'symbol', 'use-name', 'zoom-dialog', 'zoom-sel', 'new-window', 'show-formulas', 'view-gridlines', 'view-headings', 'view-fbar', 'font', 'size', 'font-pick'].includes(cmd);
     if (editing && needsCommit && !cmd.startsWith('chart-')) { if (!Ed.commit()) return; }
-    if (editing && (cmd === 'font' || cmd === 'size')) Ed.commit();
+    if (editing && (cmd === 'font' || cmd === 'size' || cmd === 'font-pick')) Ed.commit();
+    if (['sheet-add', 'sheet-dup', 'sheet-del'].includes(cmd) && Prot.structureCheck()) return;
     const anchor = el && el.closest ? el.closest('button,select,label') || el : el;
     switch (cmd) {
       /* clipboard & history */
@@ -361,7 +447,12 @@
       case 'paste-menu': return BTS.menu(anchor, [{ label: 'Paste', icon: 'clipboard-paste', kbd: 'Ctrl+V', action: () => A.pasteCmd() }, { label: 'Paste values', icon: 'clipboard-type', action: () => A.clip ? A.pasteInternal('values') : A.pasteCmd('values') }, { label: 'Paste formulas', icon: 'square-function', action: () => A.pasteInternal('formulas') }, { label: 'Paste formatting', icon: 'paintbrush', action: () => A.pasteInternal('formats') }, { label: 'Transpose', icon: 'arrow-down-up', action: () => A.clip ? A.pasteInternal('transpose') : A.pasteCmd('transpose') }, { label: 'Keep column widths', icon: 'move-horizontal', action: () => { A.pasteInternal('all'); A.pasteInternal('colwidths'); } }, { sep: true }, { label: 'Paste special…', icon: 'clipboard-list', action: () => Dlg.pasteSpecial() }]);
       case 'format-painter': if (A.painter) A.cancelPainter(); else A.startPainter(ev && ev.detail > 1); return;
       /* font */
-      case 'font': return A.applyStyle({ font: el.value === 'Calibri' ? undefined : el.value }, 'Font');
+      case 'font': return App.applyFont(el.value);
+      case 'font-pick': {
+        const st = s.style(s.active.r, s.active.c); const th = STheme.cur();
+        const f = await BTS.fontPicker($('#sel-font'), { current: st.font || SU.defFont, theme: [{ label: 'Headings', name: th.head }, { label: 'Body', name: th.body }, ...(th.num ? [{ label: 'Numbers', name: th.num }] : [])] });
+        if (f) await App.applyFont(f); Grid.focus(); return;
+      }
       case 'size': { const n = parseFloat(el.value); if (n > 0) A.setFontSize(n); Grid.focus(); return; }
       case 'font-grow': return A.growFont(1);
       case 'font-shrink': return A.growFont(-1);
@@ -397,7 +488,7 @@
       /* styles */
       case 'cf-menu': return cfMenu(anchor);
       case 'table-menu': return tableMenu(anchor);
-      case 'format-table': return A.formatAsTable(A.TABLE_THEMES[0]);
+      case 'format-table': return A.formatAsTable('Medium 2');
       case 'styles-menu': return stylesMenu(anchor);
       /* cells */
       case 'insert-menu': return BTS.menu(anchor, [{ label: 'Insert cells…', icon: 'square-plus', kbd: 'Ctrl++', action: () => Dlg.insertCells() }, { label: 'Insert sheet rows', icon: 'between-horizontal-start', action: () => A.insertRows() }, { label: 'Insert sheet columns', icon: 'between-vertical-start', action: () => A.insertCols() }, { label: 'Insert sheet', icon: 'file-plus', action: () => App.cmd('sheet-add') }]);
@@ -422,7 +513,75 @@
       case 'goto': return Dlg.goto();
       /* insert */
       case 'insert-image': return Charts.insertImage();
-      case 'chart-column': case 'chart-bar': case 'chart-line': case 'chart-pie': case 'chart-doughnut': case 'chart-area': case 'chart-scatter': if (Charts.selected && Charts.find(Charts.selected)?.kind === 'chart' && BTS.activeTab === 'chart') return Charts.update({ type: cmd.slice(6) }); return Charts.create(cmd.slice(6));
+      case 'chart-column-menu': return chartMenu(anchor, ['column', 'stackedColumn', 'stackedColumn100']);
+      case 'chart-bar-menu': return chartMenu(anchor, ['bar', 'stackedBar', 'stackedBar100']);
+      case 'chart-pie-menu': return chartMenu(anchor, ['pie', 'doughnut']);
+      case 'chart-column': case 'chart-bar': case 'chart-line': case 'chart-pie': case 'chart-doughnut': case 'chart-area': case 'chart-scatter':
+      case 'chart-bubble': case 'chart-combo': case 'chart-radar': case 'chart-waterfall': case 'chart-histogram':
+      case 'chart-stackedColumn': case 'chart-stackedColumn100': case 'chart-stackedBar': case 'chart-stackedBar100':
+        if (Charts.selected && Charts.find(Charts.selected)?.kind === 'chart' && BTS.activeTab === 'chart') return Charts.update({ type: cmd.slice(6) }); return Charts.create(cmd.slice(6));
+      case 'spark-line': case 'spark-column': case 'spark-winloss': return Spark.dialog(cmd.slice(6));
+      case 'pivot-insert': return Pivot.createDialog();
+      case 'comment-new': return Threads.newComment();
+      case 'comments-pane': return Threads.toggle();
+      case 'comments-pane-close': return Threads.close();
+      case 'thread-delete': return Threads.deleteAtActive();
+      case 'thread-next': return Threads.go(1);
+      case 'thread-prev': return Threads.go(-1);
+      /* themes */
+      case 'theme-menu': return themeMenu(anchor);
+      case 'theme-colors': return themeMenu(anchor, 'colors');
+      case 'theme-fonts': return themeMenu(anchor, 'fonts');
+      case 'theme-reset': if (wb.theme === 'bts' && !wb.themeOver) return; wb.run('Reset theme', () => { wb.setProp(wb, 'themeOver', null); wb.setProp(wb, 'theme', 'bts'); A.restyleTagged(); Pivot.restyleAll(); }); Grid.render(); Charts.renderSheet(); App.refreshStatus(); return;
+      /* data tools */
+      case 'consolidate': return DT.consolidateDialog();
+      case 'circle-invalid': return DT.circleInvalid();
+      case 'clear-circles': return DT.clearCircles();
+      case 'goal-seek': return WhatIf.goalSeek();
+      case 'scenarios': return WhatIf.scenarioManager();
+      case 'group': return DT.group();
+      case 'ungroup': return DT.ungroup();
+      case 'clear-outline': return DT.clearOutline();
+      case 'show-detail': return DT.detail(true);
+      case 'hide-detail': return DT.detail(false);
+      /* protection */
+      case 'protect-workbook': return Prot.toggleWorkbook();
+      case 'allow-ranges': return Prot.allowRangesDialog();
+      /* pivot */
+      case 'pv-refresh': { const pv = Pivot.atActive() || (document.getElementById('pv-pane') && Pivot.find(document.getElementById('pv-pane').dataset.id)?.def); if (!pv) { BTS.toast('Select a cell in a PivotTable first.', { error: true }); return; } return Pivot.refresh(Pivot.find(pv.id).s, pv); }
+      case 'pivot-refresh-all': return Pivot.refreshAll();
+      case 'pivot-source': return Pivot.changeSource();
+      case 'pivot-options': return Pivot.options();
+      case 'pivot-delete': { const pv = Pivot.atActive(); if (pv) Pivot.remove(pv); return; }
+      case 'pivot-select': { const pv = Pivot.atActive(); if (pv) Grid.selectRange(pv.out); return; }
+      case 'pivot-chart': return Pivot.createChart('column');
+      case 'pivot-fields': { const p = document.getElementById('pv-pane'); Pivot.paneClosed = !!p && !p.classList.contains('hidden'); Pivot.refreshPane(); App.refreshContext(); return; }
+      case 'pv-pane-close': Pivot.paneClosed = true; Pivot.refreshPane(); App.refreshContext(); return;
+      case 'pivot-subtotals': { const pv = Pivot.atActive(); if (!pv) return; return BTS.menu(anchor, [{ label: 'Do not show subtotals', checked: pv.subtotals === false, action: () => Pivot.update(s, pv.id, { subtotals: false }, 'Subtotals') }, { label: 'Show all subtotals at bottom of group', checked: pv.subtotals !== false, action: () => Pivot.update(s, pv.id, { subtotals: true }, 'Subtotals') }]); }
+      case 'pivot-grand': { const pv = Pivot.atActive(); if (!pv) return; const gr = pv.grandRows !== false, gc = pv.grandCols !== false; return BTS.menu(anchor, [{ label: 'Off for rows and columns', checked: !gr && !gc, action: () => Pivot.update(s, pv.id, { grandRows: false, grandCols: false }, 'Grand totals') }, { label: 'On for rows and columns', checked: gr && gc, action: () => Pivot.update(s, pv.id, { grandRows: true, grandCols: true }, 'Grand totals') }, { label: 'On for rows only', checked: gr && !gc, action: () => Pivot.update(s, pv.id, { grandRows: true, grandCols: false }, 'Grand totals') }, { label: 'On for columns only', checked: !gr && gc, action: () => Pivot.update(s, pv.id, { grandRows: false, grandCols: true }, 'Grand totals') }]); }
+      case 'pivot-styles': return Pivot.styleGallery(anchor);
+      /* table design */
+      case 'table-name': { const t = s.tableAt(s.active.r, s.active.c); if (t && el.value.trim() !== t.name) { if (!A.renameTable(t, el.value)) el.value = t.name; } return; }
+      case 'table-resize': { const t = s.tableAt(s.active.r, s.active.c); if (t) A.resizeTable(t); return; }
+      case 'table-convert': { const t = s.tableAt(s.active.r, s.active.c); if (t) A.convertTableToRange(t); return; }
+      case 'table-pivot': { const t = s.tableAt(s.active.r, s.active.c); return Pivot.createDialog(t); }
+      case 'tbl-header': case 'tbl-total': case 'tbl-banded': case 'tbl-first': case 'tbl-last': case 'tbl-bandcols': case 'tbl-filter': {
+        const t = s.tableAt(s.active.r, s.active.c); if (!t) return; const prop = { 'tbl-header': 'header', 'tbl-total': 'total', 'tbl-banded': 'banded', 'tbl-first': 'firstCol', 'tbl-last': 'lastCol', 'tbl-bandcols': 'bandedCols', 'tbl-filter': 'filterBtn' }[cmd];
+        if (prop === 'header' && !el.checked) { BTS.toast('Tables in BTS Sheets always keep their header row.', { error: true }); el.checked = true; return; }
+        return A.setTableProps(t, { [prop]: el.checked }, 'Table style options');
+      }
+      /* sparkline tab */
+      case 'spark-type-line': case 'spark-type-column': case 'spark-type-winloss': return Spark.update({ type: cmd.slice(11) }, 'Sparkline type');
+      case 'spk-high': case 'spk-low': case 'spk-neg': case 'spk-first': case 'spk-last': case 'spk-markers': return Spark.update({ show: { [{ 'spk-high': 'high', 'spk-low': 'low', 'spk-neg': 'neg', 'spk-first': 'first', 'spk-last': 'last', 'spk-markers': 'markers' }[cmd]]: el.checked } }, 'Sparkline points');
+      case 'spark-color': { const c = await BTS.colorPicker(anchor, {}); if (c && c[0] === '#') Spark.update({ color: c }, 'Sparkline color'); return; }
+      case 'spark-marker-color': { const c = await BTS.colorPicker(anchor, {}); if (c && c[0] === '#') Spark.update({ markerColor: c, highColor: c, lowColor: c }, 'Marker color'); return; }
+      case 'spark-clear': return Spark.clear(false);
+      case 'spark-clear-group': return Spark.clear(true);
+      case 'spark-edit': return Spark.editData();
+      /* chart extras */
+      case 'chart-styles': { const f = Charts.find(Charts.selected); if (!f) return; return BTS.menu(anchor, Charts.STYLES.map(([n, l]) => ({ label: l, checked: (f.obj.style || 1) === n, action: () => Charts.update({ style: n }, 'Chart style') }))); }
+      case 'chart-axis-titles': return Charts.update({ axisTitles: el.checked }, 'Axis titles');
+      case 'chart-axis-edit': { const f = Charts.find(Charts.selected); if (!f) return; const d = Charts.config(f.obj).options.scales || {}; const res = await BTS.dialog({ title: 'Axis titles', width: 380, body: `<div class="field"><label>Horizontal axis title</label><input id="ax-x" value="${SU.esc((d.x && d.x.title && d.x.title.text) || '')}"></div><div class="field"><label>Vertical axis title</label><input id="ax-y" value="${SU.esc((d.y && d.y.title && d.y.title.text) || '')}"></div>`, buttons: [{ label: 'Cancel', value: null }, { label: 'OK', primary: true, value: (r) => ({ x: r.querySelector('#ax-x').value, y: r.querySelector('#ax-y').value }) }] }); if (res) { const horiz = /^(bar|stackedBar|stackedBar100)$/.test(f.obj.type); Charts.update(horiz ? { xTitle: res.x, yTitle: res.y, axisTitles: true } : { xTitle: res.x, yTitle: res.y, axisTitles: true }, 'Axis titles'); } return; }
       case 'hyperlink': return Dlg.hyperlink();
       case 'comment': return Dlg.note();
       case 'insert-function': return Dlg.insertFunction();
@@ -465,14 +624,14 @@
       case 'flash-fill': return A.flashFill();
       case 'remove-duplicates': return Dlg.removeDuplicates();
       case 'validation': return Dlg.validation();
-      case 'group-rows': return A.setHidden('r', true);
-      case 'ungroup-rows': { const g = A.eff(s.sel); const set = new Set(s.hiddenR); for (let r = g.r0; r <= g.r1 + 1; r++) set.delete(r); wb.run('Show rows', () => wb.setProp(s, 'hiddenR', set)); Grid.updateSpacer(); return; }
+      case 'group-rows': return DT.group('r');
+      case 'ungroup-rows': return DT.ungroup('r');
       case 'subtotal': { const g = A.dataRange(); const r = g.r1 + 1; const cells = [{ r, c: g.c0, v: 'Total' }]; for (let c = g.c0 + 1; c <= g.c1; c++) { let num = false; for (let rr = g.r0; rr <= g.r1; rr++) if (typeof s.value(rr, c) === 'number') { num = true; break; } if (num) cells.push({ r, c, v: `=SUBTOTAL(9,${SU.rangeStr({ r0: g.r0 + (A.hasHeader(s, g) ? 1 : 0), c0: c, r1: g.r1, c1: c })})` }); } wb.run('Totals row', () => { wb.setContents(s, cells); cells.forEach(x => wb.setStyle(s, x.r, x.c, SU.mergeStyle(s.style(x.r, x.c), { b: true, bT: { style: 'thin', color: '#000000' } }))); }); return; }
       /* review */
       case 'comment-delete': { const k = key(s.active.r, s.active.c); if (!s.comments.has(k)) return; wb.run('Delete note', () => { const m = new Map(s.comments); m.delete(k); wb.setProp(s, 'comments', m); }); hideNote(); return; }
       case 'comment-next': case 'comment-prev': { const keys = [...s.comments.keys()].map(SU.unkey).sort((a, b) => a.r - b.r || a.c - b.c); if (!keys.length) { BTS.toast('This sheet has no notes.', { error: true }); return; } const a = s.active; let i = cmd === 'comment-next' ? keys.findIndex(k => k.r > a.r || (k.r === a.r && k.c > a.c)) : keys.map((k, i) => [k, i]).filter(([k]) => k.r < a.r || (k.r === a.r && k.c < a.c)).map(x => x[1]).pop(); if (i === undefined || i < 0) i = cmd === 'comment-next' ? 0 : keys.length - 1; Grid.select(keys[i].r, keys[i].c); showNote(keys[i].r, keys[i].c, s.comments.get(key(keys[i].r, keys[i].c)), 'Note'); return; }
       case 'comments-show': App.notesShown = !App.notesShown; persistNotes(); App.refreshRibbon(); return;
-      case 'protect': wb.run(s.protected ? 'Unprotect sheet' : 'Protect sheet', () => wb.setProp(s, 'protected', !s.protected)); BTS.toast(s.protected ? 'Sheet protected. Only unlocked cells can be edited.' : 'Sheet unprotected'); renderTabs(); App.refreshRibbon(); App.refreshStatus(); return;
+      case 'protect': return Prot.toggleSheet();
       case 'stats': return Dlg.stats();
       /* view */
       case 'view-gridlines': s.showGrid = el ? el.checked : !s.showGrid; Grid.render(); App.refreshRibbon(); BTS.markDirty(); return;
@@ -494,10 +653,47 @@
       case 'chart-legend': return Charts.update({ legend: el.checked });
       case 'chart-labels': return Charts.update({ labels: el.checked });
       case 'chart-grid': return Charts.update({ grid: el.checked });
-      case 'chart-colors': return BTS.menu(anchor, Object.entries(Charts.PALETTES).map(([n, cols]) => ({ label: n, html: `<span style="display:flex;gap:1px">${cols.slice(0, 6).map(c => `<i style="width:10px;height:12px;background:${c}"></i>`).join('')}</span><span>${n}</span>`, action: () => Charts.update({ palette: n }, 'Chart colors') })));
+      case 'chart-colors': return BTS.menu(anchor, Object.keys(Charts.PALETTES).map((n) => { const cols = Charts.PALETTES[n]; return { label: n, html: `<span style="display:flex;gap:1px">${cols.slice(0, 6).map(c => `<i style="width:10px;height:12px;background:${c}"></i>`).join('')}</span><span>${n === 'Theme' ? 'Theme colours (' + SU.esc(STheme.cur().name) + ')' : n}</span>`, action: () => Charts.update({ palette: n }, 'Chart colors') }; }));
       case 'chart-delete': return Charts.deleteSelected();
     }
   };
+  /* font: load the face before the first paint, then apply */
+  App.applyFont = async (name) => {
+    const st = wb.active.style(wb.active.active.r, wb.active.active.c);
+    await Promise.race([Promise.all([STheme.loadFont(name, false, false), STheme.loadFont(name, !!st.b, !!st.i)]), new Promise(r => setTimeout(r, 2500))]);
+    A.applyStyle({ font: name === SU.defFont ? undefined : name }, 'Font');
+    Grid.render();
+  };
+  /* contextual tabs: Table Design, PivotTable Analyze, Sparkline (Chart is handled by Charts.select) */
+  App.refreshContext = () => {
+    const s = wb.active; if (!s) return; const a = s.active; const chartSel = !!Charts.selected;
+    const t = !chartSel && s.tableAt(a.r, a.c), pv = !chartSel && Pivot.at(s, a.r, a.c), sp = !chartSel && Grid.sparkAt(s, a.r, a.c);
+    const show = (id, on, tab) => { const b = document.getElementById(id); const was = !b.classList.contains('hidden'); b.classList.toggle('hidden', !on); if (!on && was && BTS.activeTab === tab) BTS.showTab('home'); };
+    show('tab-table', !!t, 'table'); show('tab-pivot', !!pv, 'pivot'); show('tab-spark', !!sp, 'spark');
+    if (t) {
+      const ni = $('#tbl-name'); if (document.activeElement !== ni) ni.value = t.name;
+      const chk = (id, v) => { $(id).checked = !!v; };
+      chk('#tbl-header', t.header !== false); chk('#tbl-total', t.total); chk('#tbl-banded', t.banded !== false); chk('#tbl-first', t.firstCol); chk('#tbl-last', t.lastCol); chk('#tbl-bandcols', t.bandedCols); chk('#tbl-filter', t.filterBtn !== false);
+      const gal = $('#tbl-gallery'); const th = STheme.cur(); const ids = ['Light 1', 'Light 9', 'Medium 2', 'Medium 3', 'Medium 4', 'Medium 7', 'Dark 2'];
+      const key = ids.join() + th.accents.join() + t.styleId; if (gal._k !== key) { gal._k = key; gal.innerHTML = ids.map(id => `<button class="gi tsw ${t.styleId === id ? 'on' : ''}" data-id="${id}" title="Table style ${id}">${STheme.swatchHTML(id, th)}</button>`).join(''); }
+    }
+    if (pv) { $('#pv-name-label').textContent = pv.name; const p = document.getElementById('pv-pane'); $('#btn-pvfields').classList.toggle('on', !!p && !p.classList.contains('hidden')); }
+    if (sp) { const g = sp.g; ['line', 'column', 'winloss'].forEach(k => $('#spk-' + k).classList.toggle('on', g.type === k)); const sh = g.show || {}; ['high', 'low', 'neg', 'first', 'last', 'markers'].forEach(k => { $('#spk-' + k).checked = !!sh[k]; }); }
+  };
+  /** side panes (PivotTable Fields, Comments) take room from the grid */
+  App.layoutPanes = () => {
+    const open = [...document.querySelectorAll('#workspace > .side-pane')].some(p => !p.classList.contains('hidden'));
+    document.getElementById('workspace').classList.toggle('with-pane', open);
+    Grid.resize(); Ed.reposition(); App.refreshValidationUI();
+  };
+  /* status bar: right-click to choose statistics */
+  const SB_KEYS = [['average', 'Average'], ['count', 'Count'], ['ncount', 'Numerical Count'], ['min', 'Minimum'], ['max', 'Maximum'], ['sum', 'Sum']];
+  App.statusOpts = () => { let o = null; try { o = JSON.parse(localStorage.getItem('bts-sheets-status') || 'null'); } catch { } return o || { average: true, count: true, sum: true, ncount: false, min: false, max: false }; };
+  function statusMenu(e) {
+    const o = App.statusOpts();
+    BTS.menu({ x: e.clientX, y: e.clientY - 230 }, [{ head: 'Show on the status bar' }, ...SB_KEYS.map(([k, l]) => ({ label: l, checked: !!o[k], action: () => { o[k] = !o[k]; try { localStorage.setItem('bts-sheets-status', JSON.stringify(o)); } catch { } App.refreshStatus(); } }))]);
+  }
+  App.statusMenu = statusMenu;
   function setPage(p) { const s = wb.active; wb.run('Page setup', () => wb.setProp(s, 'page', { ...s.page, ...p })); App.refreshRibbon(); BTS.toast('Page setup updated'); }
 
   document.addEventListener('DOMContentLoaded', init);

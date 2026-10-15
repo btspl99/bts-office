@@ -197,7 +197,7 @@
     recentSyms = [v, ...recentSyms.filter(x => x !== v)].slice(0, 24); try { localStorage.setItem('docs-recent-syms', JSON.stringify(recentSyms)); } catch { }
     D.insertText(v);
   };
-  D.insertText = (t) => D.change(() => { D.ensureSel(); document.execCommand('insertText', false, t); });
+  D.insertText = (t) => D.change(() => { D.ensureSel(); const live = D.trackBefore ? D.trackBefore() : null; document.execCommand('insertText', false, t); if (live) D.trackAfter(live); });
 
   /* ================= equations ================= */
   /** Tiny linear-format → HTML: x^2, x_i, a/b (simple), sqrt(x), \alpha, \pi, \sum ... */
@@ -312,18 +312,18 @@
   }
   D.pageOfEl = pageOfEl;
   D.insertTOC = (style = 'auto') => D.change(() => {
-    let toc = $('.toc', D.doc);
+    let toc = $('.toc:not(.tof)', D.doc);
     if (!toc) { toc = document.createElement('div'); toc.className = 'toc'; toc.contentEditable = 'false'; toc.dataset.style = style; D.insertBlocks([toc]); }
     toc.dataset.style = style; toc.innerHTML = D.tocHTML({ title: style === 'toc-index' ? 'Index of topics' : 'Contents' });
     // recompute numbers after the TOC itself took space
     D.layout(); toc.innerHTML = D.tocHTML({ title: style === 'toc-index' ? 'Index of topics' : 'Contents' });
   });
   D.updateTOC = (silent) => {
-    const tocs = $$('.toc', D.doc); if (!tocs.length) { if (!silent) BTS.toast('There is no table of contents yet — insert one first.'); return; }
+    const tocs = $$('.toc:not(.tof)', D.doc); if (!tocs.length) { if (!silent) BTS.toast('There is no table of contents yet — insert one first.'); return; }
     D.change(() => { tocs.forEach(t => { t.innerHTML = D.tocHTML({ title: t.dataset.style === 'toc-index' ? 'Index of topics' : 'Contents' }); }); });
     if (!silent) BTS.toast('Table of contents updated');
   };
-  D.removeTOC = () => D.change(() => $$('.toc', D.doc).forEach(t => t.remove()));
+  D.removeTOC = () => D.change(() => $$('.toc:not(.tof)', D.doc).forEach(t => t.remove()));
 
   /* ================= footnotes ================= */
   D.footnotes = []; // [{id, html}]

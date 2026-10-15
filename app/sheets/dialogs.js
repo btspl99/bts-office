@@ -238,15 +238,16 @@
       <label class="dv-num">Minimum / value</label><input id="dv-v1" class="dv-num" value="${esc(cur.v1 ?? '')}">
       <label class="dv-num dv-max">Maximum</label><input id="dv-v2" class="dv-num dv-max" value="${esc(cur.v2 ?? '')}">
       <label class="dv-list">Source</label><input id="dv-src" class="dv-list" placeholder="Yes, No, Maybe   or   =$A$1:$A$5" value="${esc(cur.source ?? '')}">
+      <label>Input title</label><input id="dv-ptitle" value="${esc(cur.promptTitle ?? '')}" placeholder="Optional, e.g. Marks">
       <label>Input message</label><input id="dv-prompt" value="${esc(cur.prompt ?? '')}" placeholder="Optional hint shown when the cell is selected">
       <label>Error style</label><select id="dv-style"><option value="stop">Stop</option><option value="warning">Warning</option><option value="information">Information</option></select>
       <label>Error title</label><input id="dv-etitle" value="${esc(cur.errorTitle ?? '')}">
       <label>Error message</label><input id="dv-emsg" value="${esc(cur.errorMsg ?? '')}" placeholder="e.g. Enter a number between 0 and 100">
-      </div><label class="check"><input type="checkbox" id="dv-blank" ${cur.ignoreBlank !== false ? 'checked' : ''}> Ignore blank</label><p class="dlg-note">Applies to ${SU.rangeStr(g)}.</p>`;
+      </div><label class="check"><input type="checkbox" id="dv-blank" ${cur.ignoreBlank !== false ? 'checked' : ''}> Ignore blank</label><p class="dlg-note">Applies to ${SU.rangeStr(g)}. Use Data ▸ Circle Invalid Data to find existing entries that break the rule.</p>`;
     $('#dv-type', body).value = cur.type; $('#dv-op', body).value = cur.op || 'between'; $('#dv-style', body).value = cur.errorStyle || 'stop';
     const sync = () => { const t = $('#dv-type', body).value; const op = $('#dv-op', body).value; body.querySelectorAll('.dv-num').forEach(x => x.style.display = ['whole', 'decimal', 'date', 'textLength'].includes(t) ? '' : 'none'); body.querySelectorAll('.dv-max').forEach(x => x.style.display = ['whole', 'decimal', 'date', 'textLength'].includes(t) && (op === 'between' || op === 'notBetween') ? '' : 'none'); body.querySelectorAll('.dv-list').forEach(x => x.style.display = t === 'list' ? '' : 'none'); };
     body.addEventListener('change', sync); sync();
-    const res = await BTS.dialog({ title: 'Data validation', body, buttons: [{ label: 'Clear all', value: 'clear' }, { label: 'Cancel', value: null }, { label: 'OK', primary: true, value: (r) => { const q = (x) => r.querySelector(x).value; const pd = (x) => { const p = SU.parseInput(x); return typeof p.value === 'number' ? p.value : x; }; return { type: q('#dv-type'), op: q('#dv-op'), v1: pd(q('#dv-v1')), v2: pd(q('#dv-v2')), source: q('#dv-src'), prompt: q('#dv-prompt'), errorStyle: q('#dv-style'), errorTitle: q('#dv-etitle'), errorMsg: q('#dv-emsg'), ignoreBlank: r.querySelector('#dv-blank').checked }; } }] });
+    const res = await BTS.dialog({ title: 'Data validation', body, buttons: [{ label: 'Clear all', value: 'clear' }, { label: 'Cancel', value: null }, { label: 'OK', primary: true, value: (r) => { const q = (x) => r.querySelector(x).value; const pd = (x) => { const p = SU.parseInput(x); return typeof p.value === 'number' ? p.value : x; }; return { type: q('#dv-type'), op: q('#dv-op'), v1: pd(q('#dv-v1')), v2: pd(q('#dv-v2')), source: q('#dv-src'), prompt: q('#dv-prompt'), promptTitle: q('#dv-ptitle'), errorStyle: q('#dv-style'), errorTitle: q('#dv-etitle'), errorMsg: q('#dv-emsg'), ignoreBlank: r.querySelector('#dv-blank').checked }; } }] });
     if (!res) return;
     const rest = s.validations.filter(v => !SU.intersects(v.range, g) || !(v.range.r0 >= g.r0 && v.range.r1 <= g.r1 && v.range.c0 >= g.c0 && v.range.c1 <= g.c1));
     // trim overlapping validations
@@ -254,7 +255,7 @@
     const list = res === 'clear' || res.type === 'any' ? trimmed : [...trimmed, { ...res, range: g }];
     if (res !== 'clear' && res.type === 'list' && !String(res.source).trim()) { BTS.toast('Enter the list items for the source.', { error: true }); return; }
     wb.run('Data validation', () => wb.setProp(s, 'validations', list));
-    App.refreshValidationUI();
+    App.refreshValidationUI(); if (s._circles) DT.circleInvalid(true);
   };
 
   /* ---------- Conditional formatting ---------- */
@@ -436,7 +437,10 @@
       <label>Horizontal</label><select id="fc-h"><option value="">General</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="fill">Fill</option></select>
       <label>Vertical</label><select id="fc-v"><option value="bottom">Bottom</option><option value="middle">Middle</option><option value="top">Top</option></select>
       <label>Indent</label><input id="fc-ind" type="number" min="0" max="15" value="${st.indent || 0}">
-      </div><label class="check"><input type="checkbox" id="fc-wrap" ${st.wrap ? 'checked' : ''}> Wrap text</label><label class="check"><input type="checkbox" id="fc-lock" ${st.locked === false ? '' : 'checked'}> Locked (takes effect when the sheet is protected)</label>
+      </div><label class="check"><input type="checkbox" id="fc-wrap" ${st.wrap ? 'checked' : ''}> Wrap text</label>
+      <div class="dlg-note" style="margin:8px 0 2px;font-weight:600;color:var(--ink-2)">Protection</div>
+      <label class="check"><input type="checkbox" id="fc-lock" ${st.locked === false ? '' : 'checked'}> Locked</label><label class="check"><input type="checkbox" id="fc-hide" ${st.fh ? 'checked' : ''}> Hidden (formula not shown in the formula bar)</label>
+      <p class="dlg-note">Locking cells or hiding formulas has no effect until you protect the worksheet (Review ▸ Protect Sheet).</p>
       <p class="dlg-note">Custom codes follow spreadsheet conventions, e.g. <code>#,##0.00</code>, <code>"₹"#,##,##0</code>, <code>dd-mmm-yyyy</code>, <code>0.0%</code>.</p>`;
     const nfIn = $('#fc-nf', body), cat = $('#fc-cat', body);
     const sync = () => { const f = SU.format(typeof v === 'number' ? v : 1234.5678, nfIn.value); $('#fc-sample', body).textContent = f.text; $('#fc-sample', body).style.color = f.color || ''; };
@@ -444,9 +448,9 @@
     cat.addEventListener('change', () => { if (cat.value !== '__custom') nfIn.value = cat.value; sync(); });
     nfIn.addEventListener('input', () => { cat.value = SU.FORMATS.find(f => f.nf === nfIn.value)?.nf || '__custom'; sync(); });
     $('#fc-h', body).value = st.h || ''; $('#fc-v', body).value = st.v || 'bottom'; sync();
-    const res = await BTS.dialog({ title: 'Format cells', body, buttons: [{ label: 'Cancel', value: null }, { label: 'OK', primary: true, value: (r) => ({ nf: nfIn.value.trim(), h: $('#fc-h', r).value, v: $('#fc-v', r).value, indent: +$('#fc-ind', r).value || 0, wrap: $('#fc-wrap', r).checked, locked: $('#fc-lock', r).checked }) }] });
+    const res = await BTS.dialog({ title: 'Format cells', body, buttons: [{ label: 'Cancel', value: null }, { label: 'OK', primary: true, value: (r) => ({ nf: nfIn.value.trim(), h: $('#fc-h', r).value, v: $('#fc-v', r).value, indent: +$('#fc-ind', r).value || 0, wrap: $('#fc-wrap', r).checked, locked: $('#fc-lock', r).checked, fh: $('#fc-hide', r).checked }) }] });
     if (!res) return;
-    A.applyStyle({ nf: !res.nf || res.nf === 'General' ? undefined : res.nf, h: res.h || undefined, v: res.v === 'bottom' ? undefined : res.v, indent: res.indent || undefined, wrap: res.wrap || undefined, locked: res.locked ? undefined : false }, 'Format cells');
+    A.applyStyle({ nf: !res.nf || res.nf === 'General' ? undefined : res.nf, h: res.h || undefined, v: res.v === 'bottom' ? undefined : res.v, indent: res.indent || undefined, wrap: res.wrap || undefined, locked: res.locked ? undefined : false, fh: res.fh || undefined }, 'Format cells');
   };
 
   /* ---------- Zoom ---------- */

@@ -3,6 +3,7 @@
   const Charts = window.Charts = { selected: null, instances: new Map() };
   let wb;
   const PALETTES = {
+    get 'Theme'() { return STheme.chartPalette(); },
     'BTS': ['#0F8A6A', '#2F5597', '#E07A1F', '#7A4FB5', '#D64545', '#2BA3B5', '#9AAB2E', '#C2569B'],
     'Office': ['#4472C4', '#ED7D31', '#A5A5A5', '#FFC000', '#5B9BD5', '#70AD47', '#264478', '#9E480E'],
     'Ocean': ['#03396C', '#005B96', '#6497B1', '#B3CDE0', '#011F4B', '#2A9D8F', '#48CAE4', '#90E0EF'],
@@ -18,7 +19,16 @@
   const S = () => wb.active;
 
   /* ---------- data extraction ---------- */
+  Charts.TYPES = [
+    ['column', 'Clustered column', 'chart-column'], ['stackedColumn', 'Stacked column', 'chart-column-stacked'], ['stackedColumn100', '100% stacked column', 'chart-column-stacked'],
+    ['bar', 'Clustered bar', 'chart-bar'], ['stackedBar', 'Stacked bar', 'chart-bar-stacked'], ['stackedBar100', '100% stacked bar', 'chart-bar-stacked'],
+    ['line', 'Line', 'chart-line'], ['area', 'Area', 'chart-area'], ['pie', 'Pie', 'chart-pie'], ['doughnut', 'Doughnut', 'circle-dot'],
+    ['scatter', 'Scatter (XY)', 'chart-scatter'], ['bubble', 'Bubble', 'circle-ellipsis'], ['combo', 'Combo: column + line (secondary axis)', 'chart-column-increasing'],
+    ['radar', 'Radar', 'radar'], ['waterfall', 'Waterfall', 'chart-candlestick'], ['histogram', 'Histogram', 'chart-no-axes-column'],
+  ];
+  Charts.STYLES = [[1, 'Style 1 — clean'], [2, 'Style 2 — bold with labels'], [3, 'Style 3 — outlined'], [4, 'Style 4 — dark'], [5, 'Style 5 — soft background'], [6, 'Style 6 — monochrome']];
   Charts.extract = (ch) => {
+    if (ch.pivot && window.Pivot) { const d = Pivot.chartData(ch.pivot); if (d) return d; }
     const src = ch.sheet ? wb.sheetByName(ch.sheet) : ch._sheet; if (!src) return null;
     const g = ch.range; const H = g.r1 - g.r0 + 1, W = g.c1 - g.c0 + 1;
     const val = (r, c) => src.value(r, c);
@@ -30,6 +40,21 @@
     let labels = [], series = [];
     const byCols = ch.switchRC ? false : (H - hr >= W - hc || ch.type === 'pie' || ch.type === 'doughnut' ? true : false);
     const seriesInCols = ch.switchRC === undefined ? (H - hr >= W - hc) : !ch.switchRC;
+    if (ch.type === 'bubble') {
+      const series = []; const name = hr ? txt(g.r0, g.c0 + Math.min(1, W - 1)) : 'Series 1'; const pts = [];
+      for (let r = g.r0 + hr; r <= g.r1; r++) { const x = val(r, g.c0), y = W > 1 ? val(r, g.c0 + 1) : null, z = W > 2 ? val(r, g.c0 + 2) : 1; if (typeof x === 'number' && typeof y === 'number') pts.push({ x, y, z: typeof z === 'number' ? z : 1 }); }
+      const mz = Math.max(1e-9, ...pts.map(p => Math.abs(p.z))); pts.forEach(p => { p.r = 4 + 22 * Math.sqrt(Math.abs(p.z) / mz); });
+      series.push({ name, data: pts }); return { labels: [], series, scatter: true, xTitle: hr ? txt(g.r0, g.c0) : '' };
+    }
+    if (ch.type === 'histogram') {
+      const nums = []; for (let r = g.r0 + hr; r <= g.r1; r++) for (let c = g.c0; c <= g.c1; c++) { const v = val(r, c); if (typeof v === 'number') nums.push(v); }
+      if (!nums.length) return { labels: [], series: [] };
+      const n = nums.length, min = Math.min(...nums), max = Math.max(...nums); const mean = nums.reduce((a, b) => a + b, 0) / n; const sd = Math.sqrt(nums.reduce((a, b) => a + (b - mean) ** 2, 0) / Math.max(1, n - 1));
+      let w = ch.binWidth || (sd ? 3.5 * sd / Math.cbrt(n) : 1); let k = Math.max(1, Math.min(40, Math.ceil((max - min) / w) || 1)); if (!ch.binWidth) w = (max - min) / k || 1;
+      const nice = (x) => +x.toPrecision(4); const counts = Array(k).fill(0); nums.forEach(v => { let i = Math.floor((v - min) / w); if (i >= k) i = k - 1; counts[Math.max(0, i)]++; });
+      const labels = counts.map((_, i) => (i === 0 ? '[' : '(') + SU.generalNum(nice(min + i * w)) + ', ' + SU.generalNum(nice(min + (i + 1) * w)) + ']');
+      return { labels, series: [{ name: 'Frequency', data: counts }], autoTitle: hr ? txt(g.r0, g.c0) : 'Histogram', xTitle: hr ? txt(g.r0, g.c0) : 'Bins' };
+    }
     if (ch.type === 'scatter') {
       // first column = x, others = y series
       const xs = []; for (let r = g.r0 + hr; r <= g.r1; r++) xs.push(val(r, g.c0));
@@ -54,38 +79,85 @@
   function hexA(c, a) { const n = c.replace('#', ''); const r = parseInt(n.slice(0, 2), 16), g = parseInt(n.slice(2, 4), 16), b = parseInt(n.slice(4, 6), 16); return `rgba(${r},${g},${b},${a})`; }
   Charts.config = (ch, forPrint) => {
     const d = Charts.extract(ch) || { labels: [], series: [] };
-    const pal = PALETTES[ch.palette || 'BTS'] || PALETTES.BTS;
+    const th = STheme.cur(); const style = ch.style || 1;
+    let pal = ch.palette && ch.palette !== 'Theme' ? (PALETTES[ch.palette] || STheme.chartPalette()) : STheme.chartPalette();
+    if (style === 6) pal = [0, .25, .45, .6, -.25, .7, -.4, .8].map(t => STheme.tint(th.accents[0], t));
     const t = ch.type; const pie = t === 'pie' || t === 'doughnut';
-    const typeMap = { column: 'bar', bar: 'bar', line: 'line', area: 'line', pie: 'pie', doughnut: 'doughnut', scatter: 'scatter' };
-    let datasets;
-    if (pie) { const s0 = d.series[0] || { name: '', data: [] }; datasets = [{ label: s0.name, data: s0.data, backgroundColor: d.labels.map((_, i) => pal[i % pal.length]), borderColor: '#fff', borderWidth: 1.5 }]; }
-    else datasets = d.series.map((s, i) => ({ label: s.name, data: s.data, backgroundColor: t === 'area' ? hexA(pal[i % pal.length], .35) : pal[i % pal.length], borderColor: pal[i % pal.length], borderWidth: t === 'line' || t === 'area' ? 2.25 : 0, fill: t === 'area' ? 'origin' : false, tension: 0.25, pointRadius: t === 'scatter' ? 4 : t === 'line' ? 3 : 0, pointBackgroundColor: pal[i % pal.length], borderRadius: t === 'column' || t === 'bar' ? 2 : 0, showLine: false, maxBarThickness: 64 }));
+    const typeMap = { column: 'bar', bar: 'bar', line: 'line', area: 'line', pie: 'pie', doughnut: 'doughnut', scatter: 'scatter', combo: 'bar', stackedColumn: 'bar', stackedColumn100: 'bar', stackedBar: 'bar', stackedBar100: 'bar', radar: 'radar', bubble: 'bubble', waterfall: 'bar', histogram: 'bar' };
+    const horiz = t === 'bar' || t === 'stackedBar' || t === 'stackedBar100'; const stacked = /^stacked/.test(t); const pct = /100$/.test(t);
+    const dark = style === 4; const ink = dark ? '#E8ECF2' : '#303540', ink2 = dark ? '#B9C2D0' : '#595f6b', gridColor = dark ? 'rgba(255,255,255,.14)' : '#e3e6ea';
+    const bg = dark ? STheme.tint(th.dk2, -0.2) : style === 5 ? STheme.tint(th.lt2, 0.4) : '#FFFFFF';
+    const fontB = SU.cssFont(th.body), fontH = SU.cssFont(th.head);
+    const outlined = style === 3; const bold = style === 2;
+    const fillOf = (c, a) => outlined ? hexA(c, .25) : a !== undefined ? hexA(c, a) : c;
+    let datasets, labels = d.labels;
+    if (pie) { const s0 = d.series[0] || { name: '', data: [] }; datasets = [{ label: s0.name, data: s0.data, backgroundColor: d.labels.map((_, i) => fillOf(pal[i % pal.length])), borderColor: outlined ? d.labels.map((_, i) => pal[i % pal.length]) : bg, borderWidth: outlined ? 2 : 1.5 }]; }
+    else if (t === 'waterfall') {
+      const s0 = d.series[0] || { name: '', data: [] }; let run = 0; const data = [], colors = [], deltas = [];
+      s0.data.forEach(v => { const x = typeof v === 'number' ? v : 0; data.push([run, run + x]); deltas.push(x); colors.push(x >= 0 ? pal[0] : pal[1]); run += x; });
+      if (ch.total !== false) { data.push([0, run]); deltas.push(run); colors.push(dark ? '#9aa3b2' : '#8C8C8C'); labels = [...d.labels, 'Total']; }
+      datasets = [{ label: s0.name, data, _deltas: deltas, backgroundColor: colors.map(c => fillOf(c)), borderColor: colors, borderWidth: outlined ? 2 : 0, borderSkipped: false, maxBarThickness: 64, barPercentage: .8 }];
+    } else if (t === 'histogram') {
+      const s0 = d.series[0] || { name: '', data: [] }; datasets = [{ label: s0.name, data: s0.data, backgroundColor: fillOf(pal[0]), borderColor: outlined ? pal[0] : bg, borderWidth: 1, barPercentage: 1, categoryPercentage: 1 }];
+    } else {
+      let series = d.series;
+      if (pct) { const n = Math.max(0, ...series.map(x => x.data.length)); const tot = Array.from({ length: n }, (_, i) => series.reduce((a, x) => a + Math.abs(x.data[i] || 0), 0)); series = series.map(x => ({ ...x, data: x.data.map((v, i) => v === null ? null : tot[i] ? v / tot[i] * 100 : 0) })); }
+      datasets = series.map((sr, i) => {
+        const c = pal[i % pal.length]; const isLine = t === 'line' || t === 'area' || (t === 'combo' && i === series.length - 1 && series.length > 1) || t === 'radar';
+        const ds = { label: sr.name, data: sr.data, backgroundColor: t === 'area' ? hexA(c, dark ? .45 : .35) : t === 'radar' ? hexA(c, .15) : fillOf(c), borderColor: c, borderWidth: isLine ? (bold ? 3 : 2.25) : outlined ? 2 : 0, fill: t === 'area' ? 'origin' : t === 'radar', tension: t === 'radar' ? 0 : 0.25, pointRadius: t === 'scatter' ? 4 : t === 'bubble' ? undefined : isLine ? (bold ? 4 : 3) : 0, pointBackgroundColor: c, borderRadius: style === 5 && !isLine ? 5 : (t === 'column' || t === 'bar' ? 2 : 0), showLine: false, maxBarThickness: 64 };
+        if (t === 'bubble') { ds.backgroundColor = hexA(c, .55); ds.borderWidth = 1.5; }
+        if (t === 'combo' && isLine) { ds.type = 'line'; ds.yAxisID = 'y1'; ds.order = 0; ds.showLine = true; ds.fill = false; } else if (t === 'combo') { ds.order = 1; }
+        if (t === 'line' || t === 'area') ds.showLine = true;
+        if (bold && !isLine) { ds.barPercentage = .92; ds.categoryPercentage = .85; }
+        return ds;
+      });
+    }
     const title = ch.title !== undefined && ch.title !== null ? ch.title : (d.autoTitle || 'Chart Title');
-    const gridColor = '#e3e6ea';
+    const at = ch.axisTitles; const xTitle = ch.xTitle ?? (d.xTitle || (horiz ? 'Values' : 'Categories')), yTitle = ch.yTitle ?? (horiz ? 'Categories' : (pct ? 'Percent' : t === 'histogram' ? 'Frequency' : d.series.length === 1 ? d.series[0].name : 'Values'));
+    const tick = { color: ink2, font: { family: fontB } };
+    const axTitle = (text) => ({ display: !!at && !!text, text, color: ink, font: { family: fontB, size: 12, weight: '600' } });
+    let scales = {};
+    if (t === 'radar') scales = { r: { grid: { color: gridColor }, angleLines: { color: gridColor }, pointLabels: { color: ink2, font: { family: fontB } }, ticks: { color: ink2, backdropColor: 'transparent', font: { family: fontB } }, beginAtZero: true } };
+    else if (!pie) {
+      const valAxis = { grid: { display: ch.grid !== false && style !== 2, color: gridColor }, ticks: { ...tick, ...(pct ? { callback: (v) => v + '%' } : {}) }, border: { display: false }, beginAtZero: t !== 'scatter' && t !== 'line' && t !== 'bubble' ? true : undefined, stacked: stacked || undefined, max: pct ? 100 : undefined };
+      const catAxis = { ...(t === 'scatter' || t === 'bubble' ? { type: 'linear', grid: { display: ch.grid !== false, color: gridColor } } : { grid: { display: false } }), ticks: tick, border: { color: dark ? '#7d879b' : '#bfc4cc' }, stacked: stacked || undefined, offset: t === 'histogram' ? true : undefined };
+      scales = horiz ? { x: { ...valAxis, title: axTitle(xTitle) }, y: { ...catAxis, title: axTitle(yTitle) } } : { x: { ...catAxis, title: axTitle(xTitle) }, y: { ...valAxis, title: axTitle(yTitle) } };
+      if (t === 'combo' && datasets.length > 1) scales.y1 = { position: 'right', grid: { drawOnChartArea: false }, ticks: tick, border: { display: false }, beginAtZero: true, title: axTitle(datasets[datasets.length - 1].label) };
+    }
     const cfg = {
       type: typeMap[t] || 'bar',
-      data: { labels: d.labels, datasets },
+      data: { labels, datasets },
       options: {
         responsive: false, maintainAspectRatio: false, animation: false, devicePixelRatio: forPrint ? 3 : (window.devicePixelRatio || 1) * Math.max(1, Grid.z),
-        indexAxis: t === 'bar' ? 'y' : 'x',
+        indexAxis: horiz ? 'y' : 'x',
         layout: { padding: { top: 4, right: 10, bottom: 4, left: 4 } },
         plugins: {
-          title: { display: !!title, text: title, font: { size: 16, weight: '600' }, color: '#303540', padding: { top: 4, bottom: 8 } },
-          legend: { display: ch.legend !== false && (pie || d.series.length > 1 || ch.legend === true), position: pie ? 'right' : 'bottom', labels: { boxWidth: 12, boxHeight: 12, padding: 12 } },
-          tooltip: { enabled: true },
+          title: { display: !!title, text: title, font: { size: 16, weight: '600', family: fontH }, color: ink, padding: { top: 4, bottom: 8 } },
+          legend: { display: ch.legend !== false && t !== 'waterfall' && t !== 'histogram' && (pie || d.series.length > 1 || ch.legend === true), position: pie ? 'right' : 'bottom', labels: { boxWidth: 12, boxHeight: 12, padding: 12, color: ink, font: { family: fontB } } },
+          tooltip: { enabled: true, callbacks: t === 'waterfall' ? { label: (c) => ' ' + SU.generalNum(+(c.dataset._deltas[c.dataIndex]).toPrecision(10)) } : pct ? { label: (c) => ' ' + c.dataset.label + ': ' + (+c.raw).toFixed(1) + '%' } : undefined },
         },
-        scales: pie ? {} : {
-          x: { ...(t === 'scatter' ? { type: 'linear' } : {}), grid: { display: t === 'bar' ? ch.grid !== false : false, color: gridColor }, ticks: { color: '#595f6b' }, border: { color: '#bfc4cc' }, beginAtZero: t === 'bar' },
-          y: { grid: { display: t !== 'bar' && ch.grid !== false, color: gridColor }, ticks: { color: '#595f6b' }, border: { display: false }, beginAtZero: t !== 'scatter' && t !== 'line' ? true : undefined },
-        },
+        scales,
       },
-      plugins: [labelsPlugin(ch)],
+      plugins: [bgPlugin(bg), labelsPlugin(ch, ink, fontB, bold)],
     };
+    cfg._bg = bg;
     return cfg;
   };
-  function labelsPlugin(ch) {
-    return { id: 'btsLabels', afterDatasetsDraw(chart) { if (!ch.labels) return; const { ctx } = chart; ctx.save(); ctx.font = '600 11px Carlito, Calibri, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-      chart.data.datasets.forEach((ds, di) => { const meta = chart.getDatasetMeta(di); if (meta.hidden) return; meta.data.forEach((el, i) => { const v = ds.data[i]; if (v === null || v === undefined) return; const val = typeof v === 'object' ? v.y : v; const txt = SU.generalNum(+(+val).toPrecision(6)); let { x, y } = el.tooltipPosition ? el.tooltipPosition() : el; if (chart.config.type === 'pie' || chart.config.type === 'doughnut') { ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; } else if (chart.options.indexAxis === 'y') { ctx.fillStyle = '#303540'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; x += 4; } else { ctx.fillStyle = '#303540'; y -= 3; } ctx.fillText(txt, x, y); }); }); ctx.restore(); } };
+  function bgPlugin(bg) { return { id: 'btsBg', beforeDraw(chart) { const { ctx, width, height } = chart; ctx.save(); ctx.fillStyle = bg; ctx.fillRect(0, 0, width, height); ctx.restore(); } }; }
+  function labelsPlugin(ch, ink = '#303540', family = 'Carlito, Calibri, sans-serif', force) {
+    return { id: 'btsLabels', afterDatasetsDraw(chart) { if (!ch.labels && !force) return; const { ctx } = chart; ctx.save(); ctx.font = '600 11px ' + family;
+      const stacked = /^stacked/.test(ch.type), pct = /100$/.test(ch.type);
+      chart.data.datasets.forEach((ds, di) => { const meta = chart.getDatasetMeta(di); if (meta.hidden) return; meta.data.forEach((el, i) => {
+        const v = ds.data[i]; if (v === null || v === undefined) return;
+        let val = Array.isArray(v) ? (ds._deltas ? ds._deltas[i] : v[1] - v[0]) : typeof v === 'object' ? v.y : v; if (ch.type === 'histogram' && !val) return;
+        const txt = pct ? (+val).toFixed(0) + '%' : SU.generalNum(+(+val).toPrecision(6));
+        let { x, y } = el.tooltipPosition ? el.tooltipPosition() : el; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        const type = meta.type || chart.config.type;
+        if (type === 'pie' || type === 'doughnut') { ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; }
+        else if (stacked && type === 'bar') { ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; if (chart.options.indexAxis === 'y') x = (el.x + el.base) / 2; else y = (el.y + el.base) / 2; }
+        else if (chart.options.indexAxis === 'y') { ctx.fillStyle = ink; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; x += 4; }
+        else { ctx.fillStyle = ink; y -= 3; }
+        ctx.fillText(txt, x, y); }); }); ctx.restore(); } };
   }
 
   /* ---------- DOM objects ---------- */
@@ -136,12 +208,14 @@
   };
   function drawChart(ch, el) {
     const z = Grid.z; const w = Math.max(40, Math.round(ch.w * z - 16)), h = Math.max(40, Math.round(ch.h * z - 16));
-    const key = JSON.stringify([w, h, wb.version, ch.type, ch.title, ch.legend, ch.labels, ch.grid, ch.palette, ch.switchRC, ch.range, ch.sheet, z]);
+    const key = JSON.stringify([w, h, wb.version, ch.type, ch.title, ch.legend, ch.labels, ch.grid, ch.palette, ch.switchRC, ch.range, ch.sheet, z, ch.style, ch.axisTitles, ch.xTitle, ch.yTitle, ch.pivot, wb.theme, Charts.fontGen]);
     if (el._key === key) return; el._key = key;
     const canvas = el.querySelector('canvas'); ch._sheet = Charts.find(ch.id)?.s;
     let inst = Charts.instances.get(ch.id);
     const cfg = Charts.config(ch);
     cfg.options.plugins.title.font.size = Math.round(15 * Math.max(.6, Math.min(z, 2)));
+    el.style.background = cfg._bg;
+    const th = STheme.cur(); STheme.fontReady(th.body, false, false); STheme.fontReady(th.head, true, false);
     if (inst && inst.config.type === cfg.type) {
       inst.data = cfg.data; inst.options = cfg.options; inst.config.plugins = cfg.plugins;
       inst.resize(w, h); inst.update('none');
@@ -152,6 +226,8 @@
     }
   }
   Charts.refreshAll = () => { Charts.renderSheet(); };
+  Charts.fontGen = 0;
+  Charts.onFonts = () => { Charts.fontGen++; Charts.position(); };
 
   /* ---------- interaction ---------- */
   function onObjDown(e, id, kind) {
@@ -189,6 +265,8 @@
     else if (BTS.activeTab === 'chart') BTS.showTab('insert');
     Grid.hideSelection = !!id; Grid.render();
     if (id) document.getElementById('gkeys').focus({ preventScroll: true });
+    if (isChart) { document.getElementById('chk-axist').checked = !!f.obj.axisTitles; }
+    App.refreshContext && App.refreshContext();
   };
   Charts.deleteSelected = () => {
     const f = Charts.find(Charts.selected); if (!f) return; const { s, obj, kind } = f; const prop = kind === 'chart' ? 'charts' : 'images';

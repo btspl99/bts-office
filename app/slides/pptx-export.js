@@ -1,5 +1,9 @@
 /* BTS Slides — PowerPoint (.pptx) export via PptxGenJS, plus post-processing with JSZip for
- * features PptxGenJS lacks (slide transitions, gradient backgrounds/fills, hidden slides).
+ * features PptxGenJS lacks: slide transitions + auto-advance timings, gradient backgrounds/fills, hidden slides,
+ * alt text / decorative flags on every object, Devanagari (cs) fonts, document properties (keywords, category,
+ * description), comments (legacy threaded comments), custom shows + slide show settings, and BTS metadata
+ * (customXml part: master, theme overrides, custom shows and an exact copy of every slide that is restored
+ * on reopen while the slide is unchanged — keeps animations, groups, table styles, comment anchors…).
  * Units: model px (96/in) → inches; font sizes stay in pt.
  */
 (function () {
@@ -133,41 +137,69 @@
   }
   const shadowOpt = (el) => el.shadow ? { type: 'outer', blur: 8, offset: 4, angle: 45, color: '000000', opacity: .3 } : undefined;
 
+  /* ---------- slide masters / layouts (one PptxGenJS master per BTS layout in use) ---------- */
+  async function defineMasters(pptx, pres) {
+    const W = SL.W(pres), H = SL.H(pres); const out = {};
+    for (const L of [...new Set(pres.slides.map(s => s.layout))]) {
+      const name = 'BTS ' + SL.layoutName(L);
+      const bg = SL.themeBg(pres, L); let background;
+      if (bg.type === 'image' && bg.src) { const d = await bgImage(bg, W, H); if (d) background = { data: d }; }
+      if (!background) background = { color: hx(bg.color || 'bg', pres) || 'FFFFFF' };
+      const objects = [];
+      SL.layoutPlaceholders(L, W, H, pres).forEach((sp, i) => {
+        if (sp.type !== 'text') return;
+        const d = SL.textDefaults(Object.assign({ ph: sp.ph }, sp), pres);
+        objects.push({ placeholder: { options: { name: (sp.ph === 'title' ? 'title' : 'body') + i, type: sp.ph === 'title' ? 'title' : 'body', x: IN(sp.x), y: IN(sp.y), w: IN(sp.w), h: IN(sp.h), fontFace: d.font, fontSize: sp.size || 18, color: hx(d.color, pres) || '000000', bold: !!d.bold, italic: !!d.italic, align: sp.align || 'left', valign: sp.valign === 'middle' ? 'middle' : sp.valign === 'bottom' ? 'bottom' : 'top' }, text: '' } });
+      });
+      try { pptx.defineSlideMaster({ title: name, background, objects }); out[L] = name; } catch (err) { console.warn('slide master', L, err); }
+    }
+    return out;
+  }
+
   /* ---------- main ---------- */
   X.build = async (pres = P()) => {
     if (!window.PptxGenJS) throw new Error('PptxGenJS is not loaded');
+    await SL.ensureFonts(pres);
     const pptx = new window.PptxGenJS();
     const W = SL.W(pres), H = SL.H(pres);
     pptx.defineLayout({ name: 'BTS', width: IN(W), height: IN(H) }); pptx.layout = 'BTS';
-    pptx.author = 'BTS Slides'; pptx.company = 'BTS Office'; pptx.title = BTS.title || 'Presentation';
-    try { pptx.theme = { headFontFace: SL.fontOf('title', pres), bodyFontFace: SL.fontOf('body', pres) }; } catch { }
-    const post = { trans: {}, grads: {}, bgGrads: {}, hidden: {} };
+    const props = Object.assign({}, BTS.props || {});
+    pptx.author = props.author || BTS.userName || 'BTS Slides'; pptx.company = props.company || ''; pptx.subject = props.subject || ''; pptx.title = props.title || BTS.title || 'Presentation';
+    const tf = { title: SL.fontOf('title', pres), body: SL.fontOf('body', pres) };
+    try { pptx.theme = { headFontFace: tf.title, bodyFontFace: tf.body }; } catch { }
+    const post = { trans: {}, grads: {}, bgGrads: {}, hidden: {}, descr: {}, names: [], comments: [], props, fonts: tf, pres, masterNames: {} };
+    const masters = await defineMasters(pptx, pres);
     const decoCache = {};
     const secs = pres.sections || []; const usedSec = {};
     for (let i = 0; i < pres.slides.length; i++) {
       const s = pres.slides[i];
+      post.names[i] = {};
       const sec = secs.find(x => x.start === s.id);
       if (sec) { let t = sec.name || 'Section'; while (usedSec[t]) t += ' '; usedSec[t] = 1; pptx.addSection({ title: t }); }
-      const slide = Object.keys(usedSec).length ? pptx.addSlide({ sectionTitle: Object.keys(usedSec).pop() }) : pptx.addSlide();
+      const sopt = {}; if (Object.keys(usedSec).length) sopt.sectionTitle = Object.keys(usedSec).pop(); if (masters[s.layout]) sopt.masterName = masters[s.layout];
+      const slide = pptx.addSlide(sopt);
       // background
-      const bg = s.background || SL.themeBg(pres);
+      const bg = s.background || SL.themeBg(pres, s.layout);
       if (bg.type === 'image' && bg.src) { const d = await bgImage(bg, W, H); if (d) slide.background = { data: d }; }
       else if (bg.type === 'gradient') { slide.background = { color: hx(bg.color, pres) || 'FFFFFF' }; post.bgGrads[i] = { c1: hx(bg.color, pres), c2: hx(bg.color2, pres), angle: bg.angle ?? 135 }; }
       else slide.background = { color: hx(bg.color || 'bg', pres) || 'FFFFFF' };
       if (s.hidden) { slide.hidden = true; post.hidden[i] = true; }
-      if (s.transition && s.transition.type && s.transition.type !== 'none') post.trans[i] = s.transition;
+      if (s.transition && ((s.transition.type && s.transition.type !== 'none') || s.transition.auto != null || s.transition.click === false)) post.trans[i] = s.transition;
       // theme graphics as a picture at the back (re-created from the theme on import)
       const kind = SL.decoKind(s.layout);
       const tag = `bts:theme=${pres.theme.id};v=${pres.theme.variant || 0};layout=${s.layout}`;
-      if (!s.hideGraphics) {
-        const key = kind; if (!decoCache[key]) { const svg = SL.decoSVG(Object.assign({}, s, { hideGraphics: false }), pres); decoCache[key] = svg ? await svgToPNG(svg.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" '), W, H, 1) : null; }
+      if (!s.hideGraphics && !s.noDeco) {
+        const key = kind + (s.layout === 'pictureCaption' ? ':pc' : ''); if (!decoCache[key]) { const svg = SL.decoSVG(Object.assign({}, s, { hideGraphics: false }), pres); decoCache[key] = svg ? await svgToPNG(svg.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" '), W, H, 1) : null; }
         if (decoCache[key]) slide.addImage({ data: decoCache[key], x: 0, y: 0, w: IN(W), h: IN(H), altText: tag, objectName: 'Theme graphics' });
       } else slide.addText('', { x: 0, y: 0, w: .01, h: .01, objectName: 'Theme graphics', altText: tag });
+      // slide master / layout graphics (also kept in the BTS metadata)
+      if (!s.hideGraphics && pres.master) for (const el of [...(pres.master.graphics || []), ...((pres.master.layoutGraphics || {})[s.layout] || [])]) { const nm = await addEl(slide, Object.assign({}, el, { name: 'Master graphic' }), pres, post, i, true); if (nm && !post.masterNames[el.id]) post.masterNames[el.id] = { name: nm, slide: i }; }
       // imported layout/master graphics
       for (const el of s.layer || []) await addEl(slide, el, pres, post, i, true);
       for (const el of s.elements) await addEl(slide, el, pres, post, i);
       for (const el of SL.footerEls(s, pres, i)) await addEl(slide, el, pres, post, i);
       if (s.notes) slide.addNotes(s.notes);
+      post.comments[i] = (s.comments || []).filter(c => c && c.text);
     }
     let data = await pptx.write({ outputType: 'uint8array' });
     data = await X.postProcess(data, post);
@@ -182,6 +214,13 @@
     if (el.rot) g.rotate = Math.round(el.rot);
     if (el.flipH) g.flipH = true; if (el.flipV) g.flipV = true;
     const name = (el.ph === 'title' ? 'Title ' : el.ph === 'subtitle' ? 'Subtitle ' : el.ph === 'body' ? 'Text Placeholder ' : el.footer ? 'Footer ' : (el.name ? el.name.replace(/[^\w .-]/g, '').slice(0, 40) + ' ' : '')) + 'O' + (++objN);
+    if (post.names[si] && el.id) post.names[si][el.id] = name;
+    const alt = el.decorative ? '' : (el.alt || (el.type === 'icon' ? 'Icon: ' + el.name : ''));
+    if (alt || el.decorative) post.descr[name] = { alt, decorative: !!el.decorative };
+    await addEl2(slide, el, pres, post, si, isLayer, g, name);
+    return name;
+  }
+  async function addEl2(slide, el, pres, post, si, isLayer, g, name) {
     if (el.type === 'text' || el.type === 'shape') {
       if (SL.isLine(el)) {
         const lo = lineOpts(el, pres) || { color: hx('text', pres), width: 2 };
@@ -215,19 +254,17 @@
       if (el.opacity != null && el.opacity < 1) o.transparency = Math.round((1 - el.opacity) * 100);
       slide.addImage(o);
     } else if (el.type === 'table') {
-      const acc = hx(el.accent || 'accent1', pres) || '4472C4';
-      const mixHex = (h, a) => { const r = C2(h).map(v => Math.round(v * a + 255 * (1 - a))); return r.map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase(); };
-      function C2(h) { return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); }
       const rows = el.rows.map((row, r) => {
         const out = [];
-        row.forEach((c) => {
+        row.forEach((c, ci) => {
           if (c.merged) return;
-          const isHead = el.header && r === 0;
-          let fill = c.fill ? hx(c.fill, pres) : isHead ? acc : el.banded ? ((el.header ? r - 1 : r) % 2 === 0 ? mixHex(acc, .14) : mixHex(acc, .06)) : 'FFFFFF';
-          const color = c.color ? hx(c.color, pres) : isHead ? 'FFFFFF' : (el.color ? hx(el.color, pres) : '1F2430');
-          const cellEl = { html: c.html || '', size: el.size || 16, font: el.font || SL.fontOf('body', pres), color: '#' + color, bold: isHead || c.bold, align: c.align || 'left', role: 'body', type: 'text' };
+          const ts = SL.tableCellStyle(el, r, ci, pres);
+          const fill = c.fill === 'none' ? null : c.fill ? hx(c.fill, pres) : (ts.bg ? hx(ts.bg, pres) : null);
+          const color = c.color ? hx(c.color, pres) : (hx(ts.color, pres) || '1F2430');
+          const cellEl = { html: c.html || '', size: el.size || 16, font: el.font || SL.fontOf('body', pres), color: '#' + color, bold: ts.bold || c.bold, align: c.align || 'left', role: 'body', type: 'text' };
           const runs = X.runs(cellEl, pres);
-          const opt = { fill: fill ? { color: fill } : undefined, valign: c.valign || 'middle', align: c.align || 'left', border: { type: 'solid', pt: 1, color: 'FFFFFF' }, margin: [4, 6, 4, 6] };
+          const border = ts.b.map(b => b ? { type: 'solid', pt: Math.round(b.w * .75 * 100) / 100, color: hx(b.c, pres) || 'FFFFFF' } : { type: 'none' });
+          const opt = { fill: fill ? { color: fill } : undefined, valign: c.valign || 'middle', align: c.align || 'left', border, margin: [4, 6, 4, 6] };
           if (c.cs > 1) opt.colspan = c.cs; if (c.rs > 1) opt.rowspan = c.rs;
           out.push({ text: runs, options: opt });
         });
@@ -238,7 +275,7 @@
     } else if (el.type === 'chart') {
       const ch = el.chart; if (!ch) return;
       const types = { bar: 'bar', line: 'line', pie: 'pie', doughnut: 'doughnut' };
-      const pal = SL.palette(pres).accents.map(c => hx(c, pres));
+      const pal = (ch.colors && ch.colors.length ? ch.colors : SL.palette(pres).accents).map(c => hx(c, pres));
       const series = (ch.type === 'pie' || ch.type === 'doughnut') ? ch.series.slice(0, 1) : ch.series;
       const data = series.map(s => ({ name: s.name, labels: ch.categories.slice(), values: s.values.map(v => +v || 0) }));
       const txt = hx('text', pres);
@@ -270,6 +307,7 @@
     }
     const adv = t.auto != null && t.auto !== false ? ` advTm="${Math.round(t.auto * 1000)}"` : '';
     const click = t.click === false ? ' advClick="0"' : '';
+    if (!t.type || t.type === 'none') return `<p:transition${click}${adv}/>`;
     // mc:AlternateContent so PowerPoint picks up p14 effects (flip/zoom duration) while older readers use the fallback
     const p14 = { flip: `<p14:flip dir="${dir === 'right' ? 'r' : 'l'}"/>`, cube: `<p14:prism dir="${d4}"/>`, zoom: '<p14:ripple/>' }[t.type];
     if (p14 && t.type !== 'zoom') return `<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" Requires="p14"><p:transition spd="${spd}" p14:dur="${t.dur || 700}"${click}${adv}>${p14}</p:transition></mc:Choice><mc:Fallback><p:transition spd="${spd}"${click}${adv}>${inner}</p:transition></mc:Fallback></mc:AlternateContent>`;
@@ -287,9 +325,42 @@
     const head = body.slice(0, first), tail = body.slice(first).replace(/<a:pPr\b[^>]*\/>|<a:pPr\b[^>]*>[\s\S]*?<\/a:pPr>/g, '');
     return '<a:p>' + head + tail + '</a:p>';
   });
+  const xesc = (t) => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+  X.hash = (str) => { let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8, '0') + ':' + str.length; };
+  const DEVA = /[ऀ-ॿ꣠-ꣿ]/;
+  X.devaFont = (latinFont, serif) => { const f = (window.BTS_FONTS || []).find(x => x.name === latinFont); if (f && f.cat === 'indian') return latinFont; return serif ? 'Noto Serif Devanagari' : 'Noto Sans Devanagari'; };
+  const isSerif = (f) => { const r = (window.BTS_FONTS || []).find(x => x.name === f); return r ? r.cat === 'serif' : /serif|garamond|baskerville|times|georgia|cambria/i.test(f) && !/sans/i.test(f); };
+  // Runs with Devanagari text: complex-script font = a Devanagari face, language = Hindi.
+  X.fixDevanagari = (xml) => xml.replace(/<a:r>(<a:rPr\b[^>]*?)(\/>|>([\s\S]*?)<\/a:rPr>)<a:t>([^<]*)<\/a:t><\/a:r>/g, (m, open, close, inner, text) => {
+    if (!DEVA.test(text)) return m;
+    const lat = /<a:latin typeface="([^"]+)"/.exec(inner || ''); const dev = X.devaFont(lat ? lat[1] : '', lat && isSerif(lat[1]));
+    let o = open.replace(/ lang="[^"]*"/, '') + ' lang="hi-IN"';
+    let body = inner || '';
+    if (/<a:cs\b[^>]*\/>/.test(body)) body = body.replace(/<a:cs\b[^>]*\/>/, `<a:cs typeface="${xesc(dev)}" pitchFamily="2" charset="0"/>`);
+    else body += `<a:cs typeface="${xesc(dev)}" pitchFamily="2" charset="0"/>`;
+    return `<a:r>${o}>${body}</a:rPr><a:t>${text}</a:t></a:r>`;
+  });
+  // alt text (descr) + decorative flag on the object's cNvPr, matched by object name
+  X.setDescr = (xml, descr) => xml.replace(/<p:cNvPr\b([^>]*?)(\/>|>)/g, (m, attrs, end) => {
+    const nm = /\bname="([^"]*)"/.exec(attrs); if (!nm) return m; const d = descr[nm[1].replace(/&amp;/g, '&')]; if (!d) return m;
+    let a = attrs.replace(/\s+descr="[^"]*"/, ''); if (d.alt) a += ` descr="${xesc(d.alt)}"`;
+    if (!d.decorative || d.keepAlt) return `<p:cNvPr${a}${end}`;
+    const ext = '<a:extLst><a:ext uri="{C183D7F6-B498-43B3-948B-1728B52AA6E4}"><adec:decorative xmlns:adec="http://schemas.microsoft.com/office/drawing/2017/decorative" val="1"/></a:ext></a:extLst>';
+    return end === '/>' ? `<p:cNvPr${a}>${ext}</p:cNvPr>` : `<p:cNvPr${a}>${ext}`;
+  });
+  const NS_P = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
+  const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/';
+  async function addRel(zip, relsPath, type, target) {
+    let x = zip.file(relsPath) ? await zip.file(relsPath).async('string') : '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>';
+    const ids = [...x.matchAll(/Id="rId(\d+)"/g)].map(m => +m[1]); const id = 'rId' + ((ids.length ? Math.max(...ids) : 0) + 1);
+    x = x.replace('</Relationships>', `<Relationship Id="${id}" Type="${REL}${type}" Target="${target}"/></Relationships>`); zip.file(relsPath, x); return id;
+  }
+  async function addOverride(zip, part, ct) { let x = await zip.file('[Content_Types].xml').async('string'); if (!x.includes(`PartName="${part}"`)) { x = x.replace('</Types>', `<Override PartName="${part}" ContentType="${ct}"/></Types>`); zip.file('[Content_Types].xml', x); } }
+
   X.postProcess = async (data, post) => {
     const zip = await window.JSZip.loadAsync(data);
     const n = Object.keys(zip.files).filter(f => /^ppt\/slides\/slide\d+\.xml$/.test(f)).length;
+    const pres = post.pres || P();
     for (let i = 0; i < n; i++) {
       const path = `ppt/slides/slide${i + 1}.xml`; let xml = await zip.file(path).async('string'); const orig = xml;
       xml = X.fixParagraphs(xml);
@@ -304,8 +375,98 @@
       }
       if (post.hidden[i] && !/<p:sld[^>]*show="0"/.test(xml)) xml = xml.replace(/<p:sld /, '<p:sld show="0" ');
       if (post.trans[i]) xml = xml.replace(/<p:transition[\s\S]*?(<\/p:transition>|\/>)/, '').replace('</p:cSld>', '</p:cSld>__CLR__').replace(/__CLR__(<p:clrMapOvr>[\s\S]*?<\/p:clrMapOvr>)?/, (m, clr) => (clr || '') + TRANS_XML(post.trans[i]));
+      xml = X.fixDevanagari(xml);
+      xml = X.setDescr(xml, post.descr || {});
       if (xml !== orig) zip.file(path, xml);
     }
+    // theme fonts: Devanagari complex-script faces in the font scheme
+    for (const tp of Object.keys(zip.files).filter(f => /^ppt\/theme\/theme\d+\.xml$/.test(f))) {
+      let t = await zip.file(tp).async('string'); const f = post.fonts || {};
+      const fix = (block, latin) => block.replace(/<a:cs typeface="[^"]*"\s*\/>/, `<a:cs typeface="${xesc(X.devaFont(latin, isSerif(latin)))}"/>`).replace(/<a:font script="Deva" typeface="[^"]*"\s*\/>/, `<a:font script="Deva" typeface="${xesc(X.devaFont(latin, isSerif(latin)))}"/>`);
+      t = t.replace(/<a:majorFont>[\s\S]*?<\/a:majorFont>/, (b) => fix(b, f.title || '')).replace(/<a:minorFont>[\s\S]*?<\/a:minorFont>/, (b) => fix(b, f.body || ''));
+      zip.file(tp, t);
+    }
+    // notes text with Devanagari
+    for (const np of Object.keys(zip.files).filter(f => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(f))) { const t = await zip.file(np).async('string'); const t2 = X.fixDevanagari(t); if (t2 !== t) zip.file(np, t2); }
+    // document properties
+    const pr = post.props || {};
+    if (zip.file('docProps/core.xml')) {
+      let c = await zip.file('docProps/core.xml').async('string');
+      const by = BTS.userName || pr.author || 'BTS Slides';
+      c = c.replace(/<cp:lastModifiedBy>[\s\S]*?<\/cp:lastModifiedBy>/, `<cp:lastModifiedBy>${xesc(by)}</cp:lastModifiedBy>`);
+      const add = [['cp:keywords', pr.keywords], ['cp:category', pr.category], ['dc:description', pr.comments]].filter(([, v]) => v).map(([k, v]) => `<${k}>${xesc(v)}</${k}>`).join('');
+      c = c.replace(/<(cp:keywords|cp:category|dc:description)>[\s\S]*?<\/\1>|<(cp:keywords|cp:category|dc:description)\/>/g, '');
+      if (add) c = c.replace('</cp:coreProperties>', add + '</cp:coreProperties>');
+      zip.file('docProps/core.xml', c);
+    }
+    if (zip.file('docProps/app.xml')) { let a = await zip.file('docProps/app.xml').async('string'); a = a.replace(/<Application>[\s\S]*?<\/Application>/, '<Application>BTS Slides (BTS Office)</Application>'); zip.file('docProps/app.xml', a); }
+
+    // comments (legacy comments with p15 threading so replies stay attached)
+    const authors = []; const authorIdx = (name) => { let a = authors.find(x => x.name === name); if (!a) { a = { id: authors.length, name, last: 0 }; authors.push(a); } return a; };
+    for (let i = 0; i < n; i++) {
+      const list = (post.comments || [])[i] || []; if (!list.length) continue;
+      let cm = '';
+      const one = (c, x, y, parent) => {
+        const a = authorIdx(c.author || 'Reviewer'); const idx = ++a.last;
+        const ext = parent ? `<p:extLst><p:ext uri="{C676402C-5697-4E1C-873F-D02D1690AC5C}"><p15:threadingInfo xmlns:p15="http://schemas.microsoft.com/office/powerpoint/2012/main" timeZoneBias="0"><p15:parentCm authorId="${parent.a}" idx="${parent.idx}"/></p15:threadingInfo></p:ext></p:extLst>` : '';
+        cm += `<p:cm authorId="${a.id}" dt="${new Date(c.time || Date.now()).toISOString().replace('Z', '')}" idx="${idx}"><p:pos x="${Math.round((x || 0) * 6)}" y="${Math.round((y || 0) * 6)}"/><p:text>${xesc((c.resolved && !parent ? '[Resolved] ' : '') + c.text)}</p:text>${ext}</p:cm>`;
+        return { a: a.id, idx };
+      };
+      list.forEach(c => { const el = c.elId && pres.slides[i].elements.find(e => e.id === c.elId); const x = el ? el.x + el.w - 10 : c.x, y = el ? el.y : c.y; const p0 = one(c, x, y, null); (c.replies || []).forEach(r => one(r, x, y, p0)); });
+      const part = `ppt/comments/comment${i + 1}.xml`;
+      zip.file(part, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:cmLst ${NS_P}>${cm}</p:cmLst>`);
+      await addRel(zip, `ppt/slides/_rels/slide${i + 1}.xml.rels`, 'comments', `../comments/comment${i + 1}.xml`);
+      await addOverride(zip, '/' + part, 'application/vnd.openxmlformats-officedocument.presentationml.comments+xml');
+    }
+    if (authors.length) {
+      zip.file('ppt/commentAuthors.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:cmAuthorLst ${NS_P}>${authors.map(a => `<p:cmAuthor id="${a.id}" name="${xesc(a.name)}" initials="${xesc(a.name.split(/\s+/).map(w => w[0]).join('').slice(0, 3).toUpperCase())}" lastIdx="${a.last}" clrIdx="${a.id % 8}"/>`).join('')}</p:cmAuthorLst>`);
+      await addRel(zip, 'ppt/_rels/presentation.xml.rels', 'commentAuthors', 'commentAuthors.xml');
+      await addOverride(zip, '/ppt/commentAuthors.xml', 'application/vnd.openxmlformats-officedocument.presentationml.commentAuthors+xml');
+    }
+
+    // custom shows + slide show settings
+    let px = await zip.file('ppt/presentation.xml').async('string');
+    const sldRids = [...px.matchAll(/<p:sldId\b[^>]*r:id="(rId\d+)"/g)].map(m => m[1]);
+    const shows = (pres.customShows || []).map((c, k) => ({ c, k, rids: c.slides.map(id => pres.slides.findIndex(s => s.id === id)).filter(i => i >= 0).map(i => sldRids[i]).filter(Boolean) }));
+    if (shows.length) {
+      const lst = `<p:custShowLst>${shows.map(s => `<p:custShow name="${xesc(s.c.name)}" id="${s.k}"><p:sldLst>${s.rids.map(r => `<p:sld r:id="${r}"/>`).join('')}</p:sldLst></p:custShow>`).join('')}</p:custShowLst>`;
+      px = px.replace(/<p:custShowLst>[\s\S]*?<\/p:custShowLst>/, '');
+      if (/<p:notesSz\b[^>]*\/>/.test(px)) px = px.replace(/(<p:notesSz\b[^>]*\/>)/, '$1' + lst); else px = px.replace(/(<p:sldSz\b[^>]*\/>)/, '$1' + lst);
+      zip.file('ppt/presentation.xml', px);
+    }
+    const st = pres.showSetup;
+    if (st && zip.file('ppt/presProps.xml')) {
+      let pp = await zip.file('ppt/presProps.xml').async('string');
+      const ci = st.custom ? (pres.customShows || []).findIndex(c => c.id === st.custom) : -1;
+      const sp = `<p:showPr${st.loop || st.kiosk ? ' loop="1"' : ''}${st.useTimings === false ? ' useTimings="0"' : ''}${st.noAnims ? ' showAnimation="0"' : ''} showNarration="1">${st.kiosk ? '<p:kiosk/>' : st.type === 'window' ? '<p:browse/>' : '<p:present/>'}${ci >= 0 ? `<p:custShow id="${ci}"/>` : st.range ? `<p:sldRg st="${st.range.from}" end="${st.range.to}"/>` : '<p:sldAll/>'}<p:penClr><a:prstClr val="red"/></p:penClr></p:showPr>`;
+      pp = pp.replace(/<p:showPr[\s\S]*?<\/p:showPr>/, '');
+      if (/<p:presentationPr\b[^>]*\/>/.test(pp)) pp = pp.replace(/<p:presentationPr\b([^>]*?)\s*\/>/, (m, at) => `<p:presentationPr${at}>${sp}</p:presentationPr>`);
+      else pp = pp.replace(/(<p:presentationPr\b[^>]*>)/, '$1' + sp);
+      if (!/xmlns:a=/.test(pp.slice(0, pp.indexOf('>', pp.indexOf('<p:presentationPr'))))) pp = pp.replace('<p:presentationPr ', '<p:presentationPr xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ');
+      zip.file('ppt/presProps.xml', pp);
+    }
+
+    // BTS metadata (customXml): exact copy of each slide + presentation-level settings
+    const meta = { app: 'BTS Slides', v: 2, theme: SL.clone(pres.theme), master: pres.master ? SL.clone(pres.master) : null, customShows: (pres.customShows || []).map(c => ({ name: c.name, id: c.id, slides: c.slides.map(id => pres.slides.findIndex(s => s.id === id)).filter(i => i >= 0) })), showSetup: pres.showSetup || null, footer: pres.footer || null, slides: [] };
+    if (meta.master) ['graphics'].forEach(k => (meta.master[k] || []).forEach(el => { if (el.type === 'image') { const m = post.masterNames[el.id]; if (m) { el._n = m.name; el._s = m.slide; } delete el.src; } }));
+    if (meta.master && meta.master.layoutGraphics) Object.values(meta.master.layoutGraphics).forEach(l => l.forEach(el => { if (el.type === 'image') { const m = post.masterNames[el.id]; if (m) { el._n = m.name; el._s = m.slide; } delete el.src; } }));
+    for (let i = 0; i < n && i < pres.slides.length; i++) {
+      const s = SL.clone(pres.slides[i]); const names = post.names[i] || {};
+      [...s.elements, ...(s.layer || [])].forEach(el => { if (el.type === 'image') { if (el.src) el._n = names[el.id] || null; delete el.src; } });
+      if (s.background && s.background.type === 'image') { delete s.background.src; s.background._img = true; }
+      meta.slides.push({ h: await X.slideHash(zip, i + 1), s });
+    }
+    const json = JSON.stringify(meta);
+    zip.file('customXml/btsSlides.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><bts:slides xmlns:bts="urn:bts-office:slides" version="2">${xesc(json)}</bts:slides>`);
+    await addRel(zip, 'ppt/_rels/presentation.xml.rels', 'customXml', '../customXml/btsSlides.xml');
     return await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
+  };
+  // A slide's fingerprint: slide XML + its notes and comments. Used on reopen to tell whether the slide was edited elsewhere.
+  X.slideHash = async (zip, num) => {
+    const sp = `ppt/slides/slide${num}.xml`; const f = zip.file(sp); if (!f) return '';
+    let str = await f.async('string');
+    const rf = zip.file(`ppt/slides/_rels/slide${num}.xml.rels`);
+    if (rf) { const rels = await rf.async('string'); for (const m of rels.matchAll(/Target="\.\.\/(notesSlides\/notesSlide\d+\.xml|comments\/comment\d+\.xml)"/g)) { const g = zip.file('ppt/' + m[1]); if (g) str += '\n' + await g.async('string'); } }
+    return X.hash(str);
   };
 })();

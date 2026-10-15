@@ -10,35 +10,42 @@
   function setPresentation(p, opts = {}) {
     if (E.editing) { E.editing = null; }
     FX.show.on && FX.end();
+    if (E.view === 'master' && SLX.masterAbort) SLX.masterAbort();
     SL.pres = p; SL.cur = 0; E.sel = []; E.railSel = new Set([0]); E.fit = true;
     if (!opts.keepAssets) { /* assets are additive; unused ones are dropped at save time */ }
     SL.resetHistory(); C.buildThemeGallery(); E.renderAll(); requestAnimationFrame(E.layout);
+    // thumbnails and the canvas are redrawn once the bundled fonts this presentation uses are loaded
+    SL.ensureFonts(p).then(() => { if (SL.pres === p) { E.renderAll(); C.buildThemeGallery(); } });
   }
   window.SLApp = { setPresentation };
 
   /* ---------- PDF export: render every visible slide as a page ---------- */
   async function exportPDF() {
     if (E.editing) E.endEdit();
+    if (E.view === 'master') SLX.masterClose();
+    await SL.ensureFonts(P());
     const root = $('#print-root'); root.innerHTML = '';
     const W = SL.W(P()), H = SL.H(P()); const win = W / 96, hin = H / 96;
+    root.style.width = win + 'in';
     const st = document.createElement('style'); st.id = 'print-page-style';
     st.textContent = `@page { size: ${win}in ${hin}in; margin: 0; }`;
     document.head.appendChild(st);
     P().slides.forEach((s, i) => {
       if (s.hidden) return;
       const page = document.createElement('div'); page.className = 'print-page'; page.style.width = win + 'in'; page.style.height = hin + 'in';
-      const node = SL.renderSlide(s, P(), { index: i }); node.style.transform = `scale(${(win * 96) / W})`; node.style.transformOrigin = '0 0';
+      const node = SL.renderSlide(s, P(), { index: i }); E.fitAllText(node); node.style.transform = `scale(${(win * 96) / W})`; node.style.transformOrigin = '0 0';
       page.appendChild(node); root.appendChild(page);
     });
     document.body.classList.add('printing');
     await document.fonts.ready; await new Promise(r => setTimeout(r, 120));
     return { pageSize: { width: win, height: hin }, landscape: false, preferCSSPageSize: true };
   }
-  function afterExportPDF() { document.body.classList.remove('printing'); $('#print-root').innerHTML = ''; $('#print-page-style')?.remove(); }
+  function afterExportPDF() { document.body.classList.remove('printing'); $('#print-root').innerHTML = ''; $('#print-root').style.width = ''; $('#print-page-style')?.remove(); }
 
   /* ---------- save / load ---------- */
   async function save(ext) {
     if (E.editing) E.endEdit();
+    if (E.view === 'master') SLX.masterClose();
     if (ext === 'pptx') return await PPTXExport.build(P());
     if (ext === 'json') { const used = {}; JSON.stringify(P()).replace(/"(a[\w]+)"/g, (m, id) => { if (SL.assets[id]) used[id] = SL.assets[id]; }); return JSON.stringify({ bts: 'slides', version: 1, pres: P(), assets: used }); }
     throw new Error('Unsupported format: ' + ext);
@@ -48,6 +55,9 @@
     if (ext === 'json') { const o = JSON.parse(new TextDecoder().decode(f.data)); Object.assign(SL.assets, o.assets || {}); setPresentation(o.pres); return; }
     if (ext !== 'pptx') throw new Error('BTS Slides opens .pptx presentations');
     const p = await PPTXImport.parse(f.data);
+    if (p.props) { BTS.setProps(p.props); delete p.props; }
+    SL._lastRestored = p._restored || 0; delete p._restored;
+    if (SLX.normalizeComments) SLX.normalizeComments(p);
     setPresentation(p);
   }
   function newDocument() { setPresentation(SL.newPresentation(P().theme.id === 'custom' ? 'clean' : 'clean')); BTS.title = BTS.cfg.defaultTitle; BTS.filePath = null; BTS.markClean(); }
@@ -75,6 +85,8 @@
   /* ====================================================================== */
   const needSel = (msg = 'Select an object on the slide first') => { if (!E.selected().length) { BTS.toast(msg); return false; } return true; };
   async function onCommand(cmd, el, ev) {
+    if (window.SLX && SLX.cmd[cmd]) return SLX.cmd[cmd](el, ev);
+    if (E.view === 'master' && SLX.masterBlocks && SLX.masterBlocks(cmd)) return;
     const sel = E.selected(); const one = sel[0];
     switch (cmd) {
       /* ----- edit ----- */
@@ -101,7 +113,6 @@
         { label: 'Remove all sections', icon: 'x', disabled: !(P().sections || []).length, action: () => { P().sections = []; SL.commit(); E.renderAll(); } },
       ]);
       /* ----- font ----- */
-      case 'font-name': C.setFont(el.value.trim()); return refocus();
       case 'font-size': C.setFontSize(parseFloat(el.value)); return refocus();
       case 'grow-font': return C.stepFont(1);
       case 'shrink-font': return C.stepFont(-1);
@@ -228,18 +239,16 @@
       case 'delete-comments': S().comments = []; SL.commit(); E.renderAll(); return;
       /* ----- design ----- */
       case 'apply-theme': {
-        const id = el.dataset.themeId; const was = P().theme.id; P().theme = { id, variant: 0 };
+        if (E.editing) E.endEdit();
+        const id = el.dataset.themeId; const was = P().theme.id; const before = { theme: SL.clone(P().theme), master: P().master ? SL.clone(P().master) : null };
+        P().theme = { id, variant: 0 };
+        if (P().master) { const m = P().master; delete m.bg; delete m.layoutBg; ['title', 'body'].forEach(k => { if (m[k]) { delete m[k].color; delete m[k].font; } }); }
         if (was === 'custom') P().slides.forEach(s => { s.layer = []; if (s.background && s.background.type !== 'image') s.background = null; });
-        const oldP = { width: SL.W(P()), height: SL.H(P()), theme: { id: was } };
-        const oldSpecs = SL.layoutPlaceholders('title', SL.W(P()), SL.H(P()), oldP), newSpecs = SL.layoutPlaceholders('title', SL.W(P()), SL.H(P()), P());
-        P().slides.filter(s => s.layout === 'title').forEach(s => s.elements.forEach(e => {
-          const i = oldSpecs.findIndex(sp => sp.ph === e.ph); if (i < 0) return; const o = oldSpecs[i], n = newSpecs[i];
-          if (Math.abs(e.x - o.x) < 2 && Math.abs(e.y - o.y) < 2 && Math.abs(e.w - o.w) < 2) { Object.assign(e, { x: n.x, y: n.y, w: n.w, h: n.h }); if (!e.align || e.align === o.align) e.align = n.align; }
-        }));
-        SL.commit(); C.buildThemeGallery(); E.renderAll(); return;
+        SL.syncPlaceholders(P(), before);
+        SL.commit(); C.buildThemeGallery(); E.renderAll(); SL.ensureFonts(P()).then(() => E.renderAll()); return;
       }
-      case 'apply-variant': P().theme.variant = +el.dataset.v; SL.commit(); C.buildThemeGallery(); E.renderAll(); return;
-      case 'themes-more': return C.pop(el, `<div class="menu-head">All themes</div><div class="theme-all">${SL.THEMES.map(t => `<button class="th-card ${P().theme.id === t.id ? 'on' : ''}" data-tid="${t.id}" title="${t.name}">${C.themeSample(t, 0, 150)}<span>${t.name}</span></button>`).join('')}</div>`, 'theme-pop', (e) => { const b = e.target.closest('[data-tid]'); if (b) { BTS.closePopover(); onCommand('apply-theme', { dataset: { themeId: b.dataset.tid } }); } });
+      case 'apply-variant': P().theme = Object.assign({}, P().theme, { variant: +el.dataset.v }); delete P().theme.colors; SL.commit(); C.buildThemeGallery(); E.renderAll(); return;
+      case 'themes-more': return C.pop(el, `<div class="menu-head">All themes (${SL.THEMES.length})</div><div class="theme-all">${SL.THEMES.map(t => `<button class="th-card ${P().theme.id === t.id ? 'on' : ''}" data-tid="${t.id}" title="${t.name}">${C.themeSample(t, 0, 150)}<span>${t.name}</span></button>`).join('')}</div>`, 'theme-pop', (e) => { const b = e.target.closest('[data-tid]'); if (b) { BTS.closePopover(); onCommand('apply-theme', { dataset: { themeId: b.dataset.tid } }); } });
       case 'slide-size': return BTS.menu(el, [
         { label: 'Widescreen (16:9)', checked: Math.abs(SL.W(P()) / SL.H(P()) - 16 / 9) < .02, action: () => setSize(1280, 720) },
         { label: 'Standard (4:3)', checked: Math.abs(SL.W(P()) / SL.H(P()) - 4 / 3) < .02, action: () => setSize(960, 720) },
@@ -438,7 +447,6 @@
   }
   function boot() {
     // datalists
-    $('#font-list').innerHTML = SL.FONTS.map(f => `<option value="${f}">`).join('');
     $('#size-list').innerHTML = SL.SIZES.map(s => `<option value="${s}">`).join('');
     BTS.hasContent = () => P().slides.length > 1 || P().slides.some(s => s.elements.some(e => (e.html && !SL.isEmptyText(e)) || !e.ph));
     BTS.init({
@@ -470,6 +478,8 @@
     SL.onChange = () => { };
     addEventListener('beforeunload', () => { });
     document.fonts && document.fonts.ready.then(() => { E.renderAll(); });
+    // load every theme font once so the theme gallery previews are drawn in the right typefaces
+    SL.ensureFonts([...new Set(SL.THEMES.flatMap(t => [t.titleFont, t.bodyFont]))]).then(() => { C.buildThemeGallery(); E.renderAll(); });
     requestAnimationFrame(E.layout);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();

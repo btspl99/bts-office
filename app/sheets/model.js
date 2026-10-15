@@ -10,7 +10,7 @@
     precisionRounding: 10,
   };
 
-  const META_PROPS = ['styles', 'colW', 'rowH', 'hiddenR', 'hiddenC', 'merges', 'comments', 'links', 'validations', 'cf', 'tables', 'filter', 'charts', 'images', 'page', 'freeze', 'rowCount', 'colCount', 'filterHidden'];
+  const META_PROPS = ['styles', 'colW', 'rowH', 'hiddenR', 'hiddenC', 'merges', 'comments', 'links', 'validations', 'cf', 'tables', 'filter', 'charts', 'images', 'page', 'freeze', 'rowCount', 'colCount', 'filterHidden', 'sparklines', 'threads', 'outlineR', 'outlineC', 'pivots', 'allowRanges'];
 
   class Sheet {
     constructor(wb, name) {
@@ -22,6 +22,10 @@
       this.charts = []; this.images = []; this.freeze = { r: 0, c: 0 };
       this.page = { orientation: 'portrait', paper: 'A4', margins: 'normal', printArea: null, gridlines: false, headings: false, fit: 'none' };
       this.showGrid = true; this.showHeadings = true; this.protected = false;
+      /* 1.2: sparkline groups, threaded comments (key -> {id, items:[{author,text,time}], resolved}), outline levels (index -> 1..7),
+         PivotTable definitions whose output lives on this sheet, protection options/hash, ranges editable while protected */
+      this.sparklines = []; this.threads = new Map(); this.outlineR = new Map(); this.outlineC = new Map(); this.pivots = [];
+      this.protection = null; this.allowRanges = [];
       this.rowCount = 1000; this.colCount = 100;
       this.sel = { r0: 0, c0: 0, r1: 0, c1: 0 }; this.active = { r: 0, c: 0 }; this.scroll = { x: 0, y: 0 };
       this._geomDirty = true;
@@ -138,7 +142,10 @@
       this.undoStack = []; this.redoStack = []; this.tx = null; this.txDepth = 0;
       this.listeners = new Set(); this.version = 0;
       this.props = { author: '', created: new Date() };
+      this.resetBook();
     }
+    /** workbook-level 1.2 state: theme, custom/modified cell styles, scenarios, structure protection */
+    resetBook() { this.theme = 'bts'; this.themeOver = null; this.customStyles = []; this.styleMods = {}; this.scenarios = []; this.protectStructure = null; }
     static get config() { return HF_CONFIG; }
     get active() { return this.sheets[this.activeIndex]; }
     on(fn) { this.listeners.add(fn); }
@@ -158,6 +165,7 @@
     reset() {
       this.hf.destroy(); this.hf = HF.buildEmpty(HF_CONFIG);
       this.sheets = []; this.activeIndex = 0; this.undoStack = []; this.redoStack = [];
+      this.resetBook();
     }
 
     /* ---------- transactions ---------- */
@@ -289,6 +297,8 @@
       const m = {};
       m.styles = shiftKeyMap(sheet.styles, axis, at, count);
       m.comments = shiftKeyMap(sheet.comments, axis, at, count);
+      m.threads = shiftKeyMap(sheet.threads, axis, at, count);
+      if (axis === 'r') m.outlineR = shiftIdxMap(sheet.outlineR, at, count); else m.outlineC = shiftIdxMap(sheet.outlineC, at, count);
       m.links = shiftKeyMap(sheet.links, axis, at, count);
       if (axis === 'r') { m.rowH = shiftIdxMap(sheet.rowH, at, count); m.hiddenR = shiftIdxSet(sheet.hiddenR, at, count); m.filterHidden = shiftIdxSet(sheet.filterHidden, at, count); m.rowCount = Math.max(100, sheet.rowCount + count); }
       else { m.colW = shiftIdxMap(sheet.colW, at, count); m.hiddenC = shiftIdxSet(sheet.hiddenC, at, count); m.colCount = Math.max(26, sheet.colCount + count); }
@@ -306,6 +316,10 @@
       m.filter = sheet.filter ? (sr(sheet.filter.range) ? { ...sheet.filter, range: sr(sheet.filter.range), cols: shiftFilterCols(sheet.filter.cols, axis, at, count) } : null) : null;
       m.charts = sheet.charts.map(ch => ({ ...ch, range: ch.sheet && ch.sheet !== sheet.name ? ch.range : (sr(ch.range) || ch.range) }));
       m.page = { ...sheet.page, printArea: sheet.page.printArea ? sr(sheet.page.printArea) : null };
+      const sp = (p) => { const r = axis === 'r' ? shiftIdx(p.r, at, count) : p.r, c = axis === 'c' ? shiftIdx(p.c, at, count) : p.c; return r === null || c === null ? null : { r, c }; };
+      m.sparklines = sheet.sparklines.map(g => ({ ...g, items: g.items.map(it => { const p = sp(it); if (!p) return null; return { ...it, ...p, src: it.sheet && it.sheet !== sheet.name ? it.src : (sr(it.src) || it.src) }; }).filter(Boolean) })).filter(g => g.items.length);
+      m.pivots = sheet.pivots.map(pv => { const o = { ...pv }; const d = sp(pv.dest); if (d) o.dest = { ...pv.dest, ...d }; if (pv.out) o.out = sr(pv.out) || pv.out; if (pv.src && pv.src.sheet === sheet.name && pv.src.range) o.src = { ...pv.src, range: sr(pv.src.range) || pv.src.range }; return o; });
+      m.allowRanges = sheet.allowRanges.map(a => ({ ...a, range: sr(a.range) })).filter(a => a.range);
       const fz = { ...sheet.freeze }; if (axis === 'r' && at < fz.r) fz.r = Math.max(0, count > 0 ? fz.r + count : fz.r - Math.min(-count, fz.r - at)); if (axis === 'c' && at < fz.c) fz.c = Math.max(0, count > 0 ? fz.c + count : fz.c - Math.min(-count, fz.c - at)); m.freeze = fz;
       return m;
     }
@@ -391,7 +405,10 @@
       if (!name || /[\\\/\?\*\[\]:]/.test(name) || name.length > 31) throw new Error('Sheet names can’t be blank, longer than 31 characters, or contain \\ / ? * [ ] :');
       const ex = this.sheetByName(name); if (ex && ex !== s) throw new Error('That name is already taken. Try a different one.');
       const old = s.name; if (old === name) return;
-      const fix = (from, to) => { this.sheets.forEach(x => x.charts.forEach(ch => { if (ch.sheet === from) ch.sheet = to; })); };
+      const fix = (from, to) => {
+        this.sheets.forEach(x => { x.charts.forEach(ch => { if (ch.sheet === from) ch.sheet = to; }); x.pivots.forEach(p => { if (p.src && p.src.sheet === from) p.src.sheet = to; }); x.sparklines.forEach(g => g.items.forEach(it => { if (it.sheet === from) it.sheet = to; })); });
+        this.scenarios.forEach(sc => { if (sc.sheet === from) sc.sheet = to; });
+      };
       this.custom(() => { this.hf.renameSheet(s.id, name); s.name = name; fix(old, name); }, () => { this.hf.renameSheet(s.id, old); s.name = old; fix(name, old); });
     }
     moveSheet(s, to) {

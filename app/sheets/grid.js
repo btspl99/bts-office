@@ -49,8 +49,20 @@
   G.resize = resize;
 
   /* ---------- geometry ---------- */
-  G.hw = () => { const s = S(); const z = G.z; if (!s.showHeadings) return 0; const lastRow = s.rowAt((scroller.scrollTop + H) / z) + 1; ctx.font = `${Math.round(11 * Math.max(.8, z))}px ${getFontUI()}`; return Math.max(34, Math.ceil(ctx.measureText(String(lastRow)).width + 16)) * Math.max(.75, Math.min(z, 1.6)) | 0; };
-  G.hh = () => S().showHeadings ? Math.round(22 * Math.max(.75, Math.min(G.z, 1.6))) : 0;
+  G.hw = () => { const s = S(); const z = G.z; if (!s.showHeadings) return 0; const lastRow = s.rowAt((scroller.scrollTop + H) / z) + 1; ctx.font = `${Math.round(11 * Math.max(.8, z))}px ${getFontUI()}`; return G.ogW() + (Math.max(34, Math.ceil(ctx.measureText(String(lastRow)).width + 16)) * Math.max(.75, Math.min(z, 1.6)) | 0); };
+  G.hh = () => S().showHeadings ? G.ogH() + Math.round(22 * Math.max(.75, Math.min(G.z, 1.6))) : 0;
+  /* ---------- outline (group) gutters ---------- */
+  const OG = 16;
+  function outlineInfo(map) {
+    if (map._info) return map._info;
+    const keys = [...map.keys()].sort((a, b) => a - b); let max = 0; for (const k of keys) max = Math.max(max, map.get(k));
+    const groups = [];
+    for (let L = 1; L <= max; L++) { let a = null, prev = null; for (const k of keys) { if (map.get(k) < L) continue; if (a === null) { a = k; prev = k; continue; } if (k === prev + 1) { prev = k; continue; } groups.push({ L, a, b: prev }); a = k; prev = k; } if (a !== null) groups.push({ L, a, b: prev }); }
+    const info = { max, groups }; try { Object.defineProperty(map, '_info', { value: info, configurable: true }); } catch { } return info;
+  }
+  G.outlineInfo = outlineInfo;
+  G.ogW = () => { const s = S(); if (!s || !s.showHeadings || !s.outlineR || !s.outlineR.size) return 0; return (outlineInfo(s.outlineR).max + 1) * OG + 4; };
+  G.ogH = () => { const s = S(); if (!s || !s.showHeadings || !s.outlineC || !s.outlineC.size) return 0; return (outlineInfo(s.outlineC).max + 1) * OG + 4; };
   let fontUI; function getFontUI() { return fontUI || (fontUI = getComputedStyle(document.body).fontFamily); }
   function frozen() { const s = S(), z = G.z; return { fr: s.freeze.r, fc: s.freeze.c, fw: s.colLeft(s.freeze.c) * z, fh: s.rowTop(s.freeze.r) * z }; }
   G.frozen = frozen;
@@ -108,7 +120,8 @@
   /* ---------- rendering ---------- */
   const al = (v) => Math.round(v * dpr) / dpr;              // align to device pixel
   const ln = (v) => (Math.round(v * dpr) + 0.5) / dpr;        // 1 device px line center
-  function fontStr(st, z) { return `${st.i ? 'italic ' : ''}${st.b ? 'bold ' : ''}${((st.sz || 11) * 96 / 72 * z).toFixed(2)}px ${SU.cssFont(st.font || 'Calibri')}`; }
+  function fontStr(st, z, num) { const name = st.font || (num && SU.numFont) || SU.defFont; STheme.fontReady(name, st.b, st.i); return `${st.i ? 'italic ' : ''}${st.b ? 'bold ' : ''}${((st.sz || 11) * 96 / 72 * z).toFixed(2)}px ${SU.cssFont(name)}`; }
+  STheme.onFontsLoaded = () => { measureCache.clear(); G.render(); G.onFontsLoaded && G.onFontsLoaded(); };
   G.fontStr = fontStr;
 
   G.renderNow = () => {
@@ -140,18 +153,19 @@
     return null;
   }
 
+  let renderTheme = null;
   function tableStyleAt(s, r, c) {
-    for (const t of s.tables) {
-      const g = t.range; if (!SU.inRange(g, r, c)) continue;
-      const th = t.theme; const out = {};
-      if (t.header !== false && r === g.r0) { out.fill = th.head; out.color = th.headText || '#fff'; out.b = true; }
-      else if (t.total && r === g.r1) { out.b = true; out.topBorder = th.head; out.fill = th.band2 || null; }
-      else if (t.banded !== false) { const i = r - g.r0 - (t.header !== false ? 1 : 0); out.fill = i % 2 === 0 ? th.band : th.band2 || null; }
-      if (th.line) out.line = th.line;
-      return out;
-    }
+    for (const t of s.tables) { if (SU.inRange(t.range, r, c)) return STheme.tableCell(t, r, c, renderTheme); }
     return null;
   }
+  G.tableStyleAt = (s, r, c) => tableStyleAt(s, r, c);
+  /* sparkline lookup per sheet (rebuilt when the sparklines array changes) */
+  function sparkMap(s) {
+    if (s._spk && s._spk.src === s.sparklines) return s._spk.map;
+    const map = new Map(); for (const g of s.sparklines) for (const it of g.items) map.set(key(it.r, it.c), { g, it });
+    s._spk = { src: s.sparklines, map }; return map;
+  }
+  G.sparkAt = (s, r, c) => s.sparklines.length ? sparkMap(s).get(key(r, c)) || null : null;
 
   function drawCells(s, r0, r1, c0, c1) {
     const z = G.z;
@@ -159,8 +173,8 @@
     const cExt0 = Math.max(0, c0 - 8), cExt1 = Math.min(s.colCount - 1, c1 + 8);
     const merges = s.merges.filter(m => m.r1 >= r0 && m.r0 <= r1 && m.c1 >= c0 && m.c0 <= c1);
     const inMerge = new Set(); for (const m of merges) for (let r = Math.max(m.r0, r0); r <= Math.min(m.r1, r1); r++) for (let c = m.c0; c <= m.c1; c++) inMerge.add(key(r, c));
-    const ver = wb.version;
-    const texts = [];
+    const ver = wb.version; renderTheme = STheme.cur();
+    const texts = []; const spk = s.sparklines.length ? sparkMap(s) : null;
     // pass 1: fills
     for (let r = r0; r <= r1; r++) {
       const rh = s.rowHeight(r) * z; if (!rh) continue; const y = G.rowY(r);
@@ -171,6 +185,7 @@
         const fill = (cf && cf.fill) || st.fill || (tb && tb.fill);
         if (fill) { ctx.fillStyle = fill; ctx.fillRect(al(G.colX(c)), al(y), al(cw) + 0.5, al(rh) + 0.5); }
         if (cf && cf.bar) drawBar(G.colX(c), y, cw, rh, cf.bar);
+        if (spk) { const sp = spk.get(key(r, c)); if (sp && window.Spark) Spark.draw(ctx, s, sp.g, sp.it, G.colX(c), y, cw, rh, dpr); }
       }
     }
     // pass 2: gridlines
@@ -204,21 +219,27 @@
       const rh = s.rowHeight(r) * z; if (!rh) continue; const y = G.rowY(r);
       for (let c = c0; c <= c1; c++) {
         const cw = s.colWidth(c) * z; if (!cw) continue;
-        const st = s.style(r, c); const x = G.colX(c);
+        let st = s.style(r, c); const x = G.colX(c);
+        if (s.tables.length) { const tb = tableStyleAt(s, r, c); if (tb && (tb.bT || tb.bB || tb.bL || tb.bR)) st = { ...st, bT: st.bT || tb.bT, bB: st.bB || tb.bB, bL: st.bL || tb.bL, bR: st.bR || tb.bR }; }
         if (st.bT || st.bB || st.bL || st.bR) drawBorders(x, y, cw, rh, st, s, r, c);
         if (s.comments.size && s.comments.has(key(r, c))) { ctx.fillStyle = '#d32f2f'; ctx.beginPath(); const rx = x + cw - 1, ry = y; ctx.moveTo(rx - 6 * Math.max(z, .8), ry); ctx.lineTo(rx, ry); ctx.lineTo(rx, ry + 6 * Math.max(z, .8)); ctx.fill(); }
+        if (s.threads.size && s.threads.has(key(r, c))) { const th = s.threads.get(key(r, c)); const sz = 8 * Math.max(z, .8); ctx.fillStyle = th.resolved ? '#9aa3b2' : '#7A4FB5'; ctx.beginPath(); const rx = x + cw - 1, ry = y; if (s.comments.has(key(r, c))) { ctx.moveTo(rx - sz, ry + rh - 1); ctx.lineTo(rx, ry + rh - 1); ctx.lineTo(rx, ry + rh - 1 - sz); } else { ctx.moveTo(rx - sz, ry); ctx.lineTo(rx, ry); ctx.lineTo(rx, ry + sz); } ctx.fill(); }
       }
     }
     // table outline header separation
     for (const t of s.tables) {
       if (!SU.intersects(t.range, { r0, r1, c0, c1 })) continue;
-      const rr = G.rangeRect(t.range); ctx.strokeStyle = t.theme.head; ctx.lineWidth = 1;
-      if (t.total) { const ty = G.rowY(t.range.r1); ctx.beginPath(); ctx.moveTo(rr.x, ln(ty)); ctx.lineTo(rr.x + rr.w, ln(ty)); ctx.stroke(); }
+      void t;
     }
     // filter buttons
     const fl = s.filter;
     if (fl && fl.range.r0 >= r0 && fl.range.r0 <= r1) { for (let c = Math.max(c0, fl.range.c0); c <= Math.min(c1, fl.range.c1); c++) drawFilterBtn(s, fl, c); }
     for (const t of s.tables) if (t.filterBtn !== false && t.header !== false && t.range.r0 >= r0 && t.range.r0 <= r1 && !(fl && fl.tableId === t.id)) for (let c = Math.max(c0, t.range.c0); c <= Math.min(c1, t.range.c1); c++) drawFilterBtn(s, { range: t.range, cols: {} }, c);
+    // "Circle invalid data"
+    if (s._circles && s._circles.size) {
+      ctx.strokeStyle = '#E0261B'; ctx.lineWidth = 1.6;
+      for (const k of s._circles) { const { r, c } = SU.unkey(k); if (r < r0 || r > r1 || c < c0 || c > c1) continue; const rc = G.cellRect(r, c); if (!rc.w || !rc.h) continue; ctx.beginPath(); ctx.ellipse(rc.x + rc.w / 2, rc.y + rc.h / 2, rc.w / 2 + 3, rc.h / 2 + 2, 0, 0, Math.PI * 2); ctx.stroke(); }
+    }
   }
   function drawFilterBtn(s, fl, c) {
     const r = fl.range.r0; const z = G.z; if (!s.colWidth(c)) return;
@@ -303,13 +324,13 @@
     let h_ = st.h || (isNum ? 'right' : (isErr || isBool) ? 'center' : 'left');
     if (st.h === 'fill') h_ = 'left';
     const effSt = (cf && cf.b) || (tb && tb.b) ? { ...st, b: true } : st;
-    const font = fontStr(effSt, z);
+    const font = fontStr(effSt, z, isNum);
     let color = (cf && cf.color) || fmt.color || st.color || (tb && tb.color) || (s.links.has(key(r, c)) ? '#1155cc' : '#000000');
     const padX = 3 * z + (st.indent || 0) * 9 * z;
     const fsz = (st.sz || 11) * 96 / 72 * z;
     // filter button room
     let btnRoom = 0; if (s.filter && r === s.filter.range.r0 && c >= s.filter.range.c0 && c <= s.filter.range.c1) btnRoom = 16 * z;
-    for (const t of s.tables) if (t.header !== false && r === t.range.r0 && SU.inRange(t.range, r, c)) btnRoom = 16 * z;
+    for (const t of s.tables) if (t.header !== false && t.filterBtn !== false && r === t.range.r0 && SU.inRange(t.range, r, c)) btnRoom = 16 * z;
     ctx.font = font; ctx.fillStyle = color; ctx.textBaseline = 'alphabetic';
     const ascent = fsz * 0.78, lineH = fsz * 1.22;
     const vAlign = st.v || 'bottom';
@@ -336,8 +357,9 @@
     // determine clip region with overflow into empty neighbours
     let clipL = x, clipR = x + w;
     if (!isMerge && tw > avail && !isNum) {
-      if (h_ === 'left' || h_ === 'center') { let cc = c + 1, need = (h_ === 'center' ? (tw - avail) / 2 : tw - avail); while (need > 0 && cc < s.colCount && s.isEmpty(r, cc) && !s.mergeAt(r, cc)) { const cw = s.colWidth(cc) * z; clipR += cw; need -= cw; cc++; } }
-      if (h_ === 'right' || h_ === 'center') { let cc = c - 1, need = (h_ === 'center' ? (tw - avail) / 2 : tw - avail); while (need > 0 && cc >= 0 && s.isEmpty(r, cc) && !s.mergeAt(r, cc)) { const cw = s.colWidth(cc) * z; clipL -= cw; need -= cw; cc--; } }
+      const free = (cc) => s.isEmpty(r, cc) && !s.mergeAt(r, cc) && !(s.sparklines.length && G.sparkAt(s, r, cc));
+      if (h_ === 'left' || h_ === 'center') { let cc = c + 1, need = (h_ === 'center' ? (tw - avail) / 2 : tw - avail); while (need > 0 && cc < s.colCount && free(cc)) { const cw = s.colWidth(cc) * z; clipR += cw; need -= cw; cc++; } }
+      if (h_ === 'right' || h_ === 'center') { let cc = c - 1, need = (h_ === 'center' ? (tw - avail) / 2 : tw - avail); while (need > 0 && cc >= 0 && free(cc)) { const cw = s.colWidth(cc) * z; clipL -= cw; need -= cw; cc--; } }
     }
     if (!inView) { const vx0 = G.colX(vc0), vx1 = G.colX(vc1 + 1); if (clipR <= vx0 || clipL >= vx1) return; }
     let tx;
@@ -410,7 +432,7 @@
 
   function drawHeaders(s, hw, hh, f, mainCols, mainRows, frCols, frRows) {
     if (!s.showHeadings) return;
-    const z = G.z; const sels = G.selections();
+    const z = G.z; const sels = G.selections(); const ogw = G.ogW(), ogh = G.ogH();
     const fsz = Math.round(11 * Math.max(.8, Math.min(z, 1.6)));
     ctx.font = `${fsz}px ${getFontUI()}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
     const colSel = (c) => sels.some(g => c >= g.c0 && c <= g.c1), rowSel = (r) => sels.some(g => r >= g.r0 && r <= g.r1);
@@ -418,28 +440,30 @@
     // column header
     const drawColHdr = (c0, c1, clipX, clipW) => {
       ctx.save(); ctx.beginPath(); ctx.rect(clipX, 0, clipW, hh); ctx.clip();
+      const hy = ogh, hH = hh - ogh;
       for (let c = c0; c <= c1; c++) {
         const w = s.colWidth(c) * z; const x = G.colX(c);
-        if (!w) { ctx.strokeStyle = theme.hdrLine; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(ln(x - 2), 3); ctx.lineTo(ln(x - 2), hh - 3); ctx.moveTo(ln(x + 1), 3); ctx.lineTo(ln(x + 1), hh - 3); ctx.stroke(); continue; }
+        if (!w) { ctx.strokeStyle = theme.hdrLine; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(ln(x - 2), hy + 3); ctx.lineTo(ln(x - 2), hh - 3); ctx.moveTo(ln(x + 1), hy + 3); ctx.lineTo(ln(x + 1), hh - 3); ctx.stroke(); continue; }
         const sel = colSel(c), full = colFull(c);
-        ctx.fillStyle = full ? theme.hdrFullBg : sel ? theme.hdrSelBg : theme.hdrBg; ctx.fillRect(x, 0, w, hh);
+        ctx.fillStyle = full ? theme.hdrFullBg : sel ? theme.hdrSelBg : theme.hdrBg; ctx.fillRect(x, hy, w, hH);
         ctx.fillStyle = full ? '#fff' : sel ? theme.hdrSelText : theme.hdrText; ctx.font = `${sel ? '600 ' : ''}${fsz}px ${getFontUI()}`;
-        ctx.fillText(SU.colName(c), x + w / 2, hh / 2 + 0.5);
-        ctx.strokeStyle = theme.hdrLine; ctx.lineWidth = 1 / dpr; ctx.beginPath(); ctx.moveTo(ln(x + w - 1 / dpr), 0); ctx.lineTo(ln(x + w - 1 / dpr), hh); ctx.stroke();
+        ctx.fillText(SU.colName(c), x + w / 2, hy + hH / 2 + 0.5);
+        ctx.strokeStyle = theme.hdrLine; ctx.lineWidth = 1 / dpr; ctx.beginPath(); ctx.moveTo(ln(x + w - 1 / dpr), hy); ctx.lineTo(ln(x + w - 1 / dpr), hh); ctx.stroke();
         if (sel && !full) { ctx.fillStyle = theme.accent; ctx.fillRect(x, hh - 2, w, 2); }
       }
       ctx.restore();
     };
     const drawRowHdr = (r0, r1, clipY, clipH) => {
       ctx.save(); ctx.beginPath(); ctx.rect(0, clipY, hw, clipH); ctx.clip();
+      const hx = ogw, hW = hw - ogw;
       for (let r = r0; r <= r1; r++) {
         const h = s.rowHeight(r) * z; const y = G.rowY(r);
-        if (!h) { ctx.strokeStyle = theme.hdrLine; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(3, ln(y - 2)); ctx.lineTo(hw - 3, ln(y - 2)); ctx.moveTo(3, ln(y + 1)); ctx.lineTo(hw - 3, ln(y + 1)); ctx.stroke(); continue; }
+        if (!h) { ctx.strokeStyle = theme.hdrLine; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(hx + 3, ln(y - 2)); ctx.lineTo(hw - 3, ln(y - 2)); ctx.moveTo(hx + 3, ln(y + 1)); ctx.lineTo(hw - 3, ln(y + 1)); ctx.stroke(); continue; }
         const sel = rowSel(r), full = rowFull(r);
-        ctx.fillStyle = full ? theme.hdrFullBg : sel ? theme.hdrSelBg : theme.hdrBg; ctx.fillRect(0, y, hw, h);
+        ctx.fillStyle = full ? theme.hdrFullBg : sel ? theme.hdrSelBg : theme.hdrBg; ctx.fillRect(hx, y, hW, h);
         ctx.fillStyle = full ? '#fff' : sel ? theme.hdrSelText : theme.hdrText; ctx.font = `${sel ? '600 ' : ''}${fsz}px ${getFontUI()}`;
-        ctx.fillText(String(r + 1), hw / 2, y + h / 2 + 0.5);
-        ctx.strokeStyle = theme.hdrLine; ctx.lineWidth = 1 / dpr; ctx.beginPath(); ctx.moveTo(0, ln(y + h - 1 / dpr)); ctx.lineTo(hw, ln(y + h - 1 / dpr)); ctx.stroke();
+        ctx.fillText(String(r + 1), hx + hW / 2, y + h / 2 + 0.5);
+        ctx.strokeStyle = theme.hdrLine; ctx.lineWidth = 1 / dpr; ctx.beginPath(); ctx.moveTo(hx, ln(y + h - 1 / dpr)); ctx.lineTo(hw, ln(y + h - 1 / dpr)); ctx.stroke();
         if (sel && !full) { ctx.fillStyle = theme.accent; ctx.fillRect(hw - 2, y, 2, h); }
       }
       ctx.restore();
@@ -448,9 +472,53 @@
     drawRowHdr(mainRows[0], mainRows[1], hh + f.fh, H - hh - f.fh); if (frRows) drawRowHdr(frRows[0], frRows[1], hh, f.fh);
     // header borders + corner
     ctx.fillStyle = theme.hdrBg; ctx.fillRect(0, 0, hw, hh);
-    ctx.fillStyle = theme.hdrLine; ctx.beginPath(); ctx.moveTo(hw - 4, 5); ctx.lineTo(hw - 4, hh - 4); ctx.lineTo(hw - hh + 5, hh - 4); ctx.closePath(); ctx.fill();
+    const ch = hh - ogh; ctx.fillStyle = theme.hdrLine; ctx.beginPath(); ctx.moveTo(hw - 4, ogh + 5); ctx.lineTo(hw - 4, hh - 4); ctx.lineTo(hw - ch + 5, hh - 4); ctx.closePath(); ctx.fill();
+    if (ogw || ogh) drawOutline(s, hw, hh, ogw, ogh, mainCols, mainRows, frCols, frRows);
     ctx.strokeStyle = theme.hdrLine; ctx.lineWidth = 1 / dpr; ctx.beginPath(); ctx.moveTo(0, ln(hh - 1 / dpr)); ctx.lineTo(W, ln(hh - 1 / dpr)); ctx.moveTo(ln(hw - 1 / dpr), 0); ctx.lineTo(ln(hw - 1 / dpr), H); ctx.stroke();
     ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+  }
+  /* outline bars, +/- buttons and level buttons. Group of rows a..b has its summary row at b+1 (Excel default: summary below). */
+  const outlineHits = [];
+  function obtn(x, y, label, hot) {
+    const sz = 13; ctx.fillStyle = hot ? theme.hdrSelBg : (theme.dark ? '#2a3243' : '#fff'); ctx.strokeStyle = theme.dark ? '#7d879b' : '#8a93a3'; ctx.lineWidth = 1;
+    ctx.fillRect(al(x - sz / 2) + .5, al(y - sz / 2) + .5, sz - 1, sz - 1); ctx.strokeRect(al(x - sz / 2) + .5, al(y - sz / 2) + .5, sz - 1, sz - 1);
+    ctx.fillStyle = theme.hdrText; ctx.font = `600 10px ${getFontUI()}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if (label === '+' || label === '-') { ctx.fillRect(al(x - 3.5), al(y) - .5, 7, 1.2); if (label === '+') ctx.fillRect(al(x) - .5, al(y - 3.5), 1.2, 7); }
+    else ctx.fillText(label, x, y + .5);
+  }
+  function drawOutline(s, hw, hh, ogw, ogh, mainCols, mainRows) {
+    outlineHits.length = 0; const z = G.z;
+    ctx.fillStyle = theme.hdrBg; if (ogw) ctx.fillRect(0, 0, ogw, H); if (ogh) ctx.fillRect(0, 0, W, ogh);
+    ctx.strokeStyle = theme.hdrLine; ctx.lineWidth = 1 / dpr; ctx.beginPath(); if (ogw) { ctx.moveTo(ln(ogw - 1 / dpr), 0); ctx.lineTo(ln(ogw - 1 / dpr), H); } if (ogh) { ctx.moveTo(0, ln(ogh - 1 / dpr)); ctx.lineTo(W, ln(ogh - 1 / dpr)); } ctx.stroke();
+    if (ogw) {
+      const info = outlineInfo(s.outlineR);
+      for (let L = 1; L <= info.max + 1; L++) { const x = 4 + (L - 1) * OG + OG / 2 - 2, y = hh - 11; obtn(x, y, String(L)); outlineHits.push({ x0: x - 7, x1: x + 7, y0: y - 7, y1: y + 7, kind: 'level', axis: 'r', L }); }
+      ctx.save(); ctx.beginPath(); ctx.rect(0, hh, ogw, H - hh); ctx.clip();
+      ctx.strokeStyle = theme.dark ? '#7d879b' : '#7a8496'; ctx.lineWidth = 1.3;
+      for (const g of info.groups) {
+        if (g.b + 1 < mainRows[0] - 1 && g.b + 1 < (s.freeze.r || 0)) continue;
+        if (g.a > mainRows[1] + 1) continue;
+        const x = 4 + (g.L - 1) * OG + OG / 2 - 2; let collapsed = true; for (let r = g.a; r <= g.b; r++) if (s.rowHeight(r)) { collapsed = false; break; }
+        const sy = G.rowY(g.b + 1), sh = s.rowHeight(g.b + 1) * z; const by = sy + Math.max(sh, 12) / 2;
+        if (!collapsed) { const ty = G.rowY(g.a); ctx.beginPath(); ctx.moveTo(x, ty + 2); ctx.lineTo(x, by - 7); ctx.moveTo(x, ty + 2); ctx.lineTo(x + 4, ty + 2); ctx.stroke(); }
+        obtn(x, by, collapsed ? '+' : '-'); outlineHits.push({ x0: x - 7, x1: x + 7, y0: by - 7, y1: by + 7, kind: 'toggle', axis: 'r', g, collapsed });
+      }
+      ctx.restore();
+    }
+    if (ogh) {
+      const info = outlineInfo(s.outlineC);
+      for (let L = 1; L <= info.max + 1; L++) { const x = hw - 11, y = 4 + (L - 1) * OG + OG / 2 - 2; obtn(x, y, String(L)); outlineHits.push({ x0: x - 7, x1: x + 7, y0: y - 7, y1: y + 7, kind: 'level', axis: 'c', L }); }
+      ctx.save(); ctx.beginPath(); ctx.rect(hw, 0, W - hw, ogh); ctx.clip();
+      ctx.strokeStyle = theme.dark ? '#7d879b' : '#7a8496'; ctx.lineWidth = 1.3;
+      for (const g of info.groups) {
+        if (g.a > mainCols[1] + 1) continue;
+        const y = 4 + (g.L - 1) * OG + OG / 2 - 2; let collapsed = true; for (let c = g.a; c <= g.b; c++) if (s.colWidth(c)) { collapsed = false; break; }
+        const sx = G.colX(g.b + 1), sw = s.colWidth(g.b + 1) * z; const bx = sx + Math.min(Math.max(sw, 12), 24) / 2;
+        if (!collapsed) { const tx = G.colX(g.a); ctx.beginPath(); ctx.moveTo(tx + 2, y); ctx.lineTo(bx - 7, y); ctx.moveTo(tx + 2, y); ctx.lineTo(tx + 2, y + 4); ctx.stroke(); }
+        obtn(bx, y, collapsed ? '+' : '-'); outlineHits.push({ x0: bx - 7, x1: bx + 7, y0: y - 7, y1: y + 7, kind: 'toggle', axis: 'c', g, collapsed });
+      }
+      ctx.restore();
+    }
   }
 
   /* ---------- mouse ---------- */
@@ -459,6 +527,7 @@
   function hitZone(p) {
     const hw = curHW, hh = curHH; const s = S(); const z = G.z;
     if (p.x >= scroller.clientWidth || p.y >= scroller.clientHeight) return { zone: 'scrollbar' };
+    if ((p.x < G.ogW() || p.y < G.ogH()) && outlineHits.length) { const o = outlineHits.find(o => p.x >= o.x0 && p.x <= o.x1 && p.y >= o.y0 && p.y <= o.y1); return o ? { zone: 'outline', o } : { zone: 'gutter' }; }
     if (p.x < hw && p.y < hh) return { zone: 'corner' };
     if (p.y < hh) {
       const c = G.colAtX(p.x); const x = G.colX(c), w = s.colWidth(c) * z;
@@ -487,7 +556,7 @@
   function onHover(e) {
     if (G.dragging) return;
     const p = local(e); const h = hitZone(p);
-    scroller.style.cursor = h.zone === 'colresize' ? 'col-resize' : h.zone === 'rowresize' ? 'row-resize' : h.zone === 'fill' ? 'crosshair' : h.zone === 'colhdr' ? 's-resize' : h.zone === 'rowhdr' ? 'e-resize' : h.zone === 'move' ? 'move' : h.zone === 'filterbtn' ? 'default' : h.zone === 'cell' ? 'cell' : 'default';
+    scroller.style.cursor = h.zone === 'outline' ? 'pointer' : h.zone === 'colresize' ? 'col-resize' : h.zone === 'rowresize' ? 'row-resize' : h.zone === 'fill' ? 'crosshair' : h.zone === 'colhdr' ? 's-resize' : h.zone === 'rowhdr' ? 'e-resize' : h.zone === 'move' ? 'move' : h.zone === 'filterbtn' ? 'default' : h.zone === 'cell' ? 'cell' : 'default';
     if (h.zone === 'cell' || h.zone === 'filterbtn') { const s = S(); const m = s.mergeAt(h.r, h.c); G.onHoverCell && G.onHoverCell(m ? { r: m.r0, c: m.c0 } : { r: h.r, c: h.c }, e); }
     else G.onHoverCell && G.onHoverCell(null);
   }
@@ -520,6 +589,8 @@
     G.focus();
     const up = (fn) => { const mv = (ev) => { lastMouse = local(ev); fn(lastMouse, ev); }; const u = (ev) => { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', u); stopAutoScroll(); const d = G.dragging; G.dragging = null; d && d.end && d.end(local(ev), ev); G.render(); }; document.addEventListener('mousemove', mv); document.addEventListener('mouseup', u); };
     if (h.zone === 'corner') { G.selectAll(); return; }
+    if (h.zone === 'outline') { G.onOutline && G.onOutline(h.o); return; }
+    if (h.zone === 'gutter') return;
     if (h.zone === 'filterbtn') { G.onFilterButton && G.onFilterButton(h); return; }
     if (h.zone === 'colresize' || h.zone === 'rowresize') {
       const isCol = h.zone === 'colresize'; const idx = isCol ? h.c : h.r; const start = isCol ? p.x : p.y; const orig = isCol ? s.rawColWidth(idx) : s.rawRowHeight(idx); const z = G.z;

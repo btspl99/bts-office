@@ -59,7 +59,9 @@
   D.TEXT_BLOCKS = TEXT_BLOCKS;
 
   D.defaultPage = () => ({ size: 'A4', orient: 'portrait', m: { t: 1, b: 1, l: 1, r: 1 }, hdrDist: 0.5, ftrDist: 0.5 });
-  D.defaultDesign = () => ({ theme: 'bts', pageColor: null, watermark: null, border: null, pspacing: null, hdrFirst: false });
+  D.defaultDesign = () => ({ theme: 'bts', pageColor: null, watermark: null, border: null, pspacing: null, hdrFirst: false,
+    styleSet: 'classic', styleMods: {}, customStyles: [], accent: null, dark: null,
+    biblio: { style: 'apa', sources: [] }, track: false, markup: 'all', protect: null });
   D.page = D.defaultPage();
   D.design = D.defaultDesign();
 
@@ -254,7 +256,20 @@
   }
   D.setFontName = (name) => {
     if (!name) return;
-    D.change(() => { D.ensureSel(); const restoreTo = selectWordIfCollapsed(); const r = D.range(); if (r && r.collapsed) { insertStyledCaretSpan({ fontFamily: name }); return; } D.exec('fontName', name); if (restoreTo && restoreTo.n.isConnected) D.setCaret(restoreTo.n, restoreTo.o); });
+    const stack = D.fontStack(name);
+    D.change(() => {
+      D.ensureSel(); const restoreTo = selectWordIfCollapsed(); const r = D.range();
+      if (r && r.collapsed) { insertStyledCaretSpan({ fontFamily: stack }); return; }
+      D.exec('fontName', name);
+      // give the new runs the full stack (bundled stand-in + Devanagari fallback); the first family stays the chosen name
+      const root = D.rootOf(D.range()?.commonAncestorContainer) || D.doc;
+      $$('[style*="font-family"], font[face]', root).forEach(el => {
+        if (el.tagName === 'FONT') { if (el.getAttribute('face') === name) { const sp = document.createElement('span'); sp.style.fontFamily = stack; while (el.firstChild) sp.appendChild(el.firstChild); el.replaceWith(sp); } return; }
+        const ff = el.style.fontFamily; if (ff && !ff.includes(',') && ff.replace(/["']/g, '').trim() === name) el.style.fontFamily = stack;
+      });
+      if (restoreTo && restoreTo.n.isConnected) D.setCaret(restoreTo.n, restoreTo.o);
+    });
+    try { window.btsRecentFonts && btsRecentFonts(name); } catch { }
     BTS.markDirty();
   };
   D.currentFontSize = () => {
@@ -582,16 +597,20 @@
   D.settings = () => ({ page: D.page, design: D.design });
   D.applySettings = () => {
     const th = D.theme();
+    D.design = Object.assign(D.defaultDesign(), D.design);
+    D.applyStyleSheet && D.applyStyleSheet();
     [D.doc, D.hdr, D.ftr, $('#fn-area')].forEach(el => {
       if (!el) return;
-      el.style.setProperty('--th-accent', th.accent); el.style.setProperty('--th-dark', th.dark);
-      el.style.setProperty('--th-head', D.fontStack(D.design.headFont || th.head)); el.style.setProperty('--th-body', D.fontStack(D.design.bodyFont || th.body));
+      el.style.setProperty('--th-accent', D.accent ? D.accent() : th.accent); el.style.setProperty('--th-dark', D.darkColor ? D.darkColor() : th.dark);
+      el.style.setProperty('--th-head', D.fontStack(D.headFont ? D.headFont() : (D.design.headFont || th.head))); el.style.setProperty('--th-body', D.fontStack(D.bodyFont ? D.bodyFont() : (D.design.bodyFont || th.body)));
+      el.style.setProperty('--th-mono', D.fontStack(D.monoFont ? D.monoFont() : 'Consolas'));
       const ps = D.design.pspacing; if (ps) { el.style.setProperty('--p-after', ps.after + 'pt'); el.style.setProperty('--p-line', ps.line); el.style.setProperty('--p-before', (ps.before || 0) + 'pt'); }
       else { el.style.removeProperty('--p-after'); el.style.removeProperty('--p-line'); el.style.removeProperty('--p-before'); }
     });
     [D.hdr, D.ftr].forEach(el => { el.classList.add('doc-content'); });
     D.layout();
     D.syncRibbon && D.syncRibbon();
+    D.afterSettings && D.afterSettings();
   };
   D.setPage = (patch) => D.change(() => { Object.assign(D.page, patch); D.applySettings(); });
   D.setMargins = (m) => D.change(() => { D.page.m = { ...m }; D.applySettings(); });

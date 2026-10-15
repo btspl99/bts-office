@@ -110,17 +110,17 @@
   };
 
   /* ---------- background ---------- */
-  SL.bgCSS = (bg, pres) => {
-    if (!bg) bg = SL.themeBg(pres);
+  SL.bgCSS = (bg, pres, layout) => {
+    if (!bg) bg = SL.themeBg(pres, layout);
     if (bg.type === 'gradient') return `linear-gradient(${bg.angle ?? 135}deg, ${SL.color(bg.color, pres)}, ${SL.color(bg.color2, pres)})`;
     if (bg.type === 'image') return `${SL.color(bg.color || '#ffffff', pres)} url("${SL.assetURL(bg.src)}") center/${bg.fit === 'contain' ? 'contain' : bg.fit === 'stretch' ? '100% 100%' : 'cover'} no-repeat`;
     return SL.color(bg.color || 'bg', pres);
   };
   SL.decoSVG = (slide, pres) => {
-    if (slide.hideGraphics) return '';
+    if (slide.hideGraphics || slide.noDeco) return '';
     const th = SL.themeOf(pres); if (!th.deco) return '';
     const W = SL.W(pres), H = SL.H(pres);
-    return SL.uniqIds(`<svg class="deco" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${th.deco(SL.decoKind(slide.layout), W, H, SL.palette(pres))}</svg>`);
+    return SL.uniqIds(`<svg class="deco" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${th.deco(SL.decoKind(slide.layout), W, H, SL.palette(pres), slide.layout)}</svg>`);
   };
 
   /* ---------- text styling ---------- */
@@ -141,24 +141,35 @@
       default: return '';
     }
   };
+  /* Text defaults: element → slide master text style (placeholders only) → theme. */
   SL.textDefaults = (el, pres) => {
     const role = el.role || 'body';
     const pal = SL.palette(pres);
+    const ms = (el.ph && pres && pres.master && pres.master[role === 'title' ? 'title' : 'body']) || {};
     let color = el.color ? SL.color(el.color, pres) : null;
     if (!color) {
       if (el.type === 'shape') color = '#ffffff';
-      else color = role === 'title' ? pal.title : pal.text;
+      else color = (ms.color && SL.color(ms.color, pres)) || (role === 'title' ? pal.title : pal.text);
     }
-    return { font: el.font || SL.fontOf(role === 'title' ? 'title' : 'body', pres), size: el.size || 18, color, bold: el.bold ?? (role === 'title' ? SL.themeOf(pres).titleBold : false) };
+    return { font: el.font || ms.font || SL.fontOf(role === 'title' ? 'title' : 'body', pres), size: el.size || 18, color, bold: el.bold ?? ms.bold ?? (role === 'title' ? SL.themeOf(pres).titleBold : false), italic: el.italic ?? ms.italic ?? false };
   };
-  const SERIF = /serif|times|georgia|cambria|garamond|book|roman|lora|playfair|caladea|bodoni|palatino|minion|baskerville|didot|merriweather|charter|mincho|song/i;
-  const MONO = /mono|courier|consol|code/i;
-  SL.fontStack = (f) => { f = String(f || 'Inter').replace(/['"]/g, ''); const gen = MONO.test(f) ? 'monospace' : (SERIF.test(f) && !/sans/i.test(f)) ? 'serif' : 'sans-serif'; return `'${f}', ${gen}`; };
+  const SERIF = /serif|times|georgia|cambria|garamond|book|roman|lora|playfair|caladea|bodoni|palatino|minion|baskerville|didot|merriweather|charter|mincho|song|tinos|gelasio|crimson|cormorant/i;
+  const MONO = /mono|courier|consol|code|cousine/i;
+  /* CSS font stack. Devanagari text in a Latin-only font falls back to the bundled Noto Devanagari faces (also used in exports). */
+  SL.fontStack = (f) => {
+    f = String(f || 'Inter').replace(/['"]/g, '').trim();
+    const reg = (window.BTS_FONTS || []).find(x => x.name === f);
+    const cat = reg ? reg.cat : null;
+    const serif = cat ? (cat === 'serif' || (cat === 'display' && SERIF.test(f))) : (SERIF.test(f) && !/sans/i.test(f));
+    const gen = (cat === 'mono' || (!cat && MONO.test(f))) ? 'monospace' : cat === 'script' ? 'cursive' : serif ? 'serif' : 'sans-serif';
+    const deva = cat === 'indian' ? '' : serif ? ", 'Noto Serif Devanagari'" : ", 'Noto Sans Devanagari'";
+    return `'${f}'${deva}, ${gen}`;
+  };
   SL.textStyle = (el, pres) => {
     const d = SL.textDefaults(el, pres);
     let s = `font-family:${SL.fontStack(d.font)};font-size:${el.size || 18}pt;color:${d.color};line-height:${f2(1.2 * (el.lh || 1))};text-align:${el.align || 'left'};`;
     if (d.bold) s += 'font-weight:700;';
-    if (el.italic) s += 'font-style:italic;';
+    if (d.italic) s += 'font-style:italic;';
     const deco = [el.underline && 'underline', el.strike && 'line-through'].filter(Boolean).join(' ');
     if (deco) s += `text-decoration:${deco};`;
     if (el.highlight) s += `--hl:${el.highlight};`;
@@ -172,7 +183,7 @@
   /* ---------- charts (SVG) ---------- */
   SL.chartSVG = (ch, w, h, pres) => {
     if (!ch) return '';
-    const pal = SL.palette(pres); const cols = pal.accents; const txt = pal.text;
+    const pal = SL.palette(pres); const cols = ch.colors && ch.colors.length ? ch.colors : pal.accents; const txt = pal.text;
     const font = SL.fontOf('body', pres);
     const cats = ch.categories || [], ser = ch.series || [];
     let out = `<svg class="chart" width="${f2(w)}" height="${f2(h)}" viewBox="0 0 ${f2(w)} ${f2(h)}" font-family="${esc(font)}" fill="${txt}">`;
@@ -237,26 +248,45 @@
   function fmtNum(v) { return Math.abs(v) >= 1000 ? (v / 1000).toFixed(Math.abs(v) % 1000 ? 1 : 0) + 'k' : String(Math.round(v * 100) / 100); }
 
   /* ---------- table ---------- */
+  /* Table styles (Table Design ▸ Table Styles). Each returns per-cell fill / text colour / weight / borders as hex,
+   * so the editor, PDF and .pptx export draw the same thing. */
+  SL.TABLE_STYLES = [['medium', 'Medium'], ['light', 'Light'], ['grid', 'Grid'], ['dark', 'Dark'], ['minimal', 'Minimal']];
+  SL.tableCellStyle = (el, r, ci, pres) => {
+    const acc = (SL.color(el.accent || 'accent1', pres) || '#4472C4').slice(0, 7);
+    const mix = SL.mixColor; const n = el.rows.length, nc = (el.rows[0] || []).length;
+    const head = !!el.header && r === 0, last = !!el.lastRow && r === n - 1 && n > 1, first = !!el.firstCol && ci === 0;
+    const bi = (el.header ? r - 1 : r), even = bi % 2 === 0;
+    const body = el.color ? SL.color(el.color, pres) : '#1f2430';
+    const st = el.tstyle || 'medium'; const W = (w, c) => ({ w, c });
+    let o;
+    switch (st) {
+      case 'light': o = { bg: head ? null : (el.banded && even ? mix(acc, .9) : null), color: head ? mix(acc, -.25) : body, bold: head || last || first, b: [head ? null : null, null, head ? W(2, acc) : r === n - 1 ? W(1, acc) : null, null] }; if (last) o.b[0] = W(1.5, acc); break;
+      case 'grid': o = { bg: head ? mix(acc, .7) : first ? mix(acc, .85) : (el.banded && even ? mix(acc, .92) : '#ffffff'), color: head ? mix(acc, -.45) : body, bold: head || last || first, b: [W(1, acc), W(1, acc), W(1, acc), W(1, acc)] }; break;
+      case 'dark': o = { bg: head ? mix(acc, -.45) : last ? mix(acc, -.3) : first ? mix(acc, -.2) : (el.banded ? (even ? acc : mix(acc, -.15)) : acc), color: '#ffffff', bold: head || last || first, b: [W(1.5, '#ffffff'), W(1.5, '#ffffff'), W(1.5, '#ffffff'), W(1.5, '#ffffff')] }; break;
+      case 'minimal': o = { bg: null, color: head ? (el.color ? body : '#111111') : body, bold: head || last || first, b: [last ? W(1.5, '#333333') : null, null, head ? W(2, '#333333') : W(1, '#d0d0d0'), null] }; break;
+      default: o = { bg: head ? acc : last ? mix(acc, .7) : first ? mix(acc, .75) : (el.banded ? (even ? mix(acc, .86) : mix(acc, .94)) : '#ffffff'), color: head ? '#ffffff' : body, bold: head || last || first, b: [W(1.5, '#ffffff'), W(1.5, '#ffffff'), W(1.5, '#ffffff'), W(1.5, '#ffffff')] };
+    }
+    void nc; return o;
+  };
   SL.tableHTML = (el, pres, editing) => {
-    const pal = SL.palette(pres); const acc = SL.color(el.accent || 'accent1', pres);
     const font = el.font || SL.fontOf('body', pres); const n = el.rows.length;
     const bodyColor = el.color ? SL.color(el.color, pres) : '#1f2430';
-    let h = `<table class="tbl" style="font-family:${SL.fontStack(font)};font-size:${el.size || 16}pt;--acc:${acc};--band:${mix(acc, 0.14)};--band2:${mix(acc, 0.06)};color:${bodyColor}"><colgroup>${(el.colW || []).map(c => `<col style="width:${f2(c * 100)}%">`).join('')}</colgroup>`;
+    let h = `<table class="tbl" style="font-family:${SL.fontStack(font)};font-size:${el.size || 16}pt;color:${bodyColor}"><colgroup>${(el.colW || []).map(c => `<col style="width:${f2(c * 100)}%">`).join('')}</colgroup>`;
     el.rows.forEach((row, r) => {
-      const isHead = el.header && r === 0;
       h += `<tr style="height:${f2(el.rowH?.[r] ? el.rowH[r] * el.h : el.h / n)}px">`;
       row.forEach((c, ci) => {
         if (c.merged) return;
-        let bg = c.fill ? SL.color(c.fill, pres) : isHead ? acc : (el.banded ? ((el.header ? r - 1 : r) % 2 === 0 ? 'var(--band)' : 'var(--band2)') : '#ffffff');
+        const ts = SL.tableCellStyle(el, r, ci, pres);
+        let bg = c.fill ? SL.color(c.fill, pres) : (ts.bg || 'transparent');
         if (c.fill === 'none') bg = 'transparent';
-        const col = c.color ? SL.color(c.color, pres) : isHead ? '#ffffff' : '';
-        const st = `background:${bg};${col ? 'color:' + col + ';' : ''}${isHead || c.bold ? 'font-weight:700;' : ''}text-align:${c.align || 'left'};vertical-align:${c.valign || 'middle'}`;
+        const col = c.color ? SL.color(c.color, pres) : ts.color;
+        const bd = ['top', 'right', 'bottom', 'left'].map((s, i) => `border-${s}:${ts.b[i] ? f2(ts.b[i].w) + 'px solid ' + ts.b[i].c : '0'}`).join(';');
+        const st = `background:${bg};${col ? 'color:' + col + ';' : ''}${ts.bold || c.bold ? 'font-weight:700;' : ''}${bd};text-align:${c.align || 'left'};vertical-align:${c.valign || 'middle'}`;
         h += `<td style="${st}" data-r="${r}" data-c="${ci}"${c.cs > 1 ? ` colspan="${c.cs}"` : ''}${c.rs > 1 ? ` rowspan="${c.rs}"` : ''}><div class="cell"${editing ? ' contenteditable="true" spellcheck="' + (SL.spell !== false) + '"' : ''}>${c.html || ''}</div></td>`;
       });
       h += '</tr>';
     });
     return h + '</table>';
-    function mix(hex, a) { return `color-mix(in srgb, ${hex} ${Math.round(a * 100)}%, white)`; }
   };
 
   SL.iconSVG = (el, pres, size) => {
@@ -302,7 +332,7 @@
         const c = el.crop || { l: 0, t: 0, r: 0, b: 0 };
         const iw = el.w / Math.max(.01, 1 - c.l - c.r), ih = el.h / Math.max(.01, 1 - c.t - c.b);
         const st = el.stroke && el.stroke !== 'none' ? `outline:${f2((el.strokeWidth || 1) * 4 / 3)}px solid ${SL.color(el.stroke, pres)};outline-offset:-${f2((el.strokeWidth || 1) * 4 / 3 / 2)}px;` : '';
-        d.innerHTML = `<div class="img-clip" style="border-radius:${el.radius ? f2(Math.min(el.w, el.h) * el.radius / 100) : 0}px;${st}${flip}"><img draggable="false" src="${url}" style="width:${f2(iw)}px;height:${f2(ih)}px;left:${f2(-c.l * iw)}px;top:${f2(-c.t * ih)}px" alt=""></div>`;
+        d.innerHTML = `<div class="img-clip" style="border-radius:${el.radius ? f2(Math.min(el.w, el.h) * el.radius / 100) : 0}px;${st}${flip}"><img draggable="false" src="${url}" style="width:${f2(iw)}px;height:${f2(ih)}px;left:${f2(-c.l * iw)}px;top:${f2(-c.t * ih)}px" alt="${esc(el.decorative ? '' : el.alt || '')}"></div>`;
       }
     } else if (el.type === 'table') {
       d.innerHTML = SL.tableHTML(el, pres, opts.editingId === el.id);
@@ -331,9 +361,12 @@
   SL.renderSlide = (slide, pres, opts = {}) => {
     const W = SL.W(pres), H = SL.H(pres);
     const s = document.createElement('div'); s.className = 'sl-slide' + (opts.editor ? ' editor' : '');
-    s.style.cssText = `width:${W}px;height:${H}px;background:${SL.bgCSS(slide.background, pres)};`;
+    s.style.cssText = `width:${W}px;height:${H}px;background:${SL.bgCSS(slide.background, pres, slide.layout)};`;
     s.dataset.sid = slide.id;
     s.insertAdjacentHTML('beforeend', SL.decoSVG(slide, pres));
+    // slide master / layout graphics (View ▸ Slide Master)
+    const mg = !slide.hideGraphics && pres.master ? [...(pres.master.graphics || []), ...((pres.master.layoutGraphics || {})[slide.layout] || [])] : [];
+    if (mg.length) { const lay = document.createElement('div'); lay.className = 'layer mgfx'; mg.forEach(el => lay.appendChild(SL.renderElement(el, pres, { index: opts.index ?? pres.slides.indexOf(slide) }))); s.appendChild(lay); }
     if (!slide.hideGraphics && slide.layer && slide.layer.length) {
       const lay = document.createElement('div'); lay.className = 'layer';
       slide.layer.forEach(el => lay.appendChild(SL.renderElement(el, pres, { index: opts.index })));

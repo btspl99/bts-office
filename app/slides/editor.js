@@ -122,7 +122,7 @@
     if (guides) for (const g of guides) h += g.v != null ? `<div class="guide v" style="left:${f2(g.v * z)}px;top:${f2(g.a * z)}px;height:${f2((g.b - g.a) * z)}px"></div>` : `<div class="guide h" style="top:${f2(g.h * z)}px;left:${f2(g.a * z)}px;width:${f2((g.b - g.a) * z)}px"></div>`;
     if (E._marquee) { const m = E._marquee; h += `<div class="marquee" style="left:${f2(m.x * z)}px;top:${f2(m.y * z)}px;width:${f2(m.w * z)}px;height:${f2(m.h * z)}px"></div>`; }
     // comment markers
-    (S().comments || []).forEach((c, i) => { h += `<div class="cmt-pin" data-cmt="${i}" style="left:${f2((c.x ?? 10 + i * 30) * z)}px;top:${f2((c.y ?? 10) * z)}px" title="${BTS.esc(c.author + ': ' + c.text)}">${icon('message-square', 14)}</div>`; });
+    if (E.commentPins) h += E.commentPins(z); else (S().comments || []).forEach((c, i) => { h += `<div class="cmt-pin" data-cmt="${i}" style="left:${f2((c.x ?? 10 + i * 30) * z)}px;top:${f2((c.y ?? 10) * z)}px" title="${BTS.esc(c.author + ': ' + c.text)}">${icon('message-square', 14)}</div>`; });
     ov.innerHTML = h;
   };
   function lineEnds(el) {
@@ -166,9 +166,11 @@
       const it = document.createElement('div');
       it.className = 'rail-item' + (i === SL.cur ? ' cur' : '') + (E.railSel.has(i) ? ' sel' : '') + (s.hidden ? ' hidden-s' : '');
       it.dataset.i = i;
-      const meta = `<div class="rail-num">${i + 1}${s.transition && s.transition.type !== 'none' ? `<span title="Has a transition">${icon('sparkles', 11)}</span>` : ''}${s.elements.some(e => e.anim) ? `<span title="Has animations">${icon('star', 11)}</span>` : ''}${(s.comments || []).length ? `<span title="Comments">${icon('message-square', 11)}</span>` : ''}</div>`;
+      if (E.view === 'master') { it.classList.add('m-item'); if (i > 0) it.classList.add('m-layout'); it.title = s.mname || ''; }
+      const meta = `<div class="rail-num">${E.view === 'master' ? (i === 0 ? icon('layout-dashboard', 13) : '') : i + 1}${s.transition && s.transition.type !== 'none' ? `<span title="Has a transition">${icon('sparkles', 11)}</span>` : ''}${s.elements.some(e => e.anim) ? `<span title="Has animations">${icon('star', 11)}</span>` : ''}${(s.comments || []).length ? `<span title="Comments">${icon('message-square', 11)}</span>` : ''}</div>`;
       it.innerHTML = meta;
-      const th = SL.thumb(s, P(), tw, i); it.appendChild(th);
+      const th = SL.thumb(s, P(), E.view === 'master' && i > 0 ? tw - 18 : tw, i); it.appendChild(th);
+      if (E.view === 'master') it.insertAdjacentHTML('beforeend', `<div class="m-name">${BTS.esc(s.mname || '')}</div>`);
       rail.appendChild(it);
     });
     rail.scrollTop = st;
@@ -189,11 +191,12 @@
   E.renderNotes = () => {
     const n = $('#notes'); if (!n) return;
     if (document.activeElement !== n) n.textContent = S().notes || '';
-    $('#center').classList.toggle('no-notes', !E.notesOn);
+    $('#center').classList.toggle('no-notes', !E.notesOn || E.view === 'master');
   };
 
   /* ---------- status bar & ribbon state ---------- */
   E.updateStatus = () => {
+    if (E.view === 'master') return;
     const n = P().slides.length;
     BTS.setStatus('slide', `${icon('presentation', 14)} Slide ${SL.cur + 1} of ${n}${S().hidden ? ' <span class="sb-tag">Hidden</span>' : ''}`);
     const sec = E.sectionOf(SL.cur); BTS.setStatus('section', sec ? `${icon('rows-3', 13)} ${BTS.esc(sec.name)}` : '');
@@ -231,7 +234,7 @@
     const host = $('#slide-host');
     const hdl = ev.target.closest('.hdl');
     if (hdl) { ev.preventDefault(); return startHandle(ev, hdl.dataset.h, hdl.classList.contains('crop-h')); }
-    if (ev.target.closest('.cmt-pin')) { E.openPane('comments'); return; }
+    if (ev.target.closest('.cmt-pin')) { const pin = ev.target.closest('.cmt-pin'); if (window.SLX && SLX.cmtState && pin.dataset.cmtId) SLX.cmtState.active = pin.dataset.cmtId; if (E.pane !== 'comments') E.openPane('comments'); else E.refreshPane('force'); E.renderOverlay(); return; }
     const phBtn = ev.target.closest('[data-act="fill-pic"]');
     if (phBtn) { ev.preventDefault(); const id = phBtn.closest('.el').dataset.id; E.select([id]); BTS.dispatch('insert-picture'); return; }
     const elNode = ev.target.closest('.sl-slide.editor > .el:not(.el-footer)');
@@ -718,6 +721,7 @@
     E.renderAll();
   };
   E.newSlide = (layout) => {
+    if (E.masterGuard && E.masterGuard()) return;
     if (E.editing) E.endEdit();
     const cur = S(); layout = layout || (cur.layout === 'title' ? 'titleContent' : (cur.layout === 'blank' ? 'blank' : cur.layout === 'section' ? 'titleContent' : cur.layout));
     const s = SL.newSlide(P(), layout);
@@ -728,12 +732,14 @@
     SL.commit(); E.renderAll();
   };
   E.duplicateSlides = () => {
+    if (E.masterGuard && E.masterGuard()) return;
     const idx = [...E.railSel].sort((a, b) => a - b); const last = idx[idx.length - 1];
     const copies = idx.map(i => { const s = SL.clone(P().slides[i]); s.id = SL.uid('s'); s.elements.forEach(SL.reId); regroup(s.elements); return s; });
     P().slides.splice(last + 1, 0, ...copies); SL.cur = last + copies.length; E.railSel = new Set(copies.map((_, k) => last + 1 + k));
     SL.commit(); E.renderAll();
   };
   E.deleteSlides = () => {
+    if (E.masterGuard && E.masterGuard()) return;
     const idx = [...E.railSel].sort((a, b) => b - a);
     if (idx.length >= P().slides.length) { // keep one slide
       P().slides = [SL.newSlide(P(), 'title')]; SL.cur = 0;
@@ -751,6 +757,7 @@
     P().sections = P().sections.filter(sec => P().slides.some(s => s.id === sec.start) || !removedIds.includes(sec.start));
   }
   E.moveSlides = (indices, to) => { // to = insertion index in the original array
+    if (E.masterGuard && E.masterGuard()) return;
     indices = [...indices].sort((a, b) => a - b);
     const moving = indices.map(i => P().slides[i]); const curId = S().id;
     const before = indices.filter(i => i < to).length;
@@ -804,6 +811,7 @@
     if (ev.shiftKey) { const a = Math.min(SL.cur, i), b = Math.max(SL.cur, i); E.railSel = new Set(Array.from({ length: b - a + 1 }, (_, k) => a + k)); E.renderRail(); if (E.view === 'sorter') E.renderSorter(); return; }
     if (ev.ctrlKey || ev.metaKey) { if (E.railSel.has(i) && E.railSel.size > 1) E.railSel.delete(i); else E.railSel.add(i); E.renderRail(); if (E.view === 'sorter') E.renderSorter(); return; }
     if (!E.railSel.has(i)) E.railSel = new Set([i]);
+    if (E.view === 'master') { E.railSel = new Set([i]); E.goto(i); return; }
     const container = ev.currentTarget; const grid = container.id === 'sorter';
     const x0 = ev.clientX, y0 = ev.clientY; let dragging = false; let marker = null; let drop = -1;
     const onMove = (e2) => {
@@ -878,6 +886,7 @@
     $('#notes-view').classList.toggle('hidden', v !== 'notes');
     if (v === 'sorter') { E._fitting = true; BTS.setZoom(Math.round((E.sorterZoom || 1) * 100)); E._fitting = false; E.renderSorter(); $('#sorter').focus(); }
     if (v === 'notes') E.renderNotesView();
+    if (v !== 'master') document.body.classList.remove('master-view');
     if (v === 'normal') { E.renderAll(); requestAnimationFrame(() => { E.layout(); if (!E.fit) { E._fitting = true; BTS.setZoom(Math.round(E.zoom * 100)); E._fitting = false; } }); }
     E.updateStatus(); E.updateRibbon();
   };
@@ -915,8 +924,9 @@
       const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); };
       addEventListener('pointermove', mv); addEventListener('pointerup', up);
     });
-    new ResizeObserver(() => { E.layout(); }).observe(stage);
-    let rw = 0; new ResizeObserver(() => { const w = rail.clientWidth; if (Math.abs(w - rw) > 4) { rw = w; E.renderRail(); } }).observe(rail);
+    // work is deferred to the next frame so a resize never re-triggers the observer in the same frame
+    let lf = 0; new ResizeObserver(() => { cancelAnimationFrame(lf); lf = requestAnimationFrame(() => E.layout()); }).observe(stage);
+    let rw = 0, rf = 0; new ResizeObserver(() => { cancelAnimationFrame(rf); rf = requestAnimationFrame(() => { const w = rail.clientWidth; if (Math.abs(w - rw) > 4) { rw = w; E.renderRail(); } }); }).observe(rail);
     stage.addEventListener('scroll', () => E.renderRulers());
     stage.addEventListener('wheel', (e) => { if (e.ctrlKey) { e.preventDefault(); E.fit = false; BTS.setZoom(BTS.zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1)); } }, { passive: false });
     // drag-over images

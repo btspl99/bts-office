@@ -20,10 +20,17 @@
 <script src="sheets/functions.js" defer></script>
 <script src="sheets/hfplugin.js" defer></script>
 <script src="sheets/model.js" defer></script>
+<script src="sheets/themes.js" defer></script>
 <script src="sheets/grid.js" defer></script>
 <script src="sheets/editor.js" defer></script>
 <script src="sheets/actions.js" defer></script>
 <script src="sheets/charts.js" defer></script>
+<script src="sheets/sparklines.js" defer></script>
+<script src="sheets/pivot.js" defer></script>
+<script src="sheets/whatif.js" defer></script>
+<script src="sheets/datatools.js" defer></script>
+<script src="sheets/protect.js" defer></script>
+<script src="sheets/comments.js" defer></script>
 <script src="sheets/io.js" defer></script>
 <script src="sheets/dialogs.js" defer></script>
 <script src="sheets/templates.js" defer></script>
@@ -40,6 +47,9 @@
   <button data-tab="review">Review</button>
   <button data-tab="view">View</button>
   <button data-tab="chart" class="contextual hidden" id="tab-chart">Chart</button>
+  <button data-tab="table" class="contextual hidden" id="tab-table">Table Design</button>
+  <button data-tab="pivot" class="contextual hidden" id="tab-pivot">PivotTable Analyze</button>
+  <button data-tab="spark" class="contextual hidden" id="tab-spark">Sparkline</button>
   <span class="spacer"></span>
   <div class="rt-right"><button data-cmd="theme-toggle" title="Switch light / dark" data-icon="sun-moon"></button><button data-cmd="toggle-ribbon" title="Collapse ribbon (Ctrl+F1)" data-icon="chevrons-up"></button></div>
 </nav>
@@ -54,7 +64,7 @@
         <button class="rb md" data-cmd="format-painter" data-icon="paintbrush" title="Format painter — copy formatting from the selection (double-click to keep it on)" id="btn-painter">Painter</button>
       </div></div><div class="rgroup-label">Clipboard</div></div>
     <div class="rgroup"><div class="rgroup-body"><div class="rcol">
-      <div class="rrow"><select class="rsel" data-cmd="font" id="sel-font" title="Font" style="width:118px"></select><select class="rsel" data-cmd="size" id="sel-size" title="Font size" style="width:56px"></select>
+      <div class="rrow"><button class="rsel font-box" data-cmd="font-pick" id="sel-font" title="Font — search 70 included fonts, theme fonts and recent fonts (Ctrl+Shift+F)" style="width:132px"><span>Calibri</span><svg class="caret" viewBox="0 0 10 10"><path d="M2 4l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button><select class="rsel" data-cmd="size" id="sel-size" title="Font size" style="width:56px"></select>
         <button class="rb" data-cmd="font-grow" data-icon="a-arrow-up" title="Increase font size"></button><button class="rb" data-cmd="font-shrink" data-icon="a-arrow-down" title="Decrease font size"></button></div>
       <div class="rrow">
         <button class="rb" data-cmd="bold" data-icon="bold" title="Bold (Ctrl+B)" id="btn-bold"></button>
@@ -93,9 +103,9 @@
       </div></div></div><div class="rgroup-label">Number</div></div>
     <div class="rgroup"><div class="rgroup-body">
       <div class="rcol">
-        <button class="rb md" data-cmd="cf-menu" data-icon="list-filter-plus" title="Conditional formatting">Conditional Formatting ▾</button>
-        <button class="rb md" data-cmd="table-menu" data-icon="table" title="Format as table">Format as Table ▾</button>
-        <button class="rb md" data-cmd="styles-menu" data-icon="swatch-book" title="Cell styles">Cell Styles ▾</button>
+        <button class="rb md" data-cmd="cf-menu" data-icon="list-filter-plus" title="Conditional formatting — highlight rules, data bars, colour scales">Conditional Formatting ▾</button>
+        <button class="rb md" data-cmd="table-menu" data-icon="table" title="Format as table — 28 table styles that follow the workbook theme">Format as Table ▾</button>
+        <button class="rb md" data-cmd="styles-menu" data-icon="swatch-book" title="Cell styles — Good/Bad, headings, themed accents, number styles; create or modify styles">Cell Styles ▾</button>
       </div>
     </div><div class="rgroup-label">Styles</div></div>
     <div class="rgroup"><div class="rgroup-body"><div class="rcol">
@@ -118,26 +128,43 @@
   <!-- INSERT -->
   <section class="ribbon-panel" data-panel="insert">
     <div class="rgroup"><div class="rgroup-body">
-      <button class="rb lg" data-cmd="format-table" data-icon="table" title="Create a table from the selection"><span>Table</span></button>
+      <button class="rb lg" data-cmd="pivot-insert" data-icon="table-properties" title="PivotTable — summarize data by rows, columns and values"><span>PivotTable</span></button>
+      <button class="rb lg" data-cmd="format-table" data-icon="table" title="Create a table from the selection (Ctrl+T)"><span>Table</span></button>
     </div><div class="rgroup-label">Tables</div></div>
     <div class="rgroup"><div class="rgroup-body">
       <button class="rb lg" data-cmd="insert-image" data-icon="image" title="Insert a picture from this PC"><span>Picture</span></button>
     </div><div class="rgroup-label">Illustrations</div></div>
     <div class="rgroup"><div class="rgroup-body">
-      <button class="rb lg" data-cmd="chart-column" data-icon="chart-column" title="Column chart"><span>Column</span></button>
-      <button class="rb lg" data-cmd="chart-bar" data-icon="chart-bar" title="Bar chart"><span>Bar</span></button>
+      <button class="rb lg" data-cmd="chart-column-menu" data-icon="chart-column" title="Column chart — clustered, stacked or 100% stacked"><span>Column ▾</span></button>
+      <button class="rb lg" data-cmd="chart-bar-menu" data-icon="chart-bar" title="Bar chart — clustered, stacked or 100% stacked"><span>Bar ▾</span></button>
       <button class="rb lg" data-cmd="chart-line" data-icon="chart-line" title="Line chart"><span>Line</span></button>
-      <button class="rb lg" data-cmd="chart-pie" data-icon="chart-pie" title="Pie chart"><span>Pie</span></button>
+      <button class="rb lg" data-cmd="chart-pie-menu" data-icon="chart-pie" title="Pie or doughnut chart"><span>Pie ▾</span></button>
       <div class="rcol">
-        <button class="rb md" data-cmd="chart-doughnut" data-icon="circle-dot" title="Doughnut chart">Doughnut</button>
         <button class="rb md" data-cmd="chart-area" data-icon="chart-area" title="Area chart">Area</button>
         <button class="rb md" data-cmd="chart-scatter" data-icon="chart-scatter" title="Scatter (XY) chart">Scatter</button>
+        <button class="rb md" data-cmd="chart-bubble" data-icon="circle-ellipsis" title="Bubble chart — X, Y and size columns">Bubble</button>
+      </div>
+      <div class="rcol">
+        <button class="rb md" data-cmd="chart-combo" data-icon="chart-column-increasing" title="Combo chart — columns with a line on a secondary axis">Combo</button>
+        <button class="rb md" data-cmd="chart-waterfall" data-icon="chart-candlestick" title="Waterfall chart — running total of increases and decreases">Waterfall</button>
+        <button class="rb md" data-cmd="chart-histogram" data-icon="chart-no-axes-column" title="Histogram — frequency of values in bins">Histogram</button>
+      </div>
+      <div class="rcol">
+        <button class="rb md" data-cmd="chart-radar" data-icon="radar" title="Radar chart">Radar</button>
+        <button class="rb md" data-cmd="chart-doughnut" data-icon="circle-dot" title="Doughnut chart">Doughnut</button>
+        <button class="rb md" data-cmd="chart-stackedColumn" data-icon="chart-column-stacked" title="Stacked column chart">Stacked</button>
       </div>
     </div><div class="rgroup-label">Charts</div></div>
+    <div class="rgroup"><div class="rgroup-body"><div class="rcol">
+      <button class="rb md" data-cmd="spark-line" data-icon="chart-spline" title="Line sparklines — a tiny trend line inside each cell">Line</button>
+      <button class="rb md" data-cmd="spark-column" data-icon="chart-column" title="Column sparklines inside cells">Column</button>
+      <button class="rb md" data-cmd="spark-winloss" data-icon="chart-column-stacked" title="Win/Loss sparklines inside cells">Win/Loss</button>
+    </div></div><div class="rgroup-label">Sparklines</div></div>
     <div class="rgroup"><div class="rgroup-body">
       <button class="rb lg" data-cmd="hyperlink" data-icon="link" title="Insert link (Ctrl+K)"><span>Link</span></button>
-      <button class="rb lg" data-cmd="comment" data-icon="message-square-plus" title="New note (Shift+F2)"><span>Note</span></button>
-    </div><div class="rgroup-label">Links &amp; notes</div></div>
+      <button class="rb lg" data-cmd="comment-new" data-icon="message-square-plus" title="New threaded comment (Ctrl+Alt+M)"><span>Comment</span></button>
+      <button class="rb lg" data-cmd="comment" data-icon="sticky-note" title="New note (Shift+F2)"><span>Note</span></button>
+    </div><div class="rgroup-label">Links &amp; comments</div></div>
     <div class="rgroup"><div class="rgroup-body">
       <button class="rb lg" data-cmd="insert-function" data-icon="square-function" title="Insert function (Shift+F3)"><span>Function</span></button>
       <button class="rb lg" data-cmd="symbol" data-icon="omega" title="Insert symbol"><span>Symbol</span></button>
@@ -146,6 +173,14 @@
 
   <!-- PAGE LAYOUT -->
   <section class="ribbon-panel" data-panel="layout">
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="theme-menu" data-icon="palette" title="Themes — workbook fonts and colours for cell styles, tables, charts and PivotTables" id="btn-themes"><span>Themes ▾</span></button>
+      <div class="rcol">
+        <button class="rb md" data-cmd="theme-colors" data-icon="swatch-book" title="Theme colours — change only the accent colours">Colors ▾</button>
+        <button class="rb md" data-cmd="theme-fonts" data-icon="type" title="Theme fonts — change only the heading and body fonts">Fonts ▾</button>
+        <button class="rb md" data-cmd="theme-reset" data-icon="rotate-ccw" title="Reset to the default BTS theme">Reset theme</button>
+      </div>
+    </div><div class="rgroup-label">Themes</div></div>
     <div class="rgroup"><div class="rgroup-body">
       <button class="rb lg" data-cmd="margins-menu" data-icon="square-dashed" title="Margins"><span>Margins ▾</span></button>
       <button class="rb lg" data-cmd="orientation-menu" data-icon="rectangle-vertical" title="Orientation" id="btn-orient"><span>Orientation ▾</span></button>
@@ -208,7 +243,8 @@
   <section class="ribbon-panel" data-panel="data">
     <div class="rgroup"><div class="rgroup-body">
       <button class="rb lg" data-cmd="import-text" data-icon="file-text" title="Import data from a CSV / text file into this sheet"><span>From Text/CSV</span></button>
-    </div><div class="rgroup-label">Get Data</div></div>
+      <button class="rb lg" data-cmd="pivot-refresh-all" data-icon="refresh-cw" title="Refresh all PivotTables in the workbook from their source data"><span>Refresh All</span></button>
+    </div><div class="rgroup-label">Get &amp; Refresh</div></div>
     <div class="rgroup"><div class="rgroup-body">
       <div class="rcol">
         <button class="rb md" data-cmd="sort-asc" data-icon="arrow-down-a-z" title="Sort A to Z (smallest to largest)">Sort A→Z</button>
@@ -223,34 +259,65 @@
     </div><div class="rgroup-label">Sort &amp; Filter</div></div>
     <div class="rgroup"><div class="rgroup-body">
       <button class="rb lg" data-cmd="text-to-columns" data-icon="columns-3" title="Split text into columns"><span>Text to Columns</span></button>
-      <button class="rb lg" data-cmd="flash-fill" data-icon="zap" title="Flash fill (Ctrl+E): fill the column below by example"><span>Flash Fill</span></button>
-      <button class="rb lg" data-cmd="remove-duplicates" data-icon="copy-minus" title="Remove duplicate rows"><span>Remove Duplicates</span></button>
-      <button class="rb lg" data-cmd="validation" data-icon="shield-check" title="Data validation"><span>Data Validation</span></button>
+      <button class="rb lg" data-cmd="flash-fill" data-icon="zap" title="Flash Fill (Ctrl+E): type one or two examples next to your data, then fill the rest by pattern"><span>Flash Fill</span></button>
+      <div class="rcol">
+        <button class="rb md" data-cmd="remove-duplicates" data-icon="copy-minus" title="Remove duplicate rows">Remove Duplicates</button>
+        <button class="rb md" data-cmd="validation" data-icon="shield-check" title="Data validation — allowed values, drop-down lists, input messages">Data Validation</button>
+        <button class="rb md" data-cmd="consolidate" data-icon="combine" title="Consolidate — combine ranges from several sheets with Sum, Average, Count…">Consolidate</button>
+      </div>
+      <div class="rcol">
+        <button class="rb md" data-cmd="circle-invalid" data-icon="circle-dashed" title="Circle invalid data — mark cells that break their validation rule">Circle Invalid</button>
+        <button class="rb md" data-cmd="clear-circles" data-icon="circle-x" title="Clear validation circles">Clear Circles</button>
+      </div>
     </div><div class="rgroup-label">Data Tools</div></div>
     <div class="rgroup"><div class="rgroup-body"><div class="rcol">
-      <button class="rb md" data-cmd="group-rows" data-icon="list-collapse" title="Hide the selected rows as a group">Group (hide) rows</button>
-      <button class="rb md" data-cmd="ungroup-rows" data-icon="list-tree" title="Show hidden rows in the selection">Ungroup (show)</button>
-      <button class="rb md" data-cmd="subtotal" data-icon="list-ordered" title="Add a totals row below the selection">Totals row</button>
-    </div></div><div class="rgroup-label">Outline</div></div>
+      <button class="rb md" data-cmd="goal-seek" data-icon="target" title="Goal Seek — find the input that gives the result you want">Goal Seek</button>
+      <button class="rb md" data-cmd="scenarios" data-icon="layers" title="Scenario Manager — save and switch between sets of input values">Scenario Manager</button>
+    </div></div><div class="rgroup-label">What-If Analysis</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <div class="rcol">
+        <button class="rb md" data-cmd="group" data-icon="group" title="Group rows or columns (Alt+Shift+→) — adds an outline with +/- buttons">Group</button>
+        <button class="rb md" data-cmd="ungroup" data-icon="ungroup" title="Ungroup rows or columns (Alt+Shift+←)">Ungroup</button>
+        <button class="rb md" data-cmd="clear-outline" data-icon="list-restart" title="Clear outline — remove all groups on this sheet">Clear Outline</button>
+      </div>
+      <div class="rcol">
+        <button class="rb md" data-cmd="show-detail" data-icon="unfold-vertical" title="Show detail — expand the group at the selection">Show Detail</button>
+        <button class="rb md" data-cmd="hide-detail" data-icon="fold-vertical" title="Hide detail — collapse the group at the selection">Hide Detail</button>
+        <button class="rb md" data-cmd="subtotal" data-icon="list-ordered" title="Add a totals row below the selection">Totals Row</button>
+      </div>
+    </div><div class="rgroup-label">Outline</div></div>
   </section>
 
   <!-- REVIEW -->
   <section class="ribbon-panel" data-panel="review">
     <div class="rgroup"><div class="rgroup-body">
-      <button class="rb lg" data-cmd="comment" data-icon="message-square-plus" title="New note (Shift+F2)"><span>New Note</span></button>
-      <div class="rcol">
-        <button class="rb md" data-cmd="comment-delete" data-icon="message-square-x" title="Delete note">Delete</button>
-        <button class="rb md" data-cmd="comment-prev" data-icon="arrow-up" title="Previous note">Previous</button>
-        <button class="rb md" data-cmd="comment-next" data-icon="arrow-down" title="Next note">Next</button>
-      </div>
-      <button class="rb lg" data-cmd="comments-show" data-icon="messages-square" title="Show all notes" id="btn-showcomments"><span>Show All Notes</span></button>
-    </div><div class="rgroup-label">Notes</div></div>
-    <div class="rgroup"><div class="rgroup-body">
-      <button class="rb lg" data-cmd="protect" data-icon="lock" title="Protect sheet — prevent edits" id="btn-protect"><span>Protect Sheet</span></button>
-    </div><div class="rgroup-label">Protect</div></div>
-    <div class="rgroup"><div class="rgroup-body">
       <button class="rb lg" data-cmd="stats" data-icon="clipboard-list" title="Workbook statistics"><span>Workbook Statistics</span></button>
     </div><div class="rgroup-label">Proofing</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="comment-new" data-icon="message-square-plus" title="New threaded comment (Ctrl+Alt+M) — reply, resolve and see who said what"><span>New Comment</span></button>
+      <div class="rcol">
+        <button class="rb md" data-cmd="thread-delete" data-icon="message-square-x" title="Delete the comment thread in the selected cell">Delete</button>
+        <button class="rb md" data-cmd="thread-prev" data-icon="arrow-up" title="Previous comment">Previous</button>
+        <button class="rb md" data-cmd="thread-next" data-icon="arrow-down" title="Next comment">Next</button>
+      </div>
+      <button class="rb lg" data-cmd="comments-pane" data-icon="messages-square" title="Show the Comments pane" id="btn-cmpane"><span>Show Comments</span></button>
+    </div><div class="rgroup-label">Comments</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <div class="rcol">
+        <button class="rb md" data-cmd="comment" data-icon="sticky-note" title="New or edit note (Shift+F2)">New Note</button>
+        <button class="rb md" data-cmd="comment-delete" data-icon="eraser" title="Delete note">Delete Note</button>
+        <button class="rb md" data-cmd="comments-show" data-icon="notebook-pen" title="Show all notes" id="btn-showcomments">Show All Notes</button>
+      </div>
+      <div class="rcol">
+        <button class="rb md" data-cmd="comment-prev" data-icon="arrow-up" title="Previous note">Previous Note</button>
+        <button class="rb md" data-cmd="comment-next" data-icon="arrow-down" title="Next note">Next Note</button>
+      </div>
+    </div><div class="rgroup-label">Notes</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="protect" data-icon="lock" title="Protect sheet — optional password; only unlocked cells stay editable" id="btn-protect"><span>Protect Sheet</span></button>
+      <button class="rb lg" data-cmd="protect-workbook" data-icon="book-lock" title="Protect workbook structure — stop sheets being added, deleted, renamed or moved" id="btn-protectwb"><span>Protect Workbook</span></button>
+      <button class="rb lg" data-cmd="allow-ranges" data-icon="lock-open" title="Allow edit ranges — ranges people can edit on a protected sheet"><span>Allow Edit Ranges</span></button>
+    </div><div class="rgroup-label">Protect</div></div>
   </section>
 
   <!-- VIEW -->
@@ -284,11 +351,109 @@
       <label class="rcheck"><input type="checkbox" data-cmd="chart-labels" id="chk-labels"> Data labels</label>
       <label class="rcheck"><input type="checkbox" data-cmd="chart-grid" id="chk-cgrid" checked> Gridlines</label>
     </div>
-      <button class="rb lg" data-cmd="chart-colors" data-icon="palette" title="Chart colors"><span>Colors ▾</span></button>
+      <div class="rcol">
+      <label class="rcheck"><input type="checkbox" data-cmd="chart-axis-titles" id="chk-axist"> Axis titles</label>
+      <button class="rb md" data-cmd="chart-axis-edit" data-icon="text-cursor-input" title="Edit the axis titles">Edit axis titles</button>
+      </div>
     </div><div class="rgroup-label">Layout</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="chart-styles" data-icon="swatch-book" title="Chart styles — looks that follow the workbook theme"><span>Chart Styles ▾</span></button>
+      <button class="rb lg" data-cmd="chart-colors" data-icon="palette" title="Chart colors — theme colours or another palette"><span>Colors ▾</span></button>
+    </div><div class="rgroup-label">Styles</div></div>
     <div class="rgroup"><div class="rgroup-body">
       <button class="rb lg" data-cmd="chart-delete" data-icon="trash-2" title="Delete chart (Del)"><span>Delete</span></button>
     </div><div class="rgroup-label">Arrange</div></div>
+  </section>
+
+  <!-- TABLE DESIGN (contextual) -->
+  <section class="ribbon-panel" data-panel="table">
+    <div class="rgroup"><div class="rgroup-body"><div class="rcol">
+      <label class="rlabel">Table name</label>
+      <input class="rinput" id="tbl-name" data-cmd="table-name" title="Table name — used in formulas and by PivotTables" style="width:120px">
+      <button class="rb md" data-cmd="table-resize" data-icon="scaling" title="Resize table — change the range it covers">Resize Table</button>
+    </div></div><div class="rgroup-label">Properties</div></div>
+    <div class="rgroup"><div class="rgroup-body"><div class="rcol">
+      <button class="rb md" data-cmd="table-pivot" data-icon="table-properties" title="Summarize this table with a PivotTable">Summarize with PivotTable</button>
+      <button class="rb md" data-cmd="remove-duplicates" data-icon="copy-minus" title="Remove duplicate rows from the table">Remove Duplicates</button>
+      <button class="rb md" data-cmd="table-convert" data-icon="table-2" title="Convert to a normal range (keeps the formatting)">Convert to Range</button>
+    </div></div><div class="rgroup-label">Tools</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <div class="rcol">
+        <label class="rcheck"><input type="checkbox" data-cmd="tbl-header" id="tbl-header"> Header row</label>
+        <label class="rcheck"><input type="checkbox" data-cmd="tbl-total" id="tbl-total"> Total row</label>
+        <label class="rcheck"><input type="checkbox" data-cmd="tbl-banded" id="tbl-banded"> Banded rows</label>
+      </div>
+      <div class="rcol">
+        <label class="rcheck"><input type="checkbox" data-cmd="tbl-first" id="tbl-first"> First column</label>
+        <label class="rcheck"><input type="checkbox" data-cmd="tbl-last" id="tbl-last"> Last column</label>
+        <label class="rcheck"><input type="checkbox" data-cmd="tbl-bandcols" id="tbl-bandcols"> Banded columns</label>
+      </div>
+      <div class="rcol">
+        <label class="rcheck"><input type="checkbox" data-cmd="tbl-filter" id="tbl-filter"> Filter button</label>
+      </div>
+    </div><div class="rgroup-label">Table Style Options</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <div class="rgallery tbl-gallery" id="tbl-gallery"></div>
+      <button class="rb lg" data-cmd="table-menu" data-icon="table" title="All table styles (Light, Medium, Dark)"><span>More ▾</span></button>
+    </div><div class="rgroup-label">Table Styles</div></div>
+  </section>
+
+  <!-- PIVOTTABLE ANALYZE (contextual) -->
+  <section class="ribbon-panel" data-panel="pivot">
+    <div class="rgroup"><div class="rgroup-body"><div class="rcol">
+      <label class="rlabel" id="pv-name-label">PivotTable1</label>
+      <button class="rb md" data-cmd="pivot-options" data-icon="settings-2" title="PivotTable options — name, subtotals, grand totals, autofit">Options</button>
+      <button class="rb md" data-cmd="pivot-select" data-icon="scan" title="Select the entire PivotTable">Select</button>
+    </div></div><div class="rgroup-label">PivotTable</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="pv-refresh" data-icon="refresh-cw" title="Refresh this PivotTable from its source data (Alt+F5)"><span>Refresh</span></button>
+      <div class="rcol">
+        <button class="rb md" data-cmd="pivot-refresh-all" data-icon="refresh-ccw" title="Refresh all PivotTables (Ctrl+Alt+F5)">Refresh All</button>
+        <button class="rb md" data-cmd="pivot-source" data-icon="database" title="Change the source data range or table">Change Data Source</button>
+        <button class="rb md" data-cmd="pivot-delete" data-icon="trash-2" title="Delete this PivotTable">Delete</button>
+      </div>
+    </div><div class="rgroup-label">Data</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="pivot-chart" data-icon="chart-column-big" title="PivotChart — a chart linked to this PivotTable"><span>PivotChart</span></button>
+      <button class="rb lg" data-cmd="pivot-fields" data-icon="panel-right" title="Show or hide the PivotTable Fields list" id="btn-pvfields"><span>Field List</span></button>
+    </div><div class="rgroup-label">Show</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="pivot-subtotals" data-icon="list-ordered" title="Subtotals — show or hide"><span>Subtotals ▾</span></button>
+      <button class="rb lg" data-cmd="pivot-grand" data-icon="sigma" title="Grand totals for rows and columns"><span>Grand Totals ▾</span></button>
+      <button class="rb lg" data-cmd="pivot-styles" data-icon="swatch-book" title="PivotTable styles (follow the workbook theme)"><span>Styles ▾</span></button>
+    </div><div class="rgroup-label">Layout</div></div>
+  </section>
+
+  <!-- SPARKLINE (contextual) -->
+  <section class="ribbon-panel" data-panel="spark">
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="spark-edit" data-icon="table-2" title="Edit the data and location of this sparkline group"><span>Edit Data</span></button>
+    </div><div class="rgroup-label">Sparkline</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="spark-type-line" data-icon="chart-spline" title="Change to line sparklines" id="spk-line"><span>Line</span></button>
+      <button class="rb lg" data-cmd="spark-type-column" data-icon="chart-column" title="Change to column sparklines" id="spk-column"><span>Column</span></button>
+      <button class="rb lg" data-cmd="spark-type-winloss" data-icon="chart-column-stacked" title="Change to win/loss sparklines" id="spk-winloss"><span>Win/Loss</span></button>
+    </div><div class="rgroup-label">Type</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <div class="rcol">
+        <label class="rcheck"><input type="checkbox" data-cmd="spk-high" id="spk-high"> High point</label>
+        <label class="rcheck"><input type="checkbox" data-cmd="spk-low" id="spk-low"> Low point</label>
+        <label class="rcheck"><input type="checkbox" data-cmd="spk-neg" id="spk-neg"> Negative points</label>
+      </div>
+      <div class="rcol">
+        <label class="rcheck"><input type="checkbox" data-cmd="spk-first" id="spk-first"> First point</label>
+        <label class="rcheck"><input type="checkbox" data-cmd="spk-last" id="spk-last"> Last point</label>
+        <label class="rcheck"><input type="checkbox" data-cmd="spk-markers" id="spk-markers"> Markers</label>
+      </div>
+    </div><div class="rgroup-label">Show</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="spark-color" data-icon="palette" title="Sparkline colour"><span>Sparkline Color ▾</span></button>
+      <button class="rb lg" data-cmd="spark-marker-color" data-icon="circle-dot" title="Marker colour for high, low, first and last points"><span>Marker Color ▾</span></button>
+    </div><div class="rgroup-label">Style</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="spark-clear" data-icon="eraser" title="Clear the selected sparklines"><span>Clear</span></button>
+      <button class="rb lg" data-cmd="spark-clear-group" data-icon="trash-2" title="Clear the whole sparkline group"><span>Clear Group</span></button>
+    </div><div class="rgroup-label">Group</div></div>
   </section>
 </div>
 

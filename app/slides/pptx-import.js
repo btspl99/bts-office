@@ -267,10 +267,13 @@
 
     let firstTheme = null; let btsTheme = null;
     const masterCache = {};
+    // comment authors (legacy comments)
+    const authors = {}; const caRel = Object.values(prels).find(r => r.type === 'commentAuthors');
+    if (caRel) { const ca = await C.xml(caRel.target); if (ca) kids(ca, 'cmAuthor').forEach(a => { authors[attr(a, 'id')] = attr(a, 'name') || 'Reviewer'; }); }
     for (let si = 0; si < slidePaths.length; si++) {
       const sp = slidePaths[si];
       try {
-        const slide = await parseSlide(C, sp, { W, H, defaultTx, masterCache, idx: si });
+        const slide = await parseSlide(C, sp, { W, H, defaultTx, masterCache, idx: si, authors });
         if (!firstTheme) firstTheme = slide._T;
         if (slide._bts) btsTheme = btsTheme || slide._bts;
         delete slide._T; delete slide._bts;
@@ -287,8 +290,84 @@
       out.sections = [];
       for (const s of sectionDefs) { const first = s.ids.map(id => idOrder.indexOf(id)).filter(i => i >= 0).sort((a, b) => a - b)[0]; if (first != null && out.slides[first]) out.sections.push({ start: out.slides[first].id, name: s.name || 'Section' }); }
     }
+    // custom shows and slide show settings written by PowerPoint (or BTS)
+    const csl = desc(pres, 'custShowLst');
+    if (csl) { const ridToIdx = {}; ids.forEach((n, i) => { ridToIdx[rid(n, 'r:id')] = i; }); out.customShows = kids(csl, 'custShow').map(c => ({ id: SL.uid('cs'), _pid: attr(c, 'id'), name: attr(c, 'name') || 'Custom Show', slides: descAll(c, 'sld').map(x => ridToIdx[rid(x, 'r:id')]).filter(i => i != null && out.slides[i]).map(i => out.slides[i].id) })); }
+    const ppRel = Object.values(prels).find(r => r.type === 'presProps');
+    const pp = ppRel ? await C.xml(ppRel.target) : null; const shp = pp && desc(pp, 'showPr');
+    if (shp) {
+      const st = { type: desc(shp, 'kiosk') ? 'kiosk' : desc(shp, 'browse') ? 'window' : 'speaker', loop: attr(shp, 'loop') === '1', useTimings: attr(shp, 'useTimings') !== '0', noAnims: attr(shp, 'showAnimation') === '0' };
+      st.kiosk = st.type === 'kiosk'; const rg = desc(shp, 'sldRg'); if (rg) st.range = { from: +attr(rg, 'st') || 1, to: +attr(rg, 'end') || out.slides.length };
+      const cs = desc(shp, 'custShow'); if (cs && out.customShows) { const m = out.customShows.find(c => c._pid === attr(cs, 'id')); if (m) st.custom = m.id; }
+      if (st.loop || st.kiosk || st.range || st.custom || st.type !== 'speaker' || !st.useTimings || st.noAnims) out.showSetup = st;
+    }
+    (out.customShows || []).forEach(c => delete c._pid);
+    // document properties
+    out.props = await readProps(C);
+    // BTS metadata: restore unchanged slides exactly + presentation-level settings
+    try { await applyMeta(zip, C, out, slidePaths); } catch (err) { console.warn('BTS metadata ignored:', err); }
+    const clean = (e) => { delete e._oname; };
+    out.slides.forEach(s => { (s.elements || []).forEach(clean); (s.layer || []).forEach(clean); });
     return out;
   };
+
+  async function readProps(C) {
+    const core = await C.xml('docProps/core.xml'), app = await C.xml('docProps/app.xml'); const p = {};
+    const t = (n, name) => { const e = desc(n, name); return e ? e.textContent.trim() : ''; };
+    if (core) { p.title = t(core, 'title'); p.subject = t(core, 'subject'); p.author = t(core, 'creator'); p.keywords = t(core, 'keywords'); p.category = t(core, 'category'); p.comments = t(core, 'description'); }
+    if (app) p.company = t(app, 'Company');
+    Object.keys(p).forEach(k => { if (!p[k]) delete p[k]; });
+    return p;
+  }
+  async function rawHash(zip, slidePath) {
+    const f = zip.file(slidePath); if (!f) return '';
+    let str = await f.async('string');
+    const relsPath = slidePath.replace(/[^/]*$/, '_rels/') + slidePath.split('/').pop() + '.rels';
+    const rf = zip.file(relsPath);
+    if (rf) { const rels = await rf.async('string'); for (const m of rels.matchAll(/Target="\.\.\/(notesSlides\/notesSlide\d+\.xml|comments\/comment\d+\.xml)"/g)) { const g = zip.file('ppt/' + m[1]); if (g) str += '\n' + await g.async('string'); } }
+    return window.PPTXExport.hash(str);
+  }
+  async function applyMeta(zip, C, out, slidePaths) {
+    const part = Object.keys(zip.files).find(f => /^customXml\/[^/]+\.xml$/.test(f) && !/itemProps/i.test(f) && !/_rels/.test(f));
+    let metaFile = null;
+    for (const f of Object.keys(zip.files).filter(f => /^customXml\/[^/]+\.xml$/.test(f))) { const t = await zip.file(f).async('string'); if (t.includes('urn:bts-office:slides')) { metaFile = t; break; } }
+    void part; if (!metaFile) return;
+    const doc = new DOMParser().parseFromString(metaFile, 'application/xml'); const meta = JSON.parse(doc.documentElement.textContent || '{}');
+    if (!meta || meta.app !== 'BTS Slides') return;
+    const restored = new Set();
+    for (let i = 0; i < out.slides.length && i < (meta.slides || []).length; i++) {
+      const m = meta.slides[i]; if (!m || !m.s) continue;
+      if (m.h !== await rawHash(zip, slidePaths[i])) continue;
+      const parsed = out.slides[i]; const s = m.s; const byName = {};
+      [...parsed.elements, ...(parsed.layer || [])].forEach(e => { if (e._oname) byName[e._oname] = e; });
+      const fixImages = (list) => list.filter(el => {
+        if (el.type !== 'image') return true;
+        if (!el._n) { delete el._n; return !!el.ph; }
+        const p = byName[el._n]; delete el._n;
+        if (!p || !p.src) return !!el.ph;
+        const baked = el.radius || (el.crop && (el.crop.l || el.crop.t || el.crop.r || el.crop.b)) || /^data:image\/svg/.test(SL.assetURL(el.src || ''));
+        el.src = p.src; if (baked) { el.crop = null; el.radius = 0; }
+        return true;
+      });
+      s.elements = fixImages(s.elements || []); s.layer = fixImages(s.layer || []);
+      if (s.background && s.background._img) { s.background = parsed.background && parsed.background.type === 'image' ? Object.assign({}, parsed.background, { fit: 'stretch' }) : null; }
+      out.slides[i] = s; restored.add(i);
+    }
+    // theme overrides (fonts / colours / imported custom theme) when the theme matches
+    if (meta.theme && (meta.theme.id === out.theme.id || (out.theme.id === 'custom' && meta.theme.id !== 'custom' && restored.size))) out.theme = meta.theme;
+    if (meta.master) {
+      const resolve = (el) => { if (el.type !== 'image') return true; const sl = out.slides[el._s]; const p = sl && [...sl.elements, ...(sl.layer || [])].find(e => e._oname === el._n); delete el._n; delete el._s; if (p && p.src) { el.src = p.src; el.crop = null; el.radius = 0; return true; } return false; };
+      // master graphics live in the master, not on each slide: drop the exported copies from slides read from XML
+      out.slides.forEach((s, i) => { if (!restored.has(i)) s.elements = s.elements.filter(e => !/^Master graphic O\d+$/.test(e._oname || '')); });
+      if (meta.master.graphics) meta.master.graphics = meta.master.graphics.filter(resolve);
+      if (meta.master.layoutGraphics) Object.keys(meta.master.layoutGraphics).forEach(k => { meta.master.layoutGraphics[k] = meta.master.layoutGraphics[k].filter(resolve); });
+      out.master = meta.master;
+    }
+    if (meta.customShows && meta.customShows.length) out.customShows = meta.customShows.map(c => ({ id: c.id || SL.uid('cs'), name: c.name, slides: c.slides.map(i => out.slides[i] && out.slides[i].id).filter(Boolean) }));
+    if (meta.showSetup) out.showSetup = meta.showSetup;
+    if (meta.footer) out.footer = meta.footer;
+    out._restored = restored.size;
+  }
 
   const LAYOUT_MAP = { title: 'title', obj: 'titleContent', tx: 'titleContent', secHead: 'section', twoObj: 'twoContent', twoTxTwoObj: 'comparison', titleOnly: 'titleOnly', blank: 'blank', picTx: 'pictureCaption', objTx: 'twoContent', txAndObj: 'twoContent', cust: 'titleContent' };
 
@@ -353,7 +432,21 @@
     const tr = findTransition(sld); if (tr) S.transition = tr;
     // comments (legacy)
     const cRel = Object.values(rels).find(r => r.type === 'comments');
-    if (cRel) { const cx = await C.xml(cRel.target); if (cx) S.comments = kids(cx, 'cm').map(c => ({ author: 'Reviewer', text: (desc(c, 'text') || {}).textContent || '', time: Date.parse(attr(c, 'dt')) || Date.now(), x: px((+attr(desc(c, 'pos'), 'x') || 0) * 1587.5 / 1), y: px((+attr(desc(c, 'pos'), 'y') || 0) * 1587.5) })); }
+    if (cRel) {
+      const cx = await C.xml(cRel.target);
+      if (cx) {
+        const authors = G.authors || {}; const byKey = {}; const list = [];
+        kids(cx, 'cm').forEach(c => {
+          let text = (desc(c, 'text') || {}).textContent || ''; const resolved = /^\[Resolved\] /.test(text); text = text.replace(/^\[Resolved\] /, '');
+          const o = { id: SL.uid('c'), author: authors[attr(c, 'authorId')] || 'Reviewer', text, time: Date.parse(attr(c, 'dt')) || Date.now(), x: px((+attr(desc(c, 'pos'), 'x') || 0) * 1587.5), y: px((+attr(desc(c, 'pos'), 'y') || 0) * 1587.5), replies: [] };
+          if (resolved) o.resolved = true;
+          const par = desc(c, 'parentCm'); const key = attr(c, 'authorId') + ':' + attr(c, 'idx');
+          if (par && byKey[attr(par, 'authorId') + ':' + attr(par, 'idx')]) byKey[attr(par, 'authorId') + ':' + attr(par, 'idx')].replies.push({ id: SL.uid('r'), author: o.author, text: o.text, time: o.time });
+          else { byKey[key] = o; list.push(o); }
+        });
+        S.comments = list;
+      }
+    }
     return S;
   }
   function sameColor(a, b) { return String(a || '').toLowerCase() === String(b || '').toLowerCase(); }
@@ -363,8 +456,8 @@
     const alt = kids(sld, 'AlternateContent')[0];
     if (!tr && alt) { const ch = kid(alt, 'Choice'), fb = kid(alt, 'Fallback'); tr = (ch && kid(ch, 'transition')) || (fb && kid(fb, 'transition')); if (ch && fb && kid(fb, 'transition') && kid(ch, 'transition')) { const c = kid(ch, 'transition'); const f = kid(fb, 'transition'); tr = c; if (!kids(c).length) tr = f; tr.__fb = f; } }
     if (!tr) return null;
-    const eff = kids(tr)[0];
-    const name = eff ? ln(eff) : 'fade';
+    const eff = kids(tr).find(k => ln(k) !== 'extLst' && ln(k) !== 'sndAc');
+    const name = eff ? ln(eff) : 'cut';
     const MAP = { fade: 'fade', push: 'push', wipe: 'wipe', split: 'split', cover: 'cover', pull: 'reveal', zoom: 'zoom', flip: 'flip', prism: 'cube', cube: 'cube', dissolve: 'fade', cut: 'none', randomBar: 'wipe', blinds: 'wipe', checker: 'fade', circle: 'zoom', diamond: 'zoom', plus: 'zoom', wedge: 'wipe', wheel: 'wipe', newsflash: 'zoom', strips: 'wipe', comb: 'split', ripple: 'zoom', vortex: 'zoom', shred: 'fade', switch: 'flip', gallery: 'push', conveyor: 'push', pan: 'push', ferris: 'push', flythrough: 'zoom', warp: 'zoom', glitter: 'fade', honeycomb: 'fade', flash: 'fade', doors: 'split', window: 'split', reveal: 'reveal', morph: 'fade', curtains: 'split', wind: 'push', prestige: 'fade', fracture: 'fade', crush: 'fade', peelOff: 'reveal', pageCurlDouble: 'reveal', pageCurlSingle: 'reveal', airplane: 'fade', origami: 'flip', vortexs: 'zoom' };
     const type = MAP[name] || 'fade';
     const dirA = eff && attr(eff, 'dir');
@@ -407,10 +500,10 @@
     for (const n of kids(tree)) {
       const name = ln(n);
       try {
-        if (name === 'sp') { if (layerMode && phInfo(n)) continue; const el = await shapeEl(n, env, grp); if (el) out.push(el); }
-        else if (name === 'pic') { if (layerMode && phInfo(n)) continue; const el = await picEl(n, env, grp); if (el) out.push(el); }
-        else if (name === 'cxnSp') { const el = await shapeEl(n, env, grp, true); if (el) out.push(el); }
-        else if (name === 'graphicFrame') { if (layerMode && phInfo(n)) continue; const el = await frameEl(n, env, grp); if (el) out.push(el); }
+        if (name === 'sp') { if (layerMode && phInfo(n)) continue; const el = await shapeEl(n, env, grp); if (el) out.push(objMeta(n, el)); }
+        else if (name === 'pic') { if (layerMode && phInfo(n)) continue; const el = await picEl(n, env, grp); if (el) out.push(objMeta(n, el)); }
+        else if (name === 'cxnSp') { const el = await shapeEl(n, env, grp, true); if (el) out.push(objMeta(n, el)); }
+        else if (name === 'graphicFrame') { if (layerMode && phInfo(n)) continue; const el = await frameEl(n, env, grp); if (el) out.push(objMeta(n, el)); }
         else if (name === 'grpSp') {
           const gx = kid(kid(n, 'grpSpPr'), 'xfrm'); const sub = []; const gid = SL.uid('g');
           let g2 = grp;
@@ -432,6 +525,14 @@
         }
       } catch (err) { console.warn('Skipped an object:', err); }
     }
+  }
+  // raw object name (BTS round trip), alt text and the Office "decorative" flag for any object
+  function objMeta(node, el) {
+    const nv = desc(node, 'cNvPr'); if (!nv) return el;
+    const n = attr(nv, 'name'); if (n) el._oname = n;
+    const d = attr(nv, 'descr'); if (d && !el.alt) el.alt = d;
+    if (descAll(nv, 'decorative').some(x => attr(x, 'val') === '1')) { el.decorative = true; delete el.alt; }
+    return el;
   }
   function applyGroup(b, grp) {
     if (!grp || !b) return b;

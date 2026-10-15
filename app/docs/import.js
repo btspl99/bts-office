@@ -6,7 +6,7 @@
   /* ================= sanitizing HTML ================= */
   const ALLOWED_TAGS = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'DEL', 'INS', 'SUB', 'SUP', 'SPAN', 'FONT', 'A', 'BR', 'HR', 'UL', 'OL', 'LI', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TD', 'TH', 'COLGROUP', 'COL', 'CAPTION', 'IMG', 'BLOCKQUOTE', 'PRE', 'CODE', 'DIV', 'SECTION', 'ARTICLE', 'MARK', 'SMALL', 'BIG', 'CENTER', 'DL', 'DT', 'DD', 'FIGURE', 'FIGCAPTION', 'KBD', 'Q', 'CITE', 'ABBR', 'TT', 'HEADER', 'FOOTER', 'MAIN', 'ASIDE', 'NAV', 'ADDRESS']);
   const DROP_TAGS = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'NOSCRIPT', 'TEMPLATE', 'FORM', 'INPUT', 'BUTTON', 'SELECT', 'TEXTAREA', 'SVG', 'MATH', 'CANVAS', 'VIDEO', 'AUDIO', 'TITLE', 'HEAD', 'BASE', 'FRAME', 'FRAMESET', 'APPLET']);
-  const ALLOWED_ATTR = new Set(['href', 'src', 'alt', 'title', 'style', 'class', 'colspan', 'rowspan', 'width', 'height', 'id', 'align', 'valign', 'color', 'face', 'size', 'start', 'type', 'span', 'contenteditable', 'data-eq', 'data-fn', 'data-text', 'data-cid', 'data-fld', 'data-style', 'data-target', 'data-cap', 'data-nw', 'data-nh', 'data-own-drop']);
+  const ALLOWED_ATTR = new Set(['href', 'src', 'alt', 'title', 'style', 'class', 'colspan', 'rowspan', 'width', 'height', 'id', 'align', 'valign', 'color', 'face', 'size', 'start', 'type', 'span', 'contenteditable', 'data-eq', 'data-fn', 'data-text', 'data-cid', 'data-fld', 'data-style', 'data-target', 'data-cap', 'data-nw', 'data-nh', 'data-own-drop', 'data-src', 'data-page', 'data-seq', 'data-field', 'data-author', 'data-time', 'data-tcid', 'data-label', 'data-title', 'data-head', 'data-decorative']);
   D.sanitize = (html, { keepClasses = true } = {}) => {
     const doc = new DOMParser().parseFromString('<!doctype html><body>' + html, 'text/html');
     const walk = (el) => {
@@ -203,13 +203,14 @@ ${$('#fn-area').innerHTML}
   /* ================= DOCX import ================= */
   const STYLE_MAP = [
     "p[style-name='Title'] => p.title:fresh", "p[style-name='Subtitle'] => p.subtitle:fresh",
-    "p[style-name='Quote'] => blockquote > p:fresh", "p[style-name='Intense Quote'] => blockquote > p:fresh",
+    "p[style-name='Quote'] => blockquote > p:fresh", "p[style-name='Intense Quote'] => blockquote.intense > p:fresh",
     "p[style-name='No Spacing'] => p.nospace:fresh", "p[style-name='Caption'] => p.caption:fresh",
     "p[style-name='Code'] => pre:fresh", "p[style-name='HTML Preformatted'] => pre:fresh", "p[style-name='Source Code'] => pre:fresh",
     "p[style-name='TOC Heading'] => p.toc-head:fresh", "p[style-name='toc 1'] => p.toc-l1:fresh", "p[style-name='toc 2'] => p.toc-l2:fresh", "p[style-name='toc 3'] => p.toc-l3:fresh",
     "p[style-name='TOC 1'] => p.toc-l1:fresh", "p[style-name='TOC 2'] => p.toc-l2:fresh", "p[style-name='TOC 3'] => p.toc-l3:fresh",
     "p[style-name='Heading 4'] => h4:fresh", "p[style-name='Heading 5'] => h5:fresh", "p[style-name='Heading 6'] => h6:fresh",
-    "r[style-name='Strong'] => strong", "r[style-name='Emphasis'] => em", "u => u", "strike => s",
+    "p[style-name='table of figures'] => p.tof-l:fresh", "p[style-name='Table of Figures'] => p.tof-l:fresh",
+    "r[style-name='Strong'] =>", "r[style-name='Emphasis'] =>", "u => u", "strike => s",
   ];
   const kids = (el, n) => el ? [...el.children].filter(c => c.nodeName === n) : [];
   const first = (el, n) => el ? [...el.children].find(c => c.nodeName === n) || null : null;
@@ -228,23 +229,28 @@ ${$('#fn-area').innerHTML}
   }
   /** Walk a w:p collecting runs (text with props) and comment boundaries by character offset. */
   function readPara(p, ctx) {
-    const runs = []; let text = '';
-    const visit = (el) => {
+    const runs = []; let text = ''; const dels = [];
+    const visit = (el, tc) => {
       for (const c of el.children) {
         const n = c.nodeName;
         if (n === 'w:r') {
-          const props = parseRPr(first(c, 'w:rPr')); let t = '';
+          const rPr = first(c, 'w:rPr'); const props = parseRPr(rPr); let t = '';
           for (const k of c.children) { if (k.nodeName === 'w:t') t += k.textContent; else if (k.nodeName === 'w:tab') t += '\t'; else if (k.nodeName === 'w:noBreakHyphen') t += '‑'; }
-          if (t) { runs.push({ start: text.length, end: text.length + t.length, props }); text += t; }
-        } else if (n === 'w:hyperlink' || n === 'w:ins' || n === 'w:smartTag' || n === 'w:fldSimple' || n === 'w:sdt' || n === 'w:sdtContent' || n === 'w:customXml') visit(c);
+          const rs = att(first(rPr, 'w:rStyle'), 'w:val');
+          if (t) { runs.push({ start: text.length, end: text.length + t.length, props, rs, tc }); text += t; }
+        } else if (n === 'w:ins' || n === 'w:moveTo') visit(c, { kind: 'ins', author: att(c, 'w:author') || 'Unknown', date: att(c, 'w:date') || '', id: 'x' + (att(c, 'w:id') || Math.random().toString(36).slice(2, 7)) });
+        else if (n === 'w:del' || n === 'w:moveFrom') {
+          let t = ''; const rp = []; [...c.getElementsByTagName('w:r')].forEach(r => { for (const k of r.children) { if (k.nodeName === 'w:delText' || k.nodeName === 'w:t') t += k.textContent; else if (k.nodeName === 'w:tab') t += '\t'; } if (!rp.length) rp.push(parseRPr(first(r, 'w:rPr'))); });
+          if (t) dels.push({ at: text.length, text: t, author: att(c, 'w:author') || 'Unknown', date: att(c, 'w:date') || '', id: 'x' + (att(c, 'w:id') || ''), props: rp[0] });
+        } else if (n === 'w:hyperlink' || n === 'w:smartTag' || n === 'w:fldSimple' || n === 'w:sdt' || n === 'w:sdtContent' || n === 'w:customXml') visit(c, tc);
         else if (n === 'w:commentRangeStart') ctx.cStart[att(c, 'w:id')] = { p: ctx.pi, o: text.length };
         else if (n === 'w:commentRangeEnd') ctx.cEnd[att(c, 'w:id')] = { p: ctx.pi, o: text.length };
       }
     };
-    visit(p);
+    visit(p, null);
     const pPr = first(p, 'w:pPr');
     const numPr = first(pPr, 'w:numPr');
-    return { text, runs, pPr, num: numPr ? { id: att(first(numPr, 'w:numId'), 'w:val'), lvl: +(att(first(numPr, 'w:ilvl'), 'w:val') || 0) } : null, style: att(first(pPr, 'w:pStyle'), 'w:val') };
+    return { text, runs, dels, pPr, num: numPr ? { id: att(first(numPr, 'w:numId'), 'w:val'), lvl: +(att(first(numPr, 'w:ilvl'), 'w:val') || 0) } : null, style: att(first(pPr, 'w:pStyle'), 'w:val') };
   }
   function paraCSS(pPr, isList) {
     if (!pPr) return {}; const s = {};
@@ -277,15 +283,89 @@ ${$('#fn-area').innerHTML}
   }
   const normT = (s) => s.replace(/ /g, ' ').replace(/\s+/g, ' ').trim();
 
+  const CHAR_IDS = { Emphasis: 'emphasis', Strong: 'strong', SubtleEmphasis: 'subtle-em', IntenseEmphasis: 'intense-em', SubtleReference: 'subtle-ref', IntenseReference: 'intense-ref', BookTitle: 'book-title' };
+  /** BTS Docs data stored in a custom XML part (styles, sources, protection, citation list…). */
+  async function readBtsData(zip) {
+    for (const name of Object.keys(zip.files).filter(n => /^customXml\/item\d+\.xml$/i.test(n))) {
+      try { const x = await zip.file(name).async('string'); if (!/btsDocs/.test(x)) continue; const d = new DOMParser().parseFromString(x, 'application/xml'); const root = d.documentElement; if (root.localName !== 'btsDocs') continue; return JSON.parse(root.textContent); } catch (e) { console.warn('bts data', e); }
+    }
+    return null;
+  }
+  async function readProps(zip) {
+    const out = {}; const txt = async (n) => { const f = zip.file(n); return f ? new DOMParser().parseFromString(await f.async('string'), 'application/xml') : null; };
+    const core = await txt('docProps/core.xml');
+    if (core) { const g = (tag) => { const e = core.getElementsByTagName(tag)[0]; return e ? e.textContent.trim() : ''; }; Object.assign(out, { title: g('dc:title'), subject: g('dc:subject'), author: g('dc:creator'), keywords: g('cp:keywords'), comments: g('dc:description'), category: g('cp:category'), status: g('cp:contentStatus') }); }
+    const app = await txt('docProps/app.xml'); if (app) { const c = app.getElementsByTagName('Company')[0]; if (c) out.company = c.textContent.trim(); }
+    const cust = await txt('docProps/custom.xml'); if (cust) { [...cust.getElementsByTagName('property')].forEach(pr => { if (pr.getAttribute('name') === '_MarkAsFinal' && /true|1/i.test(pr.textContent)) out.markFinal = true; }); }
+    return out;
+  }
+  async function readSettings(zip) {
+    const f = zip.file('word/settings.xml'); if (!f) return {};
+    const x = new DOMParser().parseFromString(await f.async('string'), 'application/xml'); const out = {};
+    const tr = x.getElementsByTagName('w:trackRevisions')[0]; if (tr && !/^(0|false|off)$/.test(att(tr, 'w:val') || '')) out.track = true;
+    const dp = x.getElementsByTagName('w:documentProtection')[0]; if (dp && /^(1|true|on)$/.test(att(dp, 'w:enforcement') || '') && att(dp, 'w:edit') === 'readOnly') out.readOnly = true;
+    return out;
+  }
+  /** Word documents (not made by BTS Docs): take theme fonts and built-in style formatting from styles.xml. */
+  async function readWordStyles(zip, design) {
+    try {
+      const th = zip.file('word/theme/theme1.xml');
+      if (th) { const t = new DOMParser().parseFromString(await th.async('string'), 'application/xml'); const maj = t.getElementsByTagName('a:majorFont')[0], min = t.getElementsByTagName('a:minorFont')[0]; const lat = (e) => e && e.getElementsByTagName('a:latin')[0] && e.getElementsByTagName('a:latin')[0].getAttribute('typeface'); if (lat(maj)) design.headFont = lat(maj); if (lat(min)) design.bodyFont = lat(min); const clr = (n) => { const e = t.getElementsByTagName('a:' + n)[0]; const c = e && (e.getElementsByTagName('a:srgbClr')[0] || null); return c ? '#' + c.getAttribute('val').toUpperCase() : null; }; if (clr('accent1')) design.accent = clr('accent1'); if (clr('dk2')) design.dark = clr('dk2'); }
+      const f = zip.file('word/styles.xml'); if (!f) return;
+      const x = new DOMParser().parseFromString(await f.async('string'), 'application/xml');
+      const ID = { Normal: 'normal', Title: 'title', Subtitle: 'subtitle', Heading1: 'h1', Heading2: 'h2', Heading3: 'h3', Heading4: 'h4', Heading5: 'h5', Heading6: 'h6', Quote: 'quote', IntenseQuote: 'iquote', Caption: 'caption', NoSpacing: 'nospace' };
+      const mods = {};
+      const readR = (rPr, o) => {
+        if (!rPr) return; const rf = first(rPr, 'w:rFonts');
+        if (rf) { const at = att(rf, 'w:asciiTheme'); if (at) o.font = /major/.test(at) ? '@head' : '@body'; else if (att(rf, 'w:ascii')) o.font = att(rf, 'w:ascii'); }
+        const sz = att(first(rPr, 'w:sz'), 'w:val'); if (sz) o.size = +sz / 2;
+        const c = first(rPr, 'w:color'); if (c) { const tc = att(c, 'w:themeColor'); if (tc && /accent1/.test(tc)) o.color = '@accent'; else if (tc && /text2|dark2|tx2/.test(tc)) o.color = '@dark'; else if (att(c, 'w:val') && /^[0-9a-f]{6}$/i.test(att(c, 'w:val'))) o.color = '#' + att(c, 'w:val').toUpperCase(); }
+        const on = (n) => { const e = first(rPr, n); return e ? !/^(0|false)$/.test(att(e, 'w:val') || '') : undefined; };
+        if (on('w:b') !== undefined) o.bold = on('w:b'); if (on('w:i') !== undefined) o.italic = on('w:i'); if (on('w:caps') !== undefined) o.caps = on('w:caps');
+      };
+      const readP = (pPr, o) => { if (!pPr) return; const sp = first(pPr, 'w:spacing'); if (sp) { if (att(sp, 'w:before') != null) o.before = +att(sp, 'w:before') / 20; if (att(sp, 'w:after') != null) o.after = +att(sp, 'w:after') / 20; const l = att(sp, 'w:line'); if (l && (!att(sp, 'w:lineRule') || att(sp, 'w:lineRule') === 'auto')) o.line = Math.round(+l / 240 * 100) / 100; } const jc = att(first(pPr, 'w:jc'), 'w:val'); if (jc) o.align = { center: 'center', right: 'right', both: 'justify' }[jc] || 'left'; };
+      const dd = x.getElementsByTagName('w:docDefaults')[0];
+      if (dd) { const o = {}; readR(first(first(dd, 'w:rPrDefault'), 'w:rPr'), o); readP(first(first(dd, 'w:pPrDefault'), 'w:pPr'), o); if (o.font === '@head') o.font = '@body'; if (o.after != null || o.line != null) design.pspacing = { after: o.after ?? 0, line: o.line ?? 1, before: o.before || 0 }; delete o.before; delete o.after; delete o.line; mods.normal = o; }
+      [...x.getElementsByTagName('w:style')].forEach(st => {
+        const id = ID[att(st, 'w:styleId')]; if (!id) return;
+        const o = {}; readR(first(st, 'w:rPr'), o); readP(first(st, 'w:pPr'), o);
+        if (id === 'normal') { mods.normal = Object.assign(mods.normal || {}, o); if (o.after != null || o.line != null) { design.pspacing = Object.assign({ before: 0, after: 8, line: 1.15 }, design.pspacing || {}, o.after != null ? { after: o.after } : {}, o.line != null ? { line: o.line } : {}); delete mods.normal.after; delete mods.normal.line; delete mods.normal.before; } return; }
+        if (Object.keys(o).length) mods[id] = o;
+      });
+      if (mods.normal && !Object.keys(mods.normal).length) delete mods.normal;
+      design.styleMods = mods; design.styleSet = 'classic';
+    } catch (e) { console.warn('word styles', e); }
+  }
+
   D.importDocx = async (bytes) => {
     const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-    const res = await mammoth.convertToHtml({ arrayBuffer: ab }, {
-      styleMap: STYLE_MAP, ignoreEmptyParagraphs: false, includeDefaultStyleMap: true,
+    let zip = null; try { zip = await JSZip.loadAsync(ab); } catch (e) { console.warn('zip', e); }
+    const bts = zip ? await readBtsData(zip) : null;
+    const props = zip ? await readProps(zip) : {};
+    const settings = zip ? await readSettings(zip) : {};
+    const styleMap = STYLE_MAP.slice();
+    ((bts && bts.design && bts.design.customStyles) || []).forEach(u => { if (u.type === 'c') styleMap.push(`r[style-name='${u.name.replace(/'/g, '')}'] =>`); else styleMap.push(`p[style-name='${u.name.replace(/'/g, '')}'] => p.us-${u.id}:fresh`); });
+    styleMap.push("r[style-name='BTS Citation'] =>", "r[style-name='Subtle Emphasis'] =>", "r[style-name='Intense Emphasis'] =>", "r[style-name='Subtle Reference'] =>", "r[style-name='Intense Reference'] =>", "r[style-name='Book Title'] =>");
+    // mammoth drops simple fields (SEQ, MERGEFIELD …); keep their cached result text as ordinary runs
+    let mab = ab;
+    if (zip && zip.file('word/document.xml')) {
+      const dx = await zip.file('word/document.xml').async('string');
+      if (/<w:fldSimple\b/.test(dx)) { zip.file('word/document.xml', dx.replace(/<w:fldSimple\b[^>]*\/>/g, '').replace(/<w:fldSimple\b[^>]*>/g, '').replace(/<\/w:fldSimple>/g, '')); mab = await zip.generateAsync({ type: 'arraybuffer' }); }
+    }
+    const res = await mammoth.convertToHtml({ arrayBuffer: mab }, {
+      styleMap, ignoreEmptyParagraphs: false, includeDefaultStyleMap: true,
       convertImage: mammoth.images.imgElement(img => img.read('base64').then(b => ({ src: 'data:' + (img.contentType || 'image/png') + ';base64,' + b }))),
     });
     const holder = document.createElement('div'); holder.innerHTML = res.value;
-    let zip = null, xml = null; const meta = { page: D.defaultPage(), design: D.defaultDesign(), comments: {}, hdr: '', ftr: '' };
-    try { zip = await JSZip.loadAsync(ab); xml = new DOMParser().parseFromString(await zip.file('word/document.xml').async('string'), 'application/xml'); } catch (e) { console.warn('docx xml pass skipped', e); }
+    let xml = null; const meta = { page: D.defaultPage(), design: D.defaultDesign(), comments: {}, hdr: '', ftr: '' };
+    if (bts && bts.design) { const keep = ['theme', 'pspacing', 'styleSet', 'styleMods', 'customStyles', 'headFont', 'bodyFont', 'accent', 'dark', 'biblio', 'markup', 'protect']; keep.forEach(k => { if (bts.design[k] !== undefined) meta.design[k] = bts.design[k]; }); }
+    else if (zip) await readWordStyles(zip, meta.design);
+    meta.design.track = !!settings.track;
+    if (props.markFinal || /^final$/i.test(props.status || '')) meta.design.protect = { mode: 'final' };
+    else if (settings.readOnly) meta.design.protect = { mode: 'readonly', hash: bts && bts.design && bts.design.protect ? bts.design.protect.hash || null : null };
+    else meta.design.protect = null;
+    const P = Object.assign({}, props); delete P.status; delete P.markFinal; BTS.setProps(P);
+    try { if (zip) xml = new DOMParser().parseFromString(await zip.file('word/document.xml').async('string'), 'application/xml'); } catch (e) { console.warn('docx xml pass skipped', e); }
     // footnotes from mammoth → our fn-ref sups
     $$('sup > a[href^="#footnote-"]', holder).forEach(a => {
       const id = a.getAttribute('href').slice(1); const li = holder.querySelector('li#' + CSS.escape(id));
@@ -300,7 +380,29 @@ ${$('#fn-area').innerHTML}
     tabs.forEach(n => { const parts = n.data.split('\t'); const frag = document.createDocumentFragment(); parts.forEach((p, i) => { if (i) { const s = document.createElement('span'); s.className = 'tab'; s.textContent = '\t'; frag.appendChild(s); } if (p) frag.appendChild(document.createTextNode(p)); }); n.replaceWith(frag); });
     // merge consecutive pre (one per paragraph from mammoth)
     $$('pre', holder).forEach(p => { let nx = p.nextElementSibling; while (nx && nx.tagName === 'PRE') { p.append('\n', ...nx.childNodes); const r = nx; nx = nx.nextElementSibling; r.remove(); } });
-    $$('blockquote', holder).forEach(b => { let nx = b.nextElementSibling; while (nx && nx.tagName === 'BLOCKQUOTE') { b.append(...nx.childNodes); const r = nx; nx = nx.nextElementSibling; r.remove(); } });
+    $$('blockquote', holder).forEach(b => { if (!holder.contains(b)) return; let nx = b.nextElementSibling; while (nx && nx.tagName === 'BLOCKQUOTE' && nx.className === b.className) { b.append(...nx.childNodes); const r = nx; nx = nx.nextElementSibling; r.remove(); } });
+    // table of figures paragraphs → live block
+    let hadTof = false;
+    $$('p.tof-l', holder).forEach(p0 => {
+      if (!holder.contains(p0) || (p0.previousElementSibling && p0.previousElementSibling.classList.contains('tof-l'))) return;
+      const group = []; let x = p0; while (x && x.tagName === 'P' && x.classList.contains('tof-l')) { group.push(x); x = x.nextElementSibling; }
+      const t = document.createElement('div'); t.className = 'toc tof'; t.contentEditable = 'false';
+      const m = group.map(g => g.textContent.trim().match(/^(Figure|Table|Equation)\b/i)).find(Boolean); t.dataset.label = m ? m[1][0].toUpperCase() + m[1].slice(1).toLowerCase() : 'Figure';
+      const head = p0.previousElementSibling; if (head && (head.classList.contains('toc-head') || /^(table of figures|list of (figures|tables|equations))$/i.test(head.textContent.trim()))) head.remove();
+      p0.before(t); group.forEach(g => g.remove()); hadTof = true;
+    });
+    // citations, bibliography, merge fields
+    const cites = (bts && bts.cites) || [];
+    $$('span.cite-imp', holder).forEach((sp, i) => { const c = cites[i]; if (!c) { D.unwrap(sp); return; } sp.className = 'cite'; sp.setAttribute('contenteditable', 'false'); sp.dataset.src = c.src; if (c.page) sp.dataset.page = c.page; });
+    const hasSources = !!(meta.design.biblio && meta.design.biblio.sources && meta.design.biblio.sources.length);
+    $$('p.bib-entry', holder).forEach(p0 => {
+      if (!holder.contains(p0) || !hasSources || (p0.previousElementSibling && p0.previousElementSibling.classList.contains('bib-entry'))) return;
+      const b = document.createElement('div'); b.className = 'biblio'; b.setAttribute('contenteditable', 'false');
+      const head = p0.previousElementSibling; if (head && /^H[1-3]$/.test(head.tagName) && /^(references|works cited|bibliography|reference list|sources)$/i.test(head.textContent.trim())) { if (/^bibliography$/i.test(head.textContent.trim())) b.dataset.title = 'Bibliography'; b.dataset.head = head.tagName.toLowerCase(); head.remove(); }
+      p0.before(b); let x = b.nextElementSibling; while (x && x.tagName === 'P' && x.classList.contains('bib-entry')) { const nx = x.nextElementSibling; x.remove(); x = nx; }
+    });
+    { const tw2 = document.createTreeWalker(holder, NodeFilter.SHOW_TEXT); const hits = []; let t; while ((t = tw2.nextNode())) if (/«[^«»\n]{1,60}»/.test(t.data)) hits.push(t);
+      hits.forEach(t => { const frag = document.createDocumentFragment(); let last = 0; const re = /«([^«»\n]{1,60})»/g; let m; while ((m = re.exec(t.data))) { if (m.index > last) frag.appendChild(document.createTextNode(t.data.slice(last, m.index))); const sp = document.createElement('span'); sp.className = 'mf'; sp.setAttribute('contenteditable', 'false'); sp.dataset.field = m[1]; sp.textContent = m[0]; frag.appendChild(sp); last = m.index + m[0].length; } if (last < t.data.length) frag.appendChild(document.createTextNode(t.data.slice(last))); t.replaceWith(frag); }); }
     // TOC paragraphs → live TOC block
     const tocPs = $$('p.toc-l1, p.toc-l2, p.toc-l3', holder); let hadToc = false;
     if (tocPs.length) {
@@ -318,7 +420,8 @@ ${$('#fn-area').innerHTML}
     if (meta.cols > 1) { const d = document.createElement('div'); d.className = 'cols cols-' + meta.cols; while (holder.firstChild) d.appendChild(holder.firstChild); holder.appendChild(d); }
     D.page = meta.page; D.design = meta.design; D.comments = meta.comments;
     D.setContent(D.sanitize(holder.innerHTML), { hdr: meta.hdr, ftr: meta.ftr });
-    if (hadToc) setTimeout(() => { D.updateTOC(true); D.clearHistory(); BTS.markClean(); }, 120);
+    const needFields = hadToc || hadTof || $('.cite,.biblio,.seq', D.doc);
+    if (needFields) setTimeout(() => { D.updateFields(true); D.clearHistory(); BTS.markClean(); }, 120);
     return res.messages;
   };
 
@@ -347,8 +450,18 @@ ${$('#fn-area').innerHTML}
       Object.entries(css).forEach(([k, v]) => { if (v) el.style[k] = v; });
       // runs
       const htxt = htext(el);
+      if (el.tagName === 'P' && xp.style) {
+        const cls = xp.style === 'ListParagraph' && !xp.num ? 'listpara' : xp.style === 'Bibliography' ? 'bib-entry' : /^TableofFigures$/i.test(xp.style) ? 'tof-l' : /^BTSU/.test(xp.style) ? 'us-' + xp.style.slice(4) : null;
+        if (cls) el.classList.add(cls);
+      }
       if (htxt === xp.text) {
-        xp.runs.forEach(r => { if (!r.props) return; const p = r.props; wrapOffsets(el, r.start, r.end, () => { const s = document.createElement('span'); if (p.color) s.style.color = p.color; if (p.size) s.style.fontSize = p.size + 'pt'; if (p.font) s.style.fontFamily = p.font; if (p.bg) s.style.backgroundColor = p.bg; if (p.caps) s.style.textTransform = 'uppercase'; return s; }); });
+        xp.runs.forEach(r => { if (!r.props) return; const p = r.props; wrapOffsets(el, r.start, r.end, () => { const s = document.createElement('span'); if (p.color) s.style.color = p.color; if (p.size) s.style.fontSize = p.size + 'pt'; if (p.font) s.style.fontFamily = D.fontStack(p.font); if (p.bg) s.style.backgroundColor = p.bg; if (p.caps) s.style.textTransform = 'uppercase'; return s; }); });
+        xp.runs.forEach(r => { if (!r.tc) return; wrapOffsets(el, r.start, r.end, () => D.makeTC('ins', r.tc.id, r.tc.author, r.tc.date || undefined)); });
+        xp.runs.forEach(r => {
+          if (!r.rs) return; let cls = null;
+          if (r.rs === 'BTSCitation') cls = 'cite-imp'; else if (CHAR_IDS[r.rs]) cls = 'cs-' + CHAR_IDS[r.rs]; else if (/^BTSU/.test(r.rs)) cls = 'cs-' + r.rs.slice(4);
+          if (cls) wrapOffsets(el, r.start, r.end, () => { const s = document.createElement('span'); s.className = cls; return s; });
+        });
         xp._el = el;
       }
       // list style from numbering definitions
@@ -388,6 +501,17 @@ ${$('#fn-area').innerHTML}
         });
       }
     } catch (e) { console.warn('comments', e); }
+    // --- tracked deletions: put the deleted text back as <del> at its offset ---
+    xparas.forEach(xp => {
+      if (!xp._el || !xp.dels.length) return; const el = xp._el;
+      [...xp.dels].reverse().forEach(dl => {
+        const d = D.makeTC('del', dl.id, dl.author, dl.date || undefined); d.textContent = dl.text;
+        if (dl.props && (dl.props.color || dl.props.font)) { const sp = document.createElement('span'); if (dl.props.color) sp.style.color = dl.props.color; if (dl.props.font) sp.style.fontFamily = D.fontStack(dl.props.font); sp.textContent = dl.text; d.textContent = ''; d.appendChild(sp); }
+        const nodes = paraTextNodes(el); let pos = 0, placed = false;
+        for (const n of nodes) { if (dl.at <= pos + n.length) { const off = dl.at - pos; if (off === 0) n.before(d); else if (off === n.length) n.after(d); else { const rest = n.splitText(off); rest.before(d); } placed = true; break; } pos += n.length; }
+        if (!placed) { const br = [...el.childNodes].find(c => c.nodeName === 'BR' && !c.nextSibling); if (br) br.before(d); else el.appendChild(d); }
+      });
+    });
     // --- images: sizes & wrapping ---
     const drawings = [...body.getElementsByTagName('w:drawing'), ...body.getElementsByTagName('v:imagedata')].filter(d => d.nodeName === 'v:imagedata' || d.getElementsByTagName('a:blip').length);
     drawings.sort((a, b) => a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
@@ -573,6 +697,7 @@ ${$('#fn-area').innerHTML}
     else if (ext === 'md' || ext === 'markdown') { D.page = D.defaultPage(); D.design = D.defaultDesign(); D.comments = {}; D.setContent(D.sanitize(D.mdToHTML(text()))); }
     else if (ext === 'rtf') { const t = text().replace(/\\par[d]?/g, '\n').replace(/\{\\\*[^{}]*\}|\\[a-z]+-?\d* ?|[{}]/g, ''); D.page = D.defaultPage(); D.design = D.defaultDesign(); D.comments = {}; D.setContent(D.textToHTML(t.trim())); }
     else { D.page = D.defaultPage(); D.design = D.defaultDesign(); D.comments = {}; D.setContent(D.textToHTML(text())); }
+    D.normalizeMergeFields && D.normalizeMergeFields(); if (D.mm && D.mm.preview) D.mmPreview(false);
     D.renderComments(); D.renderNav(); D.canvas.scrollTop = 0; $('#recover-bar').classList.add('hidden');
     const firstBlock = D.doc.querySelector('p,h1,h2,h3,li,td'); if (firstBlock) D.setCaret(firstBlock, 0);
     setTimeout(() => D.layout(), 50);

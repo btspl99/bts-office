@@ -242,8 +242,7 @@
     if (!g._wheel) { g._wheel = true; g.addEventListener('wheel', (e) => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { g.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false }); }
     g.innerHTML = SL.THEMES.map(t => `<button class="th-card ${P().theme.id === t.id ? 'on' : ''}" data-cmd="apply-theme" data-theme-id="${t.id}" title="${esc(t.name)}">${C.themeSample(t, 0, 92)}</button>`).join('');
     const v = $('#variant-gal'); const th = SL.themeOf(P());
-    const sg = $('#style-gal');
-    if (sg) { const qs = C.QUICK(P()); const pick = [0, 3, 2, 5, 8, 7, 10, 13, 12, 15, 18, 22]; sg.innerHTML = pick.map(i => { const q = qs[i]; const f = typeof q.fill === 'object' ? `linear-gradient(180deg, ${SL.color(q.fill.color, P())}, ${q.fill.color2})` : SL.color(q.fill, P()); return `<button data-qs="${i}" title="${q.label}" style="background:${f === 'none' ? '#fff' : f};${q.stroke !== 'none' ? 'border:1.5px solid ' + SL.color(q.stroke, P()) : ''};color:${SL.color(q.color, P())};${q.shadow ? 'box-shadow:0 2px 3px rgba(0,0,0,.3)' : ''}">Ab</button>`; }).join(''); sg.onclick = (e) => { const b = e.target.closest('[data-qs]'); if (b) C.applyQuick(C.QUICK(P())[+b.dataset.qs]); }; sg.onmousedown = (e) => e.preventDefault(); }
+    if (window.SLX && SLX.buildStyleGallery) SLX.buildStyleGallery();
     v.innerHTML = (th.variants || [{}]).map((_, i) => `<button class="th-card var ${(P().theme.variant || 0) === i ? 'on' : ''}" data-cmd="apply-variant" data-v="${i}" title="Variant ${i + 1}">${C.themeSample(th, i, 72)}</button>`).join('');
   };
   C.TRANS = [['none', 'None', 'ban'], ['fade', 'Fade', 'blend'], ['push', 'Push', 'arrow-big-left'], ['wipe', 'Wipe', 'panel-left-open'], ['split', 'Split', 'columns-2'], ['reveal', 'Reveal', 'panel-right-open'], ['cover', 'Cover', 'layers'], ['zoom', 'Zoom', 'zoom-in'], ['flip', 'Flip', 'flip-horizontal-2'], ['cube', 'Cube', 'box'], ['morph', 'Morph', 'sparkles']];
@@ -262,7 +261,7 @@
     const tels = C.textTargets(); const t = tels[0];
     // contextual tab
     const tabF = $('#tab-format');
-    const showFmt = !!els.length && E.view === 'normal';
+    const showFmt = !!els.length && (E.view === 'normal' || E.view === 'master');
     tabF.classList.toggle('hidden', !showFmt);
     if (showFmt) {
       const types = new Set(els.map(e => SL.isLine(e) ? 'shape' : e.type));
@@ -271,10 +270,9 @@
       if (el) { const w = $('#size-w'), h = $('#size-h'); if (document.activeElement !== w) w.value = f2(el.w / 96); if (document.activeElement !== h) h.value = f2(el.h / 96); $('#size-lock').checked = !!el.lockAspect || el.type === 'image' || el.type === 'icon'; }
       if (el && el.type === 'table') { $('#tbl-header').checked = !!el.header; $('#tbl-banded').checked = !!el.banded; }
       $('#b-crop').classList.toggle('on', !!E.cropping);
-    } else if (BTS.activeTab === 'format') BTS.showTab('home');
-    // font fields
-    const fn = $('#font-name'), fs = $('#font-size');
-    if (document.activeElement !== fn) fn.value = ed ? fontAtCaret() : t ? SL.textDefaults(t, P()).font : '';
+    } else if (BTS.activeTab === 'format') BTS.showTab(E.view === 'master' ? 'master' : 'home');
+    // font fields (the font name box is updated by styles.js)
+    const fs = $('#font-size');
     if (document.activeElement !== fs) fs.value = ed ? (sizeAtCaret() || '') : t ? (t.size || 18) : '';
     const st = (k) => ed ? document.queryCommandState(k === 'strike' ? 'strikeThrough' : k) : t ? C.elFlag(t, k) : false;
     ['bold', 'italic', 'underline', 'strike'].forEach(k => $('#b-' + k).classList.toggle('on', st(k)));
@@ -301,6 +299,8 @@
     $$('#theme-gal .th-card').forEach(b => b.classList.toggle('on', b.dataset.themeId === P().theme.id));
     $$('#variant-gal .th-card').forEach(b => b.classList.toggle('on', +b.dataset.v === (P().theme.variant || 0)));
     $('#b-anim-pane').classList.toggle('on', E.pane === 'anim'); $('#b-comments').classList.toggle('on', E.pane === 'comments');
+    const a11 = $('#b-a11y'); if (a11) a11.classList.toggle('on', E.pane === 'a11y');
+    (window.SLX && SLX.ribbon || []).forEach(f => { try { f(); } catch (err) { console.error(err); } });
   };
 
   /* ====================================================================== */
@@ -535,7 +535,8 @@
       },
     },
   };
-  C.elName = (el) => el.name || ({ text: el.ph === 'title' ? 'Title' : el.ph ? 'Content placeholder' : 'Text box', shape: Object.fromEntries(SL.SHAPES)[el.kind] || 'Shape', image: 'Picture', table: 'Table', chart: 'Chart', icon: 'Icon: ' + el.name }[el.type]) + (SL.plainText(el.html || '').trim() ? ': ' + SL.plainText(el.html).trim().slice(0, 24) : '');
+  C.PANES = PANES;
+  C.elName = (el) => (el.type !== 'icon' && el.name) || ({ text: el.ph === 'title' ? 'Title' : el.ph ? 'Content placeholder' : 'Text box', shape: Object.fromEntries(SL.SHAPES)[el.kind] || 'Shape', image: 'Picture', table: 'Table', chart: 'Chart', icon: 'Icon: ' + el.name }[el.type]) + (SL.plainText(el.html || '').trim() ? ': ' + SL.plainText(el.html).trim().slice(0, 24) : '');
 
   /* ---------- animations helpers ---------- */
   C.animOrder = (slide) => slide.elements.filter(e => e.anim && e.anim.type && e.anim.type !== 'none').sort((a, b) => (a.anim.order ?? 0) - (b.anim.order ?? 0));
@@ -597,8 +598,9 @@
     E.sel = [id]; E.renderCanvas(); SL.commit(); E.refreshThumb(true); E.updateRibbon();
   };
 
-  /* ---------- reuse slides from another .pptx ---------- */
-  C.reuseSlides = async () => {
+  /* ---------- reuse slides from another .pptx (the dialog with thumbnails lives in showtools.js) ---------- */
+  C.reuseSlides = () => window.SLX && SLX.reuseSlides ? SLX.reuseSlides() : C.reuseSlidesQuick();
+  C.reuseSlidesQuick = async () => {
     const f = await BTS.pickFile('.pptx'); if (!f) return;
     try {
       const other = await window.PPTXImport.parse(f.data);
@@ -665,7 +667,7 @@
   };
   C.copySlides = () => { E.slideClip = { slides: [...E.railSel].sort((a, b) => a - b).map(i => SL.clone(P().slides[i])), assets: Object.assign({}, SL.assets) }; BTS.toast(`Copied ${E.slideClip.slides.length} slide(s)`); };
   C.pasteSlides = () => {
-    if (!E.slideClip) return; Object.assign(SL.assets, E.slideClip.assets);
+    if (!E.slideClip || (E.masterGuard && E.masterGuard())) return; Object.assign(SL.assets, E.slideClip.assets);
     const add = E.slideClip.slides.map(s => { const c = SL.clone(s); c.id = SL.uid('s'); c.elements.forEach(SL.reId); E.regroup(c.elements); return c; });
     const at = Math.max(...E.railSel, SL.cur) + 1; P().slides.splice(at, 0, ...add); SL.cur = at; E.railSel = new Set(add.map((_, i) => at + i)); SL.commit(); E.renderAll();
   };

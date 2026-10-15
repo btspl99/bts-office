@@ -247,7 +247,10 @@
       return { text: (sym ? sym + ' ' : '') + num.trim(), acct: { sym, num }, color };
     }
     if (SU.isDateFormat(nf) && (v < 0 || v > 2958465)) return { text: '#'.repeat(8) };
-    return { text: ssf(nf, v), color };
+    const opt = /\.([#?]+)/.exec(sec); let text = ssf(nf, opt && !/\.0/.test(sec) ? +v.toFixed(Math.min(opt[1].length + (/%/.test(sec) ? 2 : 0), 15)) : v);
+    // optional decimals ("#,##0.##") must not leave a dangling point: "11,451." -> "11,451"
+    if (/\.[#?]/.test(sec) && !/\.0/.test(sec)) text = text.replace(/(\d)\.(?!\d)/, '$1');
+    return { text, color };
   };
   function generalNum(v) {
     if (Number.isInteger(v) && Math.abs(v) < 1e11) return String(v);

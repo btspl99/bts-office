@@ -6,9 +6,9 @@
 
   /* ================= galleries ================= */
   function renderStyles() {
-    $('#styles-gallery').innerHTML = D.STYLES.map(s => `<button class="gi keepfocus" data-cmd="style" data-style="${s.id}" title="${s.name}"><span class="pv doc-content"><span class="pv-${s.id}" style="margin:0;padding:0;border:0;background:none;${s.id === 'title' ? 'font-size:17px' : s.id === 'h1' ? 'font-size:15px' : s.id === 'quote' ? 'font-size:12px' : s.id === 'code' ? 'font-size:11px' : 'font-size:12.5px'};display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.id === 'code' ? 'code()' : 'AaBbCc'}</span></span><small>${s.name}</small></button>`).join('');
+    D.renderStylesGallery();
     const g = $('#styles-gallery');
-    g.addEventListener('mouseover', e => { const b = e.target.closest('.gi'); if (b && b.dataset.style !== hoverStyle) { hoverStyle = b.dataset.style; D.previewStyle(hoverStyle); } });
+    g.addEventListener('mouseover', e => { const b = e.target.closest('.gi[data-cmd="style"]'); if (b && b.dataset.style !== hoverStyle) { hoverStyle = b.dataset.style; D.previewStyle(hoverStyle); } });
     g.addEventListener('mouseleave', () => { hoverStyle = null; D.endPreview(); });
   }
   let hoverStyle = null;
@@ -34,7 +34,8 @@
     const block = D.blockOf(r.startContainer);
     const al = block ? getComputedStyle(block).textAlign.replace('start', 'left').replace('end', 'right') : 'left';
     $$('[data-align]').forEach(b => b.classList.toggle('on', b.dataset.align === al));
-    const st = D.styleOf(block); $$('#styles-gallery .gi').forEach(g => g.classList.toggle('on', g.dataset.style === st));
+    const st = D.styleOf(block); const cst = D.charStyleAt(r.startContainer); $$('#styles-gallery .gi').forEach(g => g.classList.toggle('on', g.dataset.cmd === 'style' ? g.dataset.style === st && !cst : g.dataset.style === cst));
+    if (!$('#styles-pane').classList.contains('hidden')) { clearTimeout(D._spT); D._spT = setTimeout(D.renderStylesPane, 120); }
     const on = $('#styles-gallery .gi.on'); if (on && !hoverStyle) { const gal = $('#styles-gallery'); const row = Math.round((on.offsetTop - gal.firstElementChild.offsetTop) / 62); if (Math.floor(gal.scrollTop / 62) !== row) gal.scrollTop = row * 62; }
     const li = D.closest(r.startContainer, 'li'); const lt = li && li.parentElement.tagName;
     $('#btn-bullets').classList.toggle('on', lt === 'UL'); $('#btn-numbering').classList.toggle('on', lt === 'OL');
@@ -55,11 +56,10 @@
 
   /* ================= menus ================= */
   const check = (on) => on;
-  function fontMenu(anchor) {
-    const cur = $('#font-name').value; const th = D.theme();
-    const items = [{ head: 'Theme fonts' }, { html: `<span class="fprev" style="font-family:${D.fontStack(D.design.headFont || th.head)}">${esc(D.design.headFont || th.head)}</span><span class="kbd">Headings</span>`, action: () => D.setFontName(D.design.headFont || th.head) }, { html: `<span class="fprev" style="font-family:${D.fontStack(D.design.bodyFont || th.body)}">${esc(D.design.bodyFont || th.body)}</span><span class="kbd">Body</span>`, action: () => D.setFontName(D.design.bodyFont || th.body) }, { head: 'All fonts' }];
-    D.FONTS.forEach(f => items.push({ checked: f === cur, html: `<span class="fprev" style="font-family:${D.fontStack(f)}">${esc(f)}</span>${f === 'Nirmala UI' || f === 'Mangal' ? '<span class="kbd">हिन्दी मराठी</span>' : ''}`, action: () => D.setFontName(f) }));
-    BTS.menu(anchor, items);
+  async function fontMenu(anchor) {
+    const cur = $('#font-name').value; D.ensureSel(); const sv = D.saveSel();
+    const f = await BTS.fontPicker(anchor, { current: cur, theme: [{ label: 'Headings', name: D.headFont() }, { label: 'Body', name: D.bodyFont() }] });
+    D.restoreSel(sv); if (f) { D.setFontName(f); $('#font-name').value = f; }
   }
   function sizeMenu(anchor) { const cur = +$('#font-size').value; BTS.menu(anchor, D.SIZES.map(s => ({ label: String(s), checked: s === cur, action: () => D.setFontSize(s) }))); }
   function caseMenu(anchor) { BTS.menu(anchor, [{ label: 'Sentence case.', action: () => D.changeCase('sentence') }, { label: 'lowercase', action: () => D.changeCase('lower') }, { label: 'UPPERCASE', action: () => D.changeCase('upper') }, { label: 'Capitalize Each Word', action: () => D.changeCase('title') }, { label: 'tOGGLE cASE', action: () => D.changeCase('toggle') }]); }
@@ -87,7 +87,12 @@
     { label: 'Add space before paragraph', icon: 'arrow-up-to-line', action: () => D.paraSpacing('before', 12) }, { label: 'Remove space after paragraph', icon: 'arrow-down-to-line', action: () => D.paraSpacing('after', 0) }, { label: 'Add space after paragraph', icon: 'arrow-down-from-line', action: () => D.paraSpacing('after', 8) }, { sep: true }, { label: 'Line spacing options…', icon: 'settings-2', action: paragraphDialog }]);
   }
   function bordersMenu(anchor) { BTS.menu(anchor, [{ label: 'Bottom border', icon: 'panel-bottom', action: () => D.paraBorder('bottom') }, { label: 'Top border', icon: 'panel-top', action: () => D.paraBorder('top') }, { label: 'Left border (bar)', icon: 'panel-left', action: () => D.paraBorder('left') }, { label: 'Right border', icon: 'panel-right', action: () => D.paraBorder('right') }, { label: 'Box border', icon: 'square', action: () => D.paraBorder('box') }, { label: 'No border', icon: 'square-dashed', action: () => D.paraBorder('none') }, { sep: true }, { label: 'Horizontal line', icon: 'minus', action: D.insertHR }]); }
-  function stylesMenu(anchor) { const cur = D.styleOf(D.blockOf((D.range() || D.ensureSel()).startContainer)); BTS.menu(anchor, [...D.STYLES.map(s => ({ label: s.name, checked: s.id === cur, action: () => D.setBlockStyle(s.id) })), { sep: true }, { label: 'Clear formatting', icon: 'remove-formatting', action: D.clearFormatting }]); }
+  function stylesMenu(anchor) {
+    const cur = D.styleOf(D.blockOf((D.range() || D.ensureSel()).startContainer));
+    BTS.menu(anchor, [{ head: 'Paragraph styles' }, ...D.allStyles().filter(s => s.type === 'p').map(s => ({ label: s.name, checked: s.id === cur, action: () => D.setBlockStyle(s.id) })), { head: 'Character styles' }, ...D.allStyles().filter(s => s.type === 'c').map(s => ({ label: s.name, checked: false, action: () => D.applyCharStyle(s.id) })), { sep: true },
+      { label: 'Styles pane', icon: 'panel-right', action: () => D.toggleStylesPane(true) }, { label: `Modify “${(D.findStyle(cur) || {}).name || 'Normal'}”…`, icon: 'pencil-ruler', action: () => D.modifyStyleDialog(cur) }, { label: 'Create a style from selection…', icon: 'square-plus', action: D.newStyleDialog }, { label: 'Clear formatting', icon: 'remove-formatting', action: D.clearFormatting }]);
+  }
+  function styleSetsMenu(anchor) { BTS.menu(anchor, [{ head: 'Style sets' }, ...D.STYLE_SETS.map(s => ({ checked: s.id === (D.design.styleSet || 'classic'), html: `<span style="font-family:${esc(D.fontStack(s.head))};font-size:14px;min-width:150px">${esc(s.name)}</span><span class="kbd" style="font-family:${esc(D.fontStack(s.body))}">${esc(s.head === s.body ? s.body : s.head + ' / ' + s.body)}</span>`, action: () => D.applyStyleSet(s.id) })), { sep: true }, { label: 'Reset styles to the style set', icon: 'rotate-ccw', disabled: !Object.keys(D.design.styleMods || {}).length, action: () => D.setDesign({ styleMods: {} }) }]); }
   async function paragraphDialog() {
     const sv = D.saveSel(); const r = D.ensureSel(); const b = D.blockOf(r.startContainer); if (!b) return;
     const cs = getComputedStyle(b); const cm = (px) => +(parseFloat(px || 0) / PX * 2.54).toFixed(2); const pt = (px) => Math.round(parseFloat(px || 0) * 0.75);
@@ -146,9 +151,9 @@
     { label: 'Border colour…', icon: 'palette', action: async () => { const c = await BTS.colorPicker(anchor, { value: col }); if (c && c[0] === '#') D.setDesign({ border: Object.assign({ style: 'solid', width: 1.5 }, D.design.border || {}, { color: c }) }); } }]);
   }
   function themeFontsMenu(anchor) {
-    const pairs = [['Calibri Light', 'Calibri'], ['Cambria', 'Calibri'], ['Georgia', 'Verdana'], ['Times New Roman', 'Times New Roman'], ['Arial', 'Arial'], ['Garamond', 'Garamond'], ['Segoe UI', 'Segoe UI'], ['Trebuchet MS', 'Trebuchet MS'], ['Tahoma', 'Verdana'], ['Nirmala UI', 'Nirmala UI']];
-    const th = D.theme(); const ch = D.design.headFont || th.head, cb = D.design.bodyFont || th.body;
-    BTS.menu(anchor, [{ head: 'Heading / body fonts' }, { label: `Theme default (${th.head} / ${th.body})`, checked: !D.design.headFont, action: () => D.setDesign({ headFont: null, bodyFont: null }) }, ...pairs.map(([h, b]) => ({ checked: !!D.design.headFont && h === ch && b === cb, html: `<span style="font-family:${D.fontStack(h)};font-size:15px">${h}</span><span class="kbd" style="font-family:${D.fontStack(b)}">${b}</span>`, action: () => D.setDesign({ headFont: h, bodyFont: b }) }))]);
+    const pairs = [['Calibri Light', 'Calibri'], ['Cambria', 'Calibri'], ['Inter', 'Source Serif 4'], ['Montserrat', 'Open Sans'], ['Playfair Display', 'Lato'], ['IBM Plex Sans', 'IBM Plex Serif'], ['Source Sans 3', 'Source Sans 3'], ['Libre Baskerville', 'Work Sans'], ['EB Garamond', 'EB Garamond'], ['Poppins', 'Lora'], ['Merriweather', 'Roboto'], ['Times New Roman', 'Times New Roman'], ['Arial', 'Arial'], ['Georgia', 'Verdana'], ['Noto Serif Devanagari', 'Mukta'], ['Nirmala UI', 'Nirmala UI']];
+    const set = D.styleSet(); const ch = D.headFont(), cb = D.bodyFont();
+    BTS.menu(anchor, [{ head: 'Heading / body fonts' }, { label: `Style set default (${set.head} / ${set.body})`, checked: !D.design.headFont, action: () => D.setDesign({ headFont: null, bodyFont: null }) }, ...pairs.map(([h, b]) => ({ checked: !!D.design.headFont && h === ch && b === cb, html: `<span style="font-family:${esc(D.fontStack(h))};font-size:15px">${h}</span><span class="kbd" style="font-family:${esc(D.fontStack(b))}">${b}</span>`, action: () => D.setDesign({ headFont: h, bodyFont: b }) })), { sep: true }, { label: 'Custom heading font…', icon: 'type', action: async () => { const f = await BTS.fontPicker(anchor, { current: ch }); if (f) D.setDesign({ headFont: f, bodyFont: cb }); } }, { label: 'Custom body font…', icon: 'type', action: async () => { const f = await BTS.fontPicker(anchor, { current: cb }); if (f) D.setDesign({ headFont: ch, bodyFont: f }); } }]);
   }
   function spacingMenu(anchor) {
     const cur = D.design.pspacing; const opts = [['Default (8 pt, 1.15)', null], ['No paragraph space', { after: 0, line: 1, before: 0 }], ['Compact', { after: 4, line: 1, before: 0 }], ['Tight', { after: 6, line: 1.15, before: 0 }], ['Open', { after: 10, line: 1.15, before: 0 }], ['Relaxed', { after: 6, line: 1.5, before: 0 }], ['Double', { after: 8, line: 2, before: 0 }]];
@@ -192,7 +197,7 @@
   function tblBordersMenu(anchor) { BTS.menu(anchor, [{ label: 'All borders', icon: 'grid-3x3', action: () => D.tableOp('borders', 'all') }, { label: 'Outside borders only', icon: 'square', action: () => D.tableOp('borders', 'outside') }, { label: 'Thick borders', icon: 'grid-2x2', action: () => D.tableOp('borders', 'thick') }, { label: 'Box around selected cells', icon: 'square-dashed', action: () => D.tableOp('borders', 'cell-box') }, { label: 'No borders', icon: 'square-dashed', action: () => D.tableOp('borders', 'none') }]); }
 
   /* ================= clipboard ================= */
-  const KEEP_CLASS = /^(title|subtitle|nospace|caption|tbl|tbl-auto|t-[a-z-]+|no-borders|img-(left|right|center|border|rounded|shadow)|page-break|toc|toc-[a-z0-9-]+|fld|eq|frac|fn-ref|textbox|tb-(left|inline)|cols|cols-[23]|dropcap|tab)$/;
+  const KEEP_CLASS = /^(cite|biblio|bib-entry|bib-title|bib-n|ieee|seq|mf|tc-ins|tc-del|tc-c\d|us-[a-z0-9]+|cs-[a-z0-9-]+|listpara|intense|tof|t-hrow|title|subtitle|nospace|caption|tbl|tbl-auto|t-[a-z-]+|no-borders|img-(left|right|center|border|rounded|shadow)|page-break|toc|toc-[a-z0-9-]+|fld|eq|frac|fn-ref|textbox|tb-(left|inline)|cols|cols-[23]|dropcap|tab)$/;
   const KEEP_STYLE = /^(color|background-color|font-weight|font-style|text-decoration|text-decoration-line|font-size|font-family|text-align|vertical-align|margin-left|margin-right|text-indent|list-style-type|width|height|border(-[a-z]+)*|padding(-[a-z]+)*|line-height|margin-top|margin-bottom|text-transform)$/;
   function cleanPasted(html, internal) {
     let s = D.sanitize(html);
@@ -213,12 +218,13 @@
   }
   D.pasteHTML = (html, internal) => {
     const clean = cleanPasted(html, internal);
-    D.change(() => { D.ensureSel(); document.execCommand('insertHTML', false, clean); $$('p:empty,li:empty', D.doc).forEach(p => p.innerHTML = '<br>'); $$('#doc td', D.doc).forEach(c => { if (!c.firstChild) c.innerHTML = '<p><br></p>'; }); });
+    D.change(() => { D.ensureSel(); const live = D.trackBefore(); document.execCommand('insertHTML', false, clean); D.trackAfter(live); $$('p:empty,li:empty', D.doc).forEach(p => p.innerHTML = '<br>'); $$('#doc td', D.doc).forEach(c => { if (!c.firstChild) c.innerHTML = '<p><br></p>'; }); });
+    if (/class="(cite|biblio|seq)/.test(clean)) { D.updateSeq(); D.updateCitations(); }
     D.renderFootnotes();
   };
   D.pasteText = (text) => {
     if (!text) return;
-    D.change(() => { D.ensureSel(); if (/\n/.test(text.trim())) document.execCommand('insertHTML', false, D.textToHTML(text.replace(/\n$/, ''))); else document.execCommand('insertText', false, text.replace(/\r?\n/g, '')); });
+    D.change(() => { D.ensureSel(); const live = D.trackBefore(); if (/\n/.test(text.trim())) document.execCommand('insertHTML', false, D.textToHTML(text.replace(/\n$/, ''))); else document.execCommand('insertText', false, text.replace(/\r?\n/g, '')); D.trackAfter(live); });
   };
   async function pasteFromClipboard(plain) {
     D.ensureSel();
@@ -238,6 +244,7 @@
   function onPaste(e) {
     const cd = e.clipboardData; if (!cd) return;
     e.preventDefault();
+    if (D.isProtected()) { BTS.toast('This document is read-only.'); return; }
     const files = [...cd.files].filter(f => f.type.startsWith('image/'));
     if (files.length) { files.forEach(async f => D.insertImageURL(await BTS.bytesToDataURL(new Uint8Array(await f.arrayBuffer()), f.type), f.name.replace(/\.[^.]+$/, ''))); return; }
     if (D._plainPaste) { D._plainPaste = false; D.pasteText(cd.getData('text/plain')); return; }
@@ -254,13 +261,14 @@
     e.clipboardData.setData('text/html', '<meta name="bts-docs-clip" content="1">' + '<div data-bts="1">' + div.innerHTML + '</div>');
     e.clipboardData.setData('text/plain', r.toString());
     e.preventDefault();
-    if (e.type === 'cut') D.change(() => { r.deleteContents(); });
+    if (e.type === 'cut') { if (D.isProtected()) return; D.change(() => { D.deleteRange(r); }); }
   }
 
   /* ================= keyboard ================= */
   function atEndOf(block) { const r = D.range(); if (!r || !r.collapsed) return false; const t = document.createRange(); t.setStart(r.startContainer, r.startOffset); t.setEnd(block, block.childNodes.length); return !t.toString().replace(/​/g, '').length && !t.cloneContents().querySelector('img'); }
   function docKey(e) {
     const mod = e.ctrlKey || e.metaKey; const k = e.key;
+    if (D.isProtected()) { if (k === 'Escape' || (mod && /^[acfgp]$/i.test(k)) || /^(Arrow|Page|Home|End|F\d)/.test(k) || (!mod && k.length > 1 && !/^(Enter|Tab|Backspace|Delete)$/.test(k))) { if (k === 'Escape' && D.focusMode) toggleFocus(false); return; } e.preventDefault(); return; }
     if (k === 'Escape') { if (D.selImg) { D.selectImage(null); } D.endPainter(); if (D.focusMode) toggleFocus(false); return; }
     if (D.selImg && (k === 'Delete' || k === 'Backspace') && !mod) { e.preventDefault(); D.imgOp('delete'); return; }
     if (k === 'Tab' && !mod && !e.altKey) {
@@ -314,7 +322,7 @@
     }
   }
   function globalKey(e) {
-    const mod = e.ctrlKey || e.metaKey; if (!mod) { if (e.key === 'F7') { e.preventDefault(); toggleSpelling(); } if (e.key === 'Escape' && D.focusMode && !document.querySelector('.modal-back')) toggleFocus(false); return; }
+    const mod = e.ctrlKey || e.metaKey; if (!mod) { if (e.key === 'F7') { e.preventDefault(); toggleSpelling(); } if (e.key === 'F9' && !document.querySelector('.modal-back') && !D.isProtected()) { e.preventDefault(); D.updateFields(); } if (e.key === 'Escape' && D.focusMode && !document.querySelector('.modal-back')) toggleFocus(false); return; }
     const lk = e.key.toLowerCase();
     if (document.querySelector('.modal-back')) return;
     if (lk === 'f' && !e.shiftKey) { e.preventDefault(); D.openFind(false); }
@@ -356,24 +364,74 @@
     const r = D.range(); const hasSel = r && !r.collapsed;
     const a = e.target.closest('a'); const img = e.target.tagName === 'IMG' ? e.target : null;
     const cell = e.target.closest('td,th'); const cmt = e.target.closest('.cmt'); const eq = e.target.closest('.eq'); const fn = e.target.closest('.fn-ref');
+    const cite = e.target.closest('.cite'); const tc = e.target.closest('ins.tc-ins, del.tc-del');
     const items = [{ label: 'Cut', icon: 'scissors', kbd: 'Ctrl+X', disabled: !hasSel && !img, action: () => document.execCommand('cut') }, { label: 'Copy', icon: 'copy', kbd: 'Ctrl+C', disabled: !hasSel && !img, action: () => document.execCommand('copy') }, { label: 'Paste', icon: 'clipboard-paste', kbd: 'Ctrl+V', action: () => pasteFromClipboard(false) }, { label: 'Paste as plain text', icon: 'clipboard-type', kbd: 'Ctrl+Shift+V', action: () => pasteFromClipboard(true) }, { sep: true }];
-    if (img) items.push({ head: 'Picture' }, { label: 'In line with text', icon: 'text-cursor', action: () => D.imgOp('wrap', 'inline') }, { label: 'Wrap text — left', icon: 'wrap-text', action: () => D.imgOp('wrap', 'left') }, { label: 'Wrap text — right', icon: 'text-wrap', action: () => D.imgOp('wrap', 'right') }, { label: 'Centered', icon: 'align-center-horizontal', action: () => D.imgOp('wrap', 'center') }, { label: 'Alt text…', icon: 'message-square-text', action: D.imgAlt }, { label: 'Reset size', icon: 'rotate-ccw', action: () => D.imgOp('reset') }, { label: 'Delete picture', icon: 'trash-2', action: () => D.imgOp('delete') }, { sep: true });
+    if (img) items.push({ head: 'Picture' }, { label: 'In line with text', icon: 'text-cursor', action: () => D.imgOp('wrap', 'inline') }, { label: 'Wrap text — left', icon: 'wrap-text', action: () => D.imgOp('wrap', 'left') }, { label: 'Wrap text — right', icon: 'text-wrap', action: () => D.imgOp('wrap', 'right') }, { label: 'Centered', icon: 'align-center-horizontal', action: () => D.imgOp('wrap', 'center') }, { label: e.target.alt ? 'Edit alt text…' : 'Add alt text…', icon: 'message-square-text', action: () => D.imgAlt(img) }, { label: 'Reset size', icon: 'rotate-ccw', action: () => D.imgOp('reset') }, { label: 'Delete picture', icon: 'trash-2', action: () => D.imgOp('delete') }, { sep: true });
     if (cell) items.push({ head: 'Table' }, { label: 'Insert row above', icon: 'between-horizontal-start', action: () => D.tableOp('row-above') }, { label: 'Insert row below', icon: 'between-horizontal-end', action: () => D.tableOp('row-below') }, { label: 'Insert column left', icon: 'between-vertical-start', action: () => D.tableOp('col-left') }, { label: 'Insert column right', icon: 'between-vertical-end', action: () => D.tableOp('col-right') }, { label: 'Merge cells', icon: 'table-cells-merge', disabled: $$('#doc .cell-sel').length < 2, action: () => D.tableOp('merge') }, { label: 'Split cell…', icon: 'table-cells-split', action: () => D.tableOp('split') }, { label: 'Delete row', icon: 'rows-3', action: () => D.tableOp('del-row') }, { label: 'Delete column', icon: 'columns-3', action: () => D.tableOp('del-col') }, { label: 'Delete table', icon: 'trash-2', action: () => D.tableOp('del-table') }, { sep: true });
     if (a) items.push({ label: 'Edit link…', icon: 'link', action: () => { D.selectNode(a, true); D.linkDialog(); } }, { label: 'Open link', icon: 'external-link', action: () => D.followLink(a) }, { label: 'Remove link', icon: 'unlink', action: () => D.change(() => D.unwrap(a)) }, { sep: true });
     else if (!img) items.push({ label: 'Link…', icon: 'link', kbd: 'Ctrl+K', action: D.linkDialog });
+    if (tc) { const sel = () => { const rr = document.createRange(); rr.selectNode(tc); const s = getSelection(); s.removeAllRanges(); s.addRange(rr); }; items.push({ head: (tc.tagName === 'INS' ? 'Inserted' : 'Deleted') + ' by ' + (tc.dataset.author || 'Unknown') }, { label: tc.tagName === 'INS' ? 'Accept insertion' : 'Accept deletion', icon: 'check', action: () => { sel(); D.tcResolve(true); } }, { label: tc.tagName === 'INS' ? 'Reject insertion' : 'Reject deletion', icon: 'x', action: () => { sel(); D.tcResolve(false); } }, { sep: true }); }
+    if (cite) items.push({ label: 'Edit citation…', icon: 'quote', action: () => D.insertCitation(cite) }, { label: 'Edit sources…', icon: 'library', action: () => D.manageSources() });
     if (eq) items.push({ label: 'Edit equation…', icon: 'sigma', action: () => D.equationDialog(eq) });
     if (fn) items.push({ label: 'Edit footnote…', icon: 'footprints', action: () => D.editFootnote(fn) });
     if (root === D.doc && !img) items.push({ label: 'New comment', icon: 'message-square-plus', action: D.addComment });
     if (cmt) items.push({ label: 'Delete comment', icon: 'message-square-x', action: () => D.deleteComment(cmt.dataset.cid) });
-    if (!img) items.push({ sep: true }, { label: 'Paragraph…', icon: 'settings-2', action: paragraphDialog }, { label: 'Clear formatting', icon: 'remove-formatting', action: D.clearFormatting });
+    if (!img) { const sid = D.styleOf(D.blockOf(e.target)); items.push({ sep: true }, { label: 'Paragraph…', icon: 'settings-2', action: paragraphDialog }, { label: `Modify style “${(D.findStyle(sid) || {}).name || 'Normal'}”…`, icon: 'pencil-ruler', action: () => D.modifyStyleDialog(sid) }, { label: 'Clear formatting', icon: 'remove-formatting', action: D.clearFormatting }); }
+    if (D.isProtected()) { BTS.menu({ x: e.clientX, y: e.clientY }, [{ label: 'Copy', icon: 'copy', kbd: 'Ctrl+C', disabled: !hasSel, action: () => document.execCommand('copy') }, { label: 'Read-only document', disabled: true }]); return; }
     BTS.menu({ x: e.clientX, y: e.clientY }, items);
   }
 
   /* ================= command router ================= */
   let prevTab = 'home';
   async function onCommand(cmd, el, ev) {
-    const z = (k, ...a) => k(...a);
+    if (D.isProtected() && !D.SAFE_CMDS.has(cmd)) { BTS.toast(D.design.protect.mode === 'final' ? 'This document is marked as final. Click “Edit anyway” to change it.' : 'This document is read-only. Stop protection to edit it.'); if (el && el.tagName === 'INPUT' && el.type === 'checkbox') el.checked = !el.checked; return; }
     switch (cmd) {
+      // styles & style sets
+      case 'char-style': hoverStyle = null; D.endPreview(); return D.applyCharStyle(el.dataset.style);
+      case 'styles-pane': return D.toggleStylesPane();
+      case 'styles-pane-check': return D.toggleStylesPane(el.checked);
+      case 'styles-close': return D.toggleStylesPane(false);
+      case 'style-row-menu': return D.styleMenu(el, el.dataset.sid);
+      case 'modify-style': { const r = D.range() || D.lastRange() || D.ensureSel(); const cs = D.charStyleAt(r.startContainer); return D.modifyStyleDialog(cs || D.styleOf(D.blockOf(r.startContainer))); }
+      case 'new-style': return D.newStyleDialog();
+      case 'style-set': return D.applyStyleSet(el.dataset.set);
+      case 'stylesets-menu': return styleSetsMenu(el);
+      case 'ssgal-up': $('#stylesets-gallery').scrollTop -= 66; return;
+      case 'ssgal-down': $('#stylesets-gallery').scrollTop += 66; return;
+      // references
+      case 'insert-citation': return D.insertCitation();
+      case 'manage-sources': return D.manageSources();
+      case 'cite-style': return D.setCiteStyle(el.value);
+      case 'bibliography-menu': return D.bibliographyMenu(el);
+      case 'insert-tof': return D.insertTOF();
+      case 'update-fields': return D.updateFields();
+      // mailings
+      case 'mm-recipients': return D.mmRecipientsMenu(el);
+      case 'mm-edit-list': return D.mmEditList();
+      case 'mm-insert-field': return D.mmFieldMenu(el);
+      case 'mm-highlight': return D.mmHighlight();
+      case 'mm-convert': return D.mmConvertPlaceholders(false);
+      case 'mm-preview': return D.mmPreview();
+      case 'mm-first': return D.mmGo('first');
+      case 'mm-prev': return D.mmGo('prev');
+      case 'mm-next': return D.mmGo('next');
+      case 'mm-last': return D.mmGo('last');
+      case 'mm-finish': return D.mmFinishMenu(el);
+      // review: tracking, protection, accessibility
+      case 'track-toggle': return D.setTrack();
+      case 'markup-menu': return D.markupMenu(el);
+      case 'tc-accept': if (ev && ev.target.closest('.caret, span')) return D.acceptMenu(el, true); return D.tcResolve(true, 'next');
+      case 'tc-reject': if (ev && ev.target.closest('.caret, span')) return D.acceptMenu(el, false); return D.tcResolve(false, 'next');
+      case 'tc-accept-all': return D.tcResolve(true, 'all');
+      case 'tc-next': return D.tcStep(1);
+      case 'tc-prev': return D.tcStep(-1);
+      case 'restrict-editing': return D.restrictDialog();
+      case 'mark-final': return D.markFinal();
+      case 'protect-edit-anyway': return D.editAnyway();
+      case 'protect-stop': return D.stopProtection();
+      case 'a11y-check': return D.toggleA11y();
+      case 'a11y-recheck': return D.renderA11y();
+      case 'a11y-close': return D.toggleA11y(false);
       case 'undo': return D.undo();
       case 'redo': return D.redo();
       // clipboard
@@ -446,7 +504,7 @@
       case 'equation': return D.equationDialog();
       case 'symbol': return D.symbolDialog();
       // design
-      case 'theme': return D.setDesign({ theme: el.dataset.th, headFont: null, bodyFont: null });
+      case 'theme': return D.setDesign({ theme: el.dataset.th, headFont: null, bodyFont: null, accent: null, dark: null });
       case 'spacing-menu': return spacingMenu(el);
       case 'theme-fonts-menu': return themeFontsMenu(el);
       case 'watermark-menu': return watermarkMenu(el);
@@ -561,6 +619,7 @@
   D.hasContent = () => !!(D.doc.textContent.replace(/​/g, '').trim() || D.doc.querySelector('img,table,hr,.toc') || D.hdr.textContent.trim() || D.ftr.textContent.trim());
   function newDocument() {
     D.page = D.defaultPage(); D.design = D.defaultDesign(); D.comments = {};
+    if (D.mm.preview) D.mmPreview(false);
     D.setContent('<p><br></p>'); D.renderComments(); BTS.setTitle('Document'); BTS.filePath = null; BTS.markClean(); D.setCaret(D.doc.firstChild, 0);
   }
   function infoHTML() {
@@ -570,13 +629,16 @@
       ${row('Title', esc(BTS.title))}${row('Location', esc(BTS.filePath || 'Not saved yet'))}
       ${row('Pages', s.pages)}${row('Words', s.words.toLocaleString('en-IN'))}${row('Characters', s.chars.toLocaleString('en-IN'))}${row('Paragraphs', s.paras)}
       ${row('Paper', `${ps.label} · ${D.page.orient}`)}${row('Margins', `T ${(D.page.m.t * 2.54).toFixed(2)} · B ${(D.page.m.b * 2.54).toFixed(2)} · L ${(D.page.m.l * 2.54).toFixed(2)} · R ${(D.page.m.r * 2.54).toFixed(2)} cm`)}
-      ${row('Comments', Object.keys(D.comments).length)}${row('Pictures', $$('img', D.doc).length)}${row('Author', esc(D.author()))}
-    </div><h2>Author name</h2><div class="field" style="max-width:320px"><input id="info-author" value="${esc(D.author())}" onchange="try{localStorage.setItem('docs-author',this.value)}catch(e){}"></div>`;
+      ${row('Comments', Object.keys(D.comments).length)}${row('Tracked changes', D.tcChanges().length)}${row('Pictures', $$('img', D.doc).length)}${row('Sources', D.sources().length)}${row('Style set', esc(D.styleSet().name))}${row('Readability', (() => { const r = D.readability(D.doc.innerText || ''); return r ? `Flesch ${r.score} · ${r.band}` : '—'; })())}${row('Protection', D.design.protect ? (D.design.protect.mode === 'final' ? 'Marked as final' : 'Read-only') : 'None')}
+    </div>`;
   }
 
   function init() {
-    D.initEditor(); D.initTables(); D.initInsert(); D.initPanes();
+    D.initEditor(); D.initStyles(); D.initTables(); D.initInsert(); D.initPanes(); D.initRefs(); D.initTrack(); D.initMailMerge(); D.initReview();
     renderStyles(); renderThemes();
+    D.afterSettings = () => { D.renderStylesGallery(); D.renderStyleSets(); D.renderStylesPane(); D.syncTrackUI(); D.applyProtection(); D.syncCiteStyle(); };
+    D.author = () => BTS.userName || BTS.props.author || 'Student';
+    D.docAuthor = () => (BTS.props.author || '').trim() || BTS.userName || 'Student';
     wireDocMouse();
     const cfg = {
       app: 'docs', name: 'BTS Docs', letter: 'D', defaultTitle: 'Document',
@@ -601,7 +663,7 @@
       exportPDF: async () => D.buildPrint(),
       afterExportPDF: () => D.afterPrint(),
       onZoom: (z) => D.setZoom(z), zoom: 100, minZoom: 20, maxZoom: 300,
-      templates: D.TEMPLATES.map(t => ({ name: t.name, thumbHTML: t.thumbHTML, apply: () => { t.apply(); D.renderComments(); D.canvas.scrollTop = 0; $('#recover-bar').classList.add('hidden'); } })),
+      templates: D.TEMPLATES.map(t => ({ name: t.name, thumbHTML: t.thumbHTML, apply: () => { BTS.resetProps(); if (D.mm.preview) D.mmPreview(false); t.apply(); D.updateFields(true); D.clearHistory(); D.renderComments(); D.canvas.scrollTop = 0; $('#recover-bar').classList.add('hidden'); } })),
       blankThumb: D.blankThumb,
       search: (text) => D.openFind(false, text),
       hasContent: D.hasContent,

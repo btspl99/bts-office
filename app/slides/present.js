@@ -94,32 +94,70 @@
 
   /* ====================================================================== */
   /*  Slide show                                                             */
+  /*  Options: { windowed, allowHidden, presenter, rehearse, order:[slide indices], useTimings, loop, kiosk }  */
+  /*  Presenter view is drawn inside the window (current slide, next slide, notes, timer, thumbnails): the   */
+  /*  main process denies window.open, so a separate audience window/display needs a main.js change.        */
   /* ====================================================================== */
   const show = FX.show = { on: false };
-  FX.start = (from = 0, opts = {}) => {
+  const fmt = (ms) => { const t = Math.max(0, Math.round(ms / 1000)); const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, s = t % 60; return (h ? h + ':' : '') + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0'); };
+  const setupOf = () => P().showSetup || {};
+  FX.start = async (from = 0, opts = {}) => {
     if (show.on) return;
     if (E.editing) E.endEdit();
+    if (E.view === 'master') { BTS.toast('Close Slide Master view first'); return; }
+    const setup = setupOf();
     const vis = P().slides.map((s, i) => i).filter(i => !P().slides[i].hidden);
-    if (!vis.length) { BTS.toast('All slides are hidden'); return; }
-    if (P().slides[from] && P().slides[from].hidden && !opts.allowHidden) from = vis.find(i => i >= from) ?? vis[vis.length - 1];
-    Object.assign(show, { on: true, idx: from, step: 0, steps: [], windowed: !!opts.windowed, ended: false, num: '', pen: null, strokes: {}, loop: !!$('#show-loop')?.checked, timings: $('#show-timings')?.checked !== false, anims: $('#show-anims')?.checked !== false, start: Date.now() });
-    const root = document.createElement('div'); root.id = 'show'; root.tabIndex = 0; if (opts.windowed) root.classList.add('windowed');
-    root.innerHTML = `<div class="show-box"><div class="show-stage"></div><canvas class="show-ink"></canvas></div><div class="show-cover"></div><div class="show-laser"></div>
-      <div class="show-bar"><button data-a="prev" title="Previous (←)">${icon('chevron-left', 18)}</button><span class="show-count"></span><button data-a="next" title="Next (→ or Space)">${icon('chevron-right', 18)}</button>
+    let order = opts.order ? opts.order.filter(i => i >= 0 && i < P().slides.length) : vis.slice();
+    if (!order.length) { BTS.toast(opts.order ? 'This custom show has no slides' : 'All slides are hidden'); return; }
+    if (!opts.order && P().slides[from] && P().slides[from].hidden) { if (opts.allowHidden) { order.push(from); order.sort((a, b) => a - b); } else from = vis.find(i => i >= from) ?? vis[vis.length - 1]; }
+    if (!order.includes(from)) from = order[0];
+    const kiosk = !!(opts.kiosk ?? setup.kiosk);
+    Object.assign(show, {
+      on: true, idx: from, step: 0, steps: [], windowed: !!opts.windowed, ended: false, num: '', pen: null, strokes: {}, order,
+      loop: kiosk || !!(opts.loop ?? $('#show-loop')?.checked), timings: !opts.rehearse && (kiosk || (opts.useTimings ?? $('#show-timings')?.checked !== false)),
+      anims: !setup.noAnims && $('#show-anims')?.checked !== false, kiosk, rehearse: !!opts.rehearse, presenter: !!(opts.presenter ?? (setup.presenter && !opts.windowed)),
+      elapsed: 0, paused: false, rec: {}, visits: [], last: performance.now(), cover: null, gridOpen: false,
+    });
+    await SL.ensureFonts(P());
+    const root = document.createElement('div'); root.id = 'show'; root.tabIndex = 0;
+    if (opts.windowed) root.classList.add('windowed'); if (show.presenter) root.classList.add('presenter'); if (kiosk) root.classList.add('kiosk');
+    const viewport = `<div class="show-viewport"><div class="show-box"><div class="show-stage"></div><canvas class="show-ink"></canvas></div><div class="show-cover"></div></div>`;
+    const tools = `<button data-a="prev" title="Previous (←)">${icon('chevron-left', 18)}</button><span class="show-count"></span><button data-a="next" title="Next (→ or Space)">${icon('chevron-right', 18)}</button>
       <span class="show-sep"></span><button data-a="laser" title="Laser pointer (L)">${icon('crosshair', 17)}</button><button data-a="pen" title="Pen (P)">${icon('pen-line', 17)}</button><button data-a="hl" title="Highlighter (H)">${icon('highlighter', 17)}</button><button data-a="erase" title="Erase all ink (E)">${icon('eraser', 17)}</button>
-      <span class="show-sep"></span><button data-a="grid" title="See all slides (G)">${icon('layout-grid', 17)}</button><button data-a="black" title="Black screen (B)">${icon('square', 17)}</button><button data-a="end" title="End show (Esc)">${icon('x', 18)}</button><span class="show-time"></span></div>
-      <div class="show-num hidden"></div>`;
+      <span class="show-sep"></span><button data-a="grid" title="See all slides (G)">${icon('layout-grid', 17)}</button><button data-a="black" title="Black screen (B)">${icon('square', 17)}</button><button data-a="white" title="White screen (W)">${icon('square-dashed', 17)}</button>`;
+    if (show.presenter) {
+      root.innerHTML = `<div class="pv-top"><div class="pv-timer" title="Time since the show started"><b class="pv-elapsed">00:00</b><button data-a="pause" title="Pause the timer">${icon('pause', 16)}</button><button data-a="reset" title="Restart the timer">${icon('rotate-ccw', 16)}</button></div><span class="pv-clock" title="Current time"></span><span class="pv-count"></span><span class="pv-flex"></span><button class="pv-btn" data-a="audience" title="Show only the slide (audience view). Press S to come back to presenter view.">${icon('monitor', 16)} Audience view</button><button class="pv-btn end" data-a="end" title="End slide show (Esc)">${icon('x', 16)} End show</button></div>
+        <div class="pv-main">${viewport}<div class="pv-tools show-bar">${tools}</div></div>
+        <div class="pv-side"><div class="pv-h">Next slide <span class="pv-nextinfo"></span></div><div class="pv-next"></div><div class="pv-h">Notes <span class="pv-flex"></span><button data-a="notes-smaller" title="Make the notes text smaller">${icon('a-arrow-down', 15)}</button><button data-a="notes-bigger" title="Make the notes text larger">${icon('a-arrow-up', 15)}</button></div><div class="pv-notes" tabindex="-1"></div></div>
+        <div class="pv-strip"></div><div class="show-laser"></div><div class="show-num hidden"></div>`;
+    } else {
+      root.innerHTML = `${viewport}<div class="show-laser"></div><div class="show-bar">${tools}<button data-a="end" title="End show (Esc)">${icon('x', 18)}</button><span class="show-time"></span></div><div class="show-num hidden"></div>`;
+    }
+    if (show.rehearse) root.insertAdjacentHTML('beforeend', `<div class="rh-bar" title="Rehearsal: the time you spend on each slide is recorded"><button data-a="next" title="Next slide">${icon('arrow-right', 16)}</button><button data-a="pause" title="Pause recording">${icon('pause', 16)}</button><b class="rh-slide">00:00</b><button data-a="repeat" title="Restart the time for this slide">${icon('rotate-ccw', 16)}</button><span class="rh-total">00:00</span></div>`);
     document.body.appendChild(root); show.root = root;
+    if (show.presenter) buildStrip();
     if (!opts.windowed && BTS.desktop) bts.fullscreen(true);
     show.onResize = () => fitShow(); addEventListener('resize', show.onResize);
     root.addEventListener('keydown', onKey); root.addEventListener('pointerdown', onPointerDown); root.addEventListener('pointermove', onPointerMove); root.addEventListener('wheel', onWheel, { passive: true });
     root.addEventListener('contextmenu', onContext);
-    root.querySelector('.show-bar').addEventListener('click', onBar);
+    root.addEventListener('click', onBar);
     root.focus();
+    requestAnimationFrame(() => fitShow());
     fitShow(); goSlide(from, { transition: false, initial: true });
-    show.clock = setInterval(() => { const t = Math.floor((Date.now() - show.start) / 1000); const el = root.querySelector('.show-time'); if (el) el.textContent = `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; }, 1000);
+    show.clock = setInterval(tick, 250); tick();
     setIdle();
   };
+  function tick() {
+    if (!show.on) return; const now = performance.now(); const dt = now - show.last; show.last = now;
+    if (!show.paused) { show.elapsed += dt; if (show.rehearse && !show.ended) { const id = P().slides[show.idx]?.id; if (id) show.rec[id] = (show.rec[id] || 0) + dt; } }
+    const r = show.root;
+    const t = r.querySelector('.show-time'); if (t) t.textContent = fmt(show.elapsed);
+    const pe = r.querySelector('.pv-elapsed'); if (pe) pe.textContent = fmt(show.elapsed);
+    const pc = r.querySelector('.pv-clock'); if (pc) pc.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const rs = r.querySelector('.rh-slide'); if (rs) rs.textContent = fmt(show.rec[P().slides[show.idx]?.id] || 0);
+    const rt = r.querySelector('.rh-total'); if (rt) rt.textContent = fmt(show.elapsed);
+    r.classList.toggle('timer-paused', !!show.paused);
+  }
   FX.end = () => {
     if (!show.on) return;
     FX.finishAll(); clearTimeout(show.autoT); clearInterval(show.clock); clearTimeout(show.idleT);
@@ -128,22 +166,53 @@
     if (!show.windowed && BTS.desktop) bts.fullscreen(false);
     if (show.idx != null && show.idx < P().slides.length && !show.ended) E.goto(show.idx);
     $('#stage')?.focus();
+    if (show.rehearse && FX.onRehearseEnd) setTimeout(() => FX.onRehearseEnd(Object.assign({}, show.rec), show.elapsed, show.order.slice()), 30);
   };
   function fitShow() {
-    const box = show.root.querySelector('.show-box'); const W = SL.W(P()), H = SL.H(P());
-    const vw = show.root.clientWidth, vh = show.root.clientHeight; const k = Math.min(vw / W, vh / H);
+    if (!show.on) return;
+    const vp = show.root.querySelector('.show-viewport'); const box = show.root.querySelector('.show-box'); const W = SL.W(P()), H = SL.H(P());
+    const vw = vp.clientWidth, vh = vp.clientHeight; if (!vw || !vh) return; const k = Math.min(vw / W, vh / H);
     show.k = k; box.style.width = W + 'px'; box.style.height = H + 'px';
     box.style.transform = `translate(${(vw - W * k) / 2}px, ${(vh - H * k) / 2}px) scale(${k})`;
     const cv = show.root.querySelector('.show-ink'); cv.width = Math.round(W * Math.min(2, k * devicePixelRatio)); cv.height = Math.round(H * Math.min(2, k * devicePixelRatio)); cv.style.width = W + 'px'; cv.style.height = H + 'px';
     redrawInk();
   }
-  function counter() { const vis = visible(); const pos = vis.indexOf(show.idx); show.root.querySelector('.show-count').textContent = `Slide ${show.idx + 1} of ${P().slides.length}` + (pos < 0 ? ' (hidden)' : ''); }
-  const visible = () => P().slides.map((s, i) => i).filter(i => !P().slides[i].hidden);
+  const pos = () => show.order.indexOf(show.idx);
+  function counter() {
+    const p = pos(); const n = show.order.length;
+    const txt = p >= 0 ? `Slide ${p + 1} of ${n}` : `Slide ${show.idx + 1} (hidden)`;
+    const c = show.root.querySelector('.show-count'); if (c) c.textContent = txt;
+    const pc = show.root.querySelector('.pv-count'); if (pc) pc.textContent = txt;
+    if (show.presenter) updatePresenter();
+  }
+  const visible = () => show.order;
+
+  /* ---------- presenter view ---------- */
+  function notesSize(d) { let v = 20; try { v = +localStorage.getItem('bts-pv-notes') || 20; } catch { } if (d) { v = Math.max(12, Math.min(48, v + d)); try { localStorage.setItem('bts-pv-notes', v); } catch { } } return v; }
+  function buildStrip() {
+    const st = show.root.querySelector('.pv-strip'); if (!st) return; st.innerHTML = '';
+    P().slides.forEach((s, i) => { const b = document.createElement('button'); b.className = 'pv-th' + (s.hidden ? ' hid' : '') + (show.order.includes(i) ? '' : ' out'); b.dataset.go = i; b.title = `Go to slide ${i + 1}`; b.appendChild(SL.thumb(s, P(), 128, i)); b.insertAdjacentHTML('beforeend', `<span>${i + 1}</span>`); st.appendChild(b); });
+  }
+  function updatePresenter() {
+    const r = show.root; const p = pos(); const nextIdx = p >= 0 && p + 1 < show.order.length ? show.order[p + 1] : (show.loop && show.order.length ? show.order[0] : null);
+    const nx = r.querySelector('.pv-next'); nx.innerHTML = '';
+    const w = Math.max(160, nx.clientWidth || 340);
+    if (show.ended) nx.innerHTML = '<div class="pv-end">End of slide show</div>';
+    else if (nextIdx != null) nx.appendChild(SL.thumb(P().slides[nextIdx], P(), w, nextIdx)); else nx.innerHTML = '<div class="pv-end">End of slide show</div>';
+    const left = show.steps.length - show.step;
+    r.querySelector('.pv-nextinfo').textContent = !show.ended && left > 0 ? `· ${left} animation${left > 1 ? 's' : ''} left on this slide` : '';
+    const notes = r.querySelector('.pv-notes'); const txt = (P().slides[show.idx]?.notes || '').trim();
+    notes.style.fontSize = notesSize() + 'px'; notes.innerHTML = txt ? BTS.esc(txt).replace(/\n/g, '<br>') : '<span class="pv-nonotes">No notes for this slide.</span>'; notes.scrollTop = 0;
+    r.querySelectorAll('.pv-th').forEach(b => b.classList.toggle('cur', +b.dataset.go === show.idx));
+    const cur = r.querySelector('.pv-th.cur'); if (cur) cur.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
 
   function goSlide(i, opts = {}) {
     FX.finishAll(); clearTimeout(show.autoT);
     const stage = show.root.querySelector('.show-stage');
     const slide = P().slides[i]; show.idx = i; show.ended = false;
+    if (!show.order.includes(i) && !show.customOrder) { /* jumped to a hidden slide: keep navigating from here */ }
+    show.visits.push(i);
     show.steps = show.anims ? FX.buildSteps(slide) : []; show.step = 0;
     const built = opts.built || !show.anims;
     const hidden = built ? new Set() : FX.hiddenAtStart(slide);
@@ -161,46 +230,53 @@
   }
   function scheduleAuto() {
     clearTimeout(show.autoT);
-    const tr = P().slides[show.idx]?.transition; if (!show.timings || !tr || tr.auto == null || tr.auto === false) return;
-    if (show.step < show.steps.length) { show.autoT = setTimeout(() => advance(), Math.max(300, tr.auto * 1000 / Math.max(1, show.steps.length + 1))); return; }
-    show.autoT = setTimeout(() => FX.next(), Math.max(0, tr.auto * 1000));
+    const tr = P().slides[show.idx]?.transition;
+    let auto = tr && tr.auto != null && tr.auto !== false ? +tr.auto : null;
+    if (show.kiosk && auto == null) auto = 5;
+    if (!show.timings || auto == null) return;
+    if (show.step < show.steps.length) { show.autoT = setTimeout(() => advance(), Math.max(300, auto * 1000 / Math.max(1, show.steps.length + 1))); return; }
+    show.autoT = setTimeout(() => FX.next(), Math.max(0, auto * 1000));
   }
   function advance() {
     const stage = show.root.querySelector('.show-slide'); const st = show.steps[show.step++];
     show.busy = true;
-    FX.playStep(stage, st).then(() => {
-      show.busy = false;
-      // chain any immediately-following auto steps ("after previous" that begins a group is folded into the step by buildSteps)
-      scheduleAuto();
-    });
+    if (show.presenter) updatePresenter();
+    FX.playStep(stage, st).then(() => { show.busy = false; scheduleAuto(); });
   }
   FX.next = () => {
     if (!show.on) return;
     if (show.busy) { FX.finishAll(); return; }
     if (show.ended) return FX.end();
     if (show.step < show.steps.length) return advance();
-    const vis = visible(); const nx = vis.find(v => v > show.idx);
-    if (nx == null) { if (show.loop) return goSlide(vis[0]); return endScreen(); }
+    const p = pos(); let nx;
+    if (p >= 0) nx = show.order[p + 1]; else nx = show.order.find(v => v > show.idx);
+    if (nx == null) { if (show.loop) return goSlide(show.order[0]); return endScreen(); }
     goSlide(nx);
   };
   FX.prev = () => {
     if (!show.on) return; FX.finishAll();
     if (show.ended) { show.ended = false; return goSlide(show.idx, { transition: false, built: true }); }
-    const vis = visible(); const pv = [...vis].reverse().find(v => v < show.idx);
+    const p = pos(); let pv;
+    if (p >= 0) pv = show.order[p - 1]; else pv = [...show.order].reverse().find(v => v < show.idx);
     if (pv == null) return;
     goSlide(pv, { transition: false, built: true });
   };
+  FX.goto = (i) => { if (show.on) goSlide(i, { transition: false }); };
   function endScreen() {
     show.ended = true; clearTimeout(show.autoT);
     const stage = show.root.querySelector('.show-stage'); const old = stage.querySelector('.show-slide');
-    const n = document.createElement('div'); n.className = 'show-end'; n.style.cssText = `width:${SL.W(P())}px;height:${SL.H(P())}px`; n.innerHTML = '<div>End of slide show. Click to exit.</div>';
+    const n = document.createElement('div'); n.className = 'show-end'; n.style.cssText = `width:${SL.W(P())}px;height:${SL.H(P())}px`; n.innerHTML = `<div>${show.rehearse ? 'End of rehearsal. Click to see your timings.' : 'End of slide show. Click to exit.'}</div>`;
     FX.transition(stage, old, n, { type: 'fade', dur: 300 });
-    show.root.querySelector('.show-count').textContent = 'End';
+    const c = show.root.querySelector('.show-count'); if (c) c.textContent = 'End';
+    const pc = show.root.querySelector('.pv-count'); if (pc) pc.textContent = 'End of show';
+    if (show.presenter) updatePresenter();
   }
 
   /* ---------- input ---------- */
   function onKey(e) {
     const k = e.key;
+    if (show.kiosk && k !== 'Escape') { e.preventDefault(); return; }
+    if (show.root.classList.contains('audience-only') && (k === 's' || k === 'S')) { show.root.classList.remove('audience-only'); requestAnimationFrame(fitShow); e.preventDefault(); return; }
     if (show.cover && !['b', 'B', 'w', 'W', '.', ','].includes(k)) { setCover(null); e.preventDefault(); return; }
     if (/^[0-9]$/.test(k)) { show.num += k; const n = show.root.querySelector('.show-num'); n.textContent = 'Go to slide ' + show.num; n.classList.remove('hidden'); e.preventDefault(); return; }
     if (k === 'Enter' && show.num) { const i = Math.max(1, Math.min(P().slides.length, +show.num)) - 1; show.num = ''; show.root.querySelector('.show-num').classList.add('hidden'); goSlide(i, { transition: false }); e.preventDefault(); return; }
@@ -212,8 +288,8 @@
         if ((k === 'p' || k === 'P') && !e.ctrlKey) { if (k === 'P' || e.shiftKey) { FX.prev(); break; } setPen(show.pen === 'pen' ? null : 'pen'); break; }
         if (e.ctrlKey && (k === 'p' || k === 'P')) { setPen('pen'); break; }
         FX.prev(); break;
-      case 'Home': goSlide(visible()[0] ?? 0, { transition: false }); break;
-      case 'End': { const v = visible(); goSlide(v[v.length - 1], { transition: false }); break; }
+      case 'Home': goSlide(show.order[0] ?? 0, { transition: false }); break;
+      case 'End': goSlide(show.order[show.order.length - 1], { transition: false }); break;
       case 'b': case 'B': case '.': setCover(show.cover === 'black' ? null : 'black'); break;
       case 'w': case 'W': case ',': setCover(show.cover === 'white' ? null : 'white'); break;
       case 'l': case 'L': setPen(show.pen === 'laser' ? null : 'laser'); break;
@@ -226,36 +302,45 @@
     }
     e.preventDefault(); e.stopPropagation();
   }
-  function onWheel(e) { if (show.gridOpen) return; clearTimeout(show.wheelT); if (show.wheelLock) return; show.wheelLock = true; show.wheelT = setTimeout(() => show.wheelLock = false, 350); if (e.deltaY > 0) FX.next(); else if (e.deltaY < 0) FX.prev(); }
+  function onWheel(e) { if (show.gridOpen || show.kiosk || e.target.closest('.pv-side, .pv-strip')) return; clearTimeout(show.wheelT); if (show.wheelLock) return; show.wheelLock = true; show.wheelT = setTimeout(() => show.wheelLock = false, 350); if (e.deltaY > 0) FX.next(); else if (e.deltaY < 0) FX.prev(); }
   function onContext(e) {
-    e.preventDefault();
+    e.preventDefault(); if (show.kiosk) return;
     BTS.menu({ x: e.clientX, y: e.clientY }, [
       { label: 'Next', icon: 'chevron-right', action: () => FX.next() }, { label: 'Previous', icon: 'chevron-left', action: () => FX.prev() },
       { label: 'See all slides', icon: 'layout-grid', action: () => openGrid() }, { sep: 1 },
       { label: 'Laser pointer', checked: show.pen === 'laser', action: () => setPen(show.pen === 'laser' ? null : 'laser') }, { label: 'Pen', checked: show.pen === 'pen', action: () => setPen(show.pen === 'pen' ? null : 'pen') }, { label: 'Highlighter', checked: show.pen === 'hl', action: () => setPen(show.pen === 'hl' ? null : 'hl') }, { label: 'Erase all ink on slide', icon: 'eraser', action: () => { show.strokes[show.idx] = []; redrawInk(); } }, { sep: 1 },
       { label: 'Black screen', icon: 'square', action: () => setCover('black') }, { label: 'White screen', icon: 'square', action: () => setCover('white') }, { sep: 1 },
+      { label: show.paused ? 'Resume timer' : 'Pause timer', icon: show.paused ? 'play' : 'pause', action: () => { show.paused = !show.paused; tick(); } }, { sep: 1 },
       { label: 'End show', icon: 'x', action: () => FX.end() },
     ]);
   }
   function onBar(e) {
+    const g = e.target.closest('[data-go]'); if (g) { e.stopPropagation(); goSlide(+g.dataset.go, { transition: false }); show.root.focus(); return; }
     const b = e.target.closest('[data-a]'); if (!b) return; e.stopPropagation();
     const a = b.dataset.a;
     if (a === 'prev') FX.prev(); if (a === 'next') FX.next(); if (a === 'end') FX.end();
     if (a === 'laser' || a === 'pen' || a === 'hl') setPen(show.pen === a ? null : a);
     if (a === 'erase') { show.strokes[show.idx] = []; redrawInk(); }
-    if (a === 'black') setCover('black'); if (a === 'grid') openGrid();
+    if (a === 'black') setCover(show.cover === 'black' ? null : 'black'); if (a === 'white') setCover(show.cover === 'white' ? null : 'white'); if (a === 'grid') openGrid();
+    if (a === 'pause') { show.paused = !show.paused; b.innerHTML = icon(show.paused ? 'play' : 'pause', 16); b.title = show.paused ? 'Resume' : 'Pause'; tick(); }
+    if (a === 'reset') { show.elapsed = 0; tick(); }
+    if (a === 'repeat') { const id = P().slides[show.idx]?.id; if (id) { show.elapsed -= show.rec[id] || 0; show.rec[id] = 0; } tick(); }
+    if (a === 'notes-bigger' || a === 'notes-smaller') { notesSize(a === 'notes-bigger' ? 2 : -2); show.root.querySelector('.pv-notes').style.fontSize = notesSize() + 'px'; }
+    if (a === 'audience') { show.root.classList.add('audience-only'); requestAnimationFrame(fitShow); BTS.toast('Audience view: press S to return to presenter view', { ms: 2200 }); }
     show.root.focus();
   }
-  function setCover(c) { show.cover = c; const cv = show.root.querySelector('.show-cover'); cv.className = 'show-cover' + (c ? ' on ' + c : ''); }
+  function setCover(c) { show.cover = c; const cv = show.root.querySelector('.show-cover'); cv.className = 'show-cover' + (c ? ' on ' + c : ''); show.root.querySelectorAll('[data-a="black"],[data-a="white"]').forEach(b => b.classList.toggle('on', b.dataset.a === c)); }
   function setPen(p) {
     show.pen = p; show.root.classList.toggle('pen-mode', p === 'pen' || p === 'hl'); show.root.classList.toggle('laser-mode', p === 'laser');
-    show.root.querySelectorAll('.show-bar [data-a]').forEach(b => b.classList.toggle('on', b.dataset.a === p));
+    show.root.querySelectorAll('.show-bar [data-a]').forEach(b => { if (['pen', 'hl', 'laser'].includes(b.dataset.a)) b.classList.toggle('on', b.dataset.a === p); });
     if (p !== 'laser') show.root.querySelector('.show-laser').style.display = 'none';
   }
   function toSlidePt(e) { const r = show.root.querySelector('.show-box').getBoundingClientRect(); return { x: (e.clientX - r.left) / show.k, y: (e.clientY - r.top) / show.k }; }
   function onPointerDown(e) {
-    if (e.target.closest('.show-bar')) return;
+    if (e.target.closest('.show-bar, .pv-top, .pv-side, .pv-strip, .rh-bar')) return;
     if (show.gridOpen) return;
+    if (show.kiosk) return;
+    if (show.presenter && !show.root.classList.contains('audience-only') && !e.target.closest('.show-viewport')) return;
     if (show.cover) { setCover(null); return; }
     if (e.button === 2) return;
     if (show.pen === 'pen' || show.pen === 'hl') {
@@ -269,9 +354,9 @@
   }
   function onPointerMove(e) {
     setIdle();
-    if (show.pen === 'laser') { const l = show.root.querySelector('.show-laser'); l.style.display = 'block'; l.style.left = e.clientX + 'px'; l.style.top = e.clientY + 'px'; }
+    if (show.pen === 'laser') { const l = show.root.querySelector('.show-laser'); const inVp = !show.presenter || e.target.closest('.show-viewport'); l.style.display = inVp ? 'block' : 'none'; l.style.left = e.clientX + 'px'; l.style.top = e.clientY + 'px'; }
   }
-  function setIdle() { show.root.classList.remove('idle'); clearTimeout(show.idleT); show.idleT = setTimeout(() => show.on && show.root.classList.add('idle'), 2500); }
+  function setIdle() { show.root.classList.remove('idle'); clearTimeout(show.idleT); show.idleT = setTimeout(() => show.on && !show.presenter && show.root.classList.add('idle'), 2500); }
   function redrawInk() {
     const cv = show.root && show.root.querySelector('.show-ink'); if (!cv) return; const ctx = cv.getContext('2d'); const k = cv.width / SL.W(P());
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); ctx.setTransform(k, 0, 0, k, 0, 0);
@@ -287,10 +372,11 @@
     g.innerHTML = `<div class="show-grid-h">All slides <span>Click a slide to go to it · Esc to return</span></div><div class="show-grid-b"></div>`;
     const b = g.querySelector('.show-grid-b');
     P().slides.forEach((s, i) => { const it = document.createElement('button'); it.className = 'sg-item' + (i === show.idx ? ' cur' : '') + (s.hidden ? ' hid' : ''); it.dataset.i = i; it.appendChild(SL.thumb(s, P(), 240, i)); it.insertAdjacentHTML('beforeend', `<span>${i + 1}</span>`); b.appendChild(it); });
-    g.addEventListener('click', e => { const it = e.target.closest('[data-i]'); if (it) { closeGrid(); goSlide(+it.dataset.i, { transition: false }); } });
+    g.addEventListener('click', e => { e.stopPropagation(); const it = e.target.closest('[data-i]'); if (it) { closeGrid(); goSlide(+it.dataset.i, { transition: false }); } });
     show.root.appendChild(g);
   }
   function closeGrid() { show.gridOpen = false; show.root.querySelector('.show-grid')?.remove(); show.root.focus(); }
+  FX._fmt = fmt;
 
   /* ====================================================================== */
   /*  Editor previews                                                        */

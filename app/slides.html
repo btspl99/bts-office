@@ -22,6 +22,11 @@
 <script src="slides/present.js" defer></script>
 <script src="slides/pptx-export.js" defer></script>
 <script src="slides/pptx-import.js" defer></script>
+<script src="slides/styles.js" defer></script>
+<script src="slides/master.js" defer></script>
+<script src="slides/review.js" defer></script>
+<script src="slides/showtools.js" defer></script>
+<script src="slides/export-extra.js" defer></script>
 <script src="slides/app.js" defer></script>
 </head>
 <body data-app="slides">
@@ -35,6 +40,8 @@
   <button data-tab="show">Slide Show</button>
   <button data-tab="review">Review</button>
   <button data-tab="view">View</button>
+  <button data-tab="export">Export</button>
+  <button data-tab="master" class="contextual hidden" id="tab-master">Slide Master</button>
   <button data-tab="format" class="contextual hidden" id="tab-format">Shape Format</button>
   <span class="spacer"></span>
   <div class="rt-right">
@@ -69,7 +76,7 @@
 
     <div class="rgroup"><div class="rgroup-body"><div class="rcol">
       <div class="rrow">
-        <input class="rinput font-input" id="font-name" list="font-list" data-cmd="font-name" title="Font" style="width:136px">
+        <button class="rb font-box" id="font-name" data-cmd="font-picker" title="Font: choose from the bundled font library (theme fonts are listed first)"><span id="font-name-label"></span><span class="fb-caret" data-icon="chevron-down"></span></button>
         <input class="rinput" id="font-size" list="size-list" data-cmd="font-size" title="Font size" style="width:52px">
         <button class="rb" data-cmd="grow-font" data-icon="a-arrow-up" title="Increase font size (Ctrl+])"></button>
         <button class="rb" data-cmd="shrink-font" data-icon="a-arrow-down" title="Decrease font size (Ctrl+[)"></button>
@@ -109,7 +116,7 @@
     <div class="rgroup"><div class="rgroup-body">
       <div class="shape-mini" id="home-shapes"></div>
       <button class="rb lg" data-cmd="arrange-menu" data-icon="layers" title="Arrange objects"><span>Arrange</span></button>
-      <button class="rb lg" data-cmd="quick-styles" data-icon="swatch-book" title="Quick styles"><span>Quick Styles</span></button>
+      <button class="rb lg" data-cmd="shape-styles" data-icon="swatch-book" title="Quick styles: shape styles in the theme colors (subtle, moderate, intense)"><span>Quick Styles</span></button>
       <div class="rcol">
         <button class="rb md color-btn" data-cmd="shape-fill" data-icon="paint-bucket" title="Shape fill">Fill<span class="swatch" id="sw-fill" style="background:#D9661A"></span></button>
         <button class="rb md" data-cmd="shape-outline" data-icon="pen-line" title="Shape outline: color, weight, dashes">Outline</button>
@@ -132,6 +139,7 @@
         <button class="rb split-caret" data-cmd="new-slide-menu" title="Choose a layout" data-icon="chevron-down"></button>
       </div>
       <button class="rb lg" data-cmd="duplicate-slide" data-icon="copy-plus" title="Duplicate the selected slides"><span>Duplicate Slide</span></button>
+      <button class="rb lg" data-cmd="reuse-slides" data-icon="folder-input" title="Reuse slides: insert slides from another PowerPoint file (.pptx)"><span>Reuse Slides</span></button>
     </div><div class="rgroup-label">Slides</div></div>
     <div class="rgroup"><div class="rgroup-body">
       <button class="rb lg" data-cmd="insert-table" data-icon="table" title="Insert a table"><span>Table</span></button>
@@ -169,10 +177,16 @@
     </div><div class="rgroup-label">Themes</div></div>
     <div class="rgroup"><div class="rgroup-body">
       <div class="variant-gal" id="variant-gal"></div>
+      <div class="rcol">
+        <button class="rb md" data-cmd="theme-colors" data-icon="palette" title="Theme colors: choose a color scheme or customize the theme colors">Colors</button>
+        <button class="rb md" data-cmd="theme-fonts" data-icon="type" title="Theme fonts: choose the heading and body font pair">Fonts</button>
+        <button class="rb md" data-cmd="customize-colors" data-icon="pipette" title="Customize theme colors: create your own color scheme">Customize</button>
+      </div>
     </div><div class="rgroup-label">Variants</div></div>
     <div class="rgroup"><div class="rgroup-body">
       <button class="rb lg" data-cmd="slide-size" data-icon="ratio" title="Slide size"><span>Slide Size</span></button>
       <button class="rb lg" data-cmd="format-bg" data-icon="paint-roller" title="Format background"><span>Format Background</span></button>
+      <button class="rb lg" data-cmd="view-master" data-icon="layout-dashboard" title="Slide master: edit the master background, text styles and layout placeholders"><span>Slide Master</span></button>
     </div><div class="rgroup-label">Customize</div></div>
   </section>
 
@@ -227,14 +241,25 @@
     <div class="rgroup"><div class="rgroup-body">
       <button class="rb lg" data-cmd="present-start" data-icon="presentation" title="From beginning (F5)"><span>From Beginning</span></button>
       <button class="rb lg" data-cmd="present-current" data-icon="play" title="From current slide (Shift+F5)"><span>From Current Slide</span></button>
+      <button class="rb lg" data-cmd="present-presenter" data-icon="monitor-speaker" title="Presenter view: current and next slide, speaker notes, timer and slide thumbnails"><span>Presenter View</span></button>
+      <div class="split-lg">
+        <button class="rb lg" data-cmd="custom-shows" data-icon="list-ordered" title="Custom slide show: create, edit and play named sets of slides"><span>Custom Show</span></button>
+        <button class="rb split-caret" data-cmd="custom-shows-menu" title="Play a custom slide show" data-icon="chevron-down"></button>
+      </div>
       <button class="rb lg" data-cmd="present-window" data-icon="app-window" title="Play the slide show inside this window"><span>Reading View</span></button>
     </div><div class="rgroup-label">Start Slide Show</div></div>
     <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="setup-show" data-icon="settings-2" title="Set up slide show: kiosk/loop, range of slides, custom show, timings and presenter view"><span>Set Up Slide Show</span></button>
       <button class="rb lg" data-cmd="hide-slide" data-icon="eye-off" title="Hide this slide during the slide show" id="b-hide"><span>Hide Slide</span></button>
+      <button class="rb lg" data-cmd="rehearse" data-icon="timer" title="Rehearse timings: practise the show and record how long you spend on each slide"><span>Rehearse Timings</span></button>
       <div class="rcol">
-        <label class="rlabel check-row"><input type="checkbox" id="show-loop" data-cmd="show-loop"> Loop until Esc</label>
-        <label class="rlabel check-row"><input type="checkbox" id="show-timings" data-cmd="show-timings" checked> Use timings</label>
-        <label class="rlabel check-row"><input type="checkbox" id="show-anims" data-cmd="show-anims" checked> Play animations</label>
+        <label class="rlabel check-row" title="Play the show again from the start until you press Esc"><input type="checkbox" id="show-loop" data-cmd="show-loop"> Loop until Esc</label>
+        <label class="rlabel check-row" title="Play with timings: advance slides automatically using the recorded timings"><input type="checkbox" id="show-timings" data-cmd="show-timings" checked> Use timings</label>
+        <label class="rlabel check-row" title="Play the entrance animations during the show"><input type="checkbox" id="show-anims" data-cmd="show-anims" checked> Play animations</label>
+      </div>
+      <div class="rcol">
+        <label class="rlabel check-row" title="Always use presenter view when the slide show starts"><input type="checkbox" id="show-presenter" data-cmd="show-presenter"> Always use presenter view</label>
+        <button class="rb md" data-cmd="clear-timings" data-icon="timer-off" title="Clear the recorded timings from all slides">Clear Timings</button>
       </div>
     </div><div class="rgroup-label">Set Up</div></div>
   </section>
@@ -246,11 +271,15 @@
       <button class="rb lg" data-cmd="word-count" data-icon="letter-text" title="Count slides, words and characters"><span>Word Count</span></button>
     </div><div class="rgroup-label">Proofing</div></div>
     <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="a11y-pane" data-icon="accessibility" title="Check accessibility: missing alt text and slide titles, low-contrast text, reading order" id="b-a11y"><span>Check Accessibility</span></button>
+      <button class="rb lg" data-cmd="alt-text" data-icon="image-play" title="Alt text: describe the selected picture, icon or chart for people who use screen readers"><span>Alt Text</span></button>
+    </div><div class="rgroup-label">Accessibility</div></div>
+    <div class="rgroup"><div class="rgroup-body">
       <button class="rb lg" data-cmd="new-comment" data-icon="message-square-plus" title="New comment"><span>New Comment</span></button>
       <div class="rcol">
         <button class="rb md" data-cmd="prev-comment" data-icon="chevron-left" title="Previous comment">Previous</button>
         <button class="rb md" data-cmd="next-comment" data-icon="chevron-right" title="Next comment">Next</button>
-        <button class="rb md" data-cmd="delete-comments" data-icon="trash-2" title="Delete all comments on this slide">Delete</button>
+        <button class="rb md" data-cmd="delete-comments" data-icon="trash-2" title="Delete comments: this slide or the whole presentation">Delete</button>
       </div>
       <button class="rb lg" data-cmd="comments-pane" data-icon="message-square" title="Show comments" id="b-comments"><span>Show Comments</span></button>
     </div><div class="rgroup-label">Comments</div></div>
@@ -264,6 +293,9 @@
       <button class="rb lg" data-cmd="view-notes" data-icon="notebook-pen" title="Notes page" id="b-v-notes"><span>Notes Page</span></button>
       <button class="rb lg" data-cmd="present-window" data-icon="book-open" title="Reading view"><span>Reading View</span></button>
     </div><div class="rgroup-label">Presentation Views</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="view-master" data-icon="layout-dashboard" title="Slide master view: edit the master and layouts used by all slides" id="b-v-master"><span>Slide Master</span></button>
+    </div><div class="rgroup-label">Master Views</div></div>
     <div class="rgroup"><div class="rgroup-body">
       <div class="rcol">
         <label class="rlabel check-row"><input type="checkbox" id="v-ruler" data-cmd="toggle-ruler"> Ruler</label>
@@ -284,6 +316,58 @@
     </div><div class="rgroup-label">Appearance</div></div>
   </section>
 
+  <!-- ================= EXPORT ================= -->
+  <section class="ribbon-panel" data-panel="export">
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="export-pdf" data-icon="file-down" title="Export the slides as a PDF document"><span>PDF</span></button>
+      <button class="rb lg" data-cmd="export-handouts" data-icon="layout-panel-top" title="Handouts PDF: 1, 2, 3, 4, 6 or 9 slides per page, with lines for notes"><span>Handouts</span></button>
+      <button class="rb lg" data-cmd="export-notes" data-icon="notebook-text" title="Notes pages PDF: each slide with its speaker notes"><span>Notes Pages</span></button>
+    </div><div class="rgroup-label">PDF</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="export-png-current" data-icon="image-down" title="Save the current slide as a PNG picture"><span>Slide as Picture</span></button>
+      <button class="rb lg" data-cmd="export-png-all" data-icon="images" title="Save all slides as PNG pictures in one .zip file"><span>All Slides as Pictures</span></button>
+    </div><div class="rgroup-label">Pictures</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="saveas" data-icon="presentation" title="Save a copy as a PowerPoint presentation (.pptx)"><span>PowerPoint</span></button>
+      <button class="rb lg" data-cmd="export-outline" data-icon="file-text" title="Export the slide text and notes as a plain-text outline (.txt)"><span>Outline</span></button>
+    </div><div class="rgroup-label">Files</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="doc-props" data-icon="info" title="Document properties: title, subject, author, company, tags, category and comments"><span>Properties</span></button>
+    </div><div class="rgroup-label">Info</div></div>
+  </section>
+
+  <!-- ================= SLIDE MASTER (contextual, View ▸ Slide Master) ================= -->
+  <section class="ribbon-panel" data-panel="master">
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="master-reset-layout" data-icon="rotate-ccw" title="Reset the selected layout's placeholders to their default positions"><span>Reset Layout</span></button>
+      <button class="rb lg" data-cmd="master-reset-all" data-icon="eraser" title="Reset the whole slide master (background, text styles and all layouts)"><span>Reset Master</span></button>
+    </div><div class="rgroup-label">Edit Master</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <div class="rcol">
+        <button class="rb md" data-cmd="master-title-font" data-icon="heading" title="Master title font (used by the title placeholders of all layouts)">Title Font</button>
+        <button class="rb md" data-cmd="master-body-font" data-icon="type" title="Master body font (used by the text placeholders of all layouts)">Body Font</button>
+      </div>
+      <div class="rcol">
+        <button class="rb md" data-cmd="master-title-color" data-icon="baseline" title="Master title color">Title Color</button>
+        <button class="rb md" data-cmd="master-body-color" data-icon="baseline" title="Master body text color">Body Color</button>
+      </div>
+      <div class="rcol">
+        <label class="rlabel" title="Master title size">Title <input class="rinput num" type="number" min="8" max="120" step="1" id="master-title-size" data-cmd="master-title-size"> pt</label>
+        <label class="rlabel" title="Master body text size">Body <input class="rinput num" type="number" min="8" max="96" step="1" id="master-body-size" data-cmd="master-body-size"> pt</label>
+      </div>
+    </div><div class="rgroup-label">Master Text Styles</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <div class="rcol">
+        <button class="rb md" data-cmd="theme-colors" data-icon="palette" title="Theme colors">Colors</button>
+        <button class="rb md" data-cmd="theme-fonts" data-icon="type" title="Theme fonts">Fonts</button>
+        <button class="rb md" data-cmd="format-bg" data-icon="paint-roller" title="Background of the master or the selected layout">Background</button>
+      </div>
+    </div><div class="rgroup-label">Background &amp; Theme</div></div>
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="master-close" data-icon="circle-x" title="Close master view and apply the changes to all slides"><span>Close Master View</span></button>
+    </div><div class="rgroup-label">Close</div></div>
+  </section>
+
   <!-- ================= FORMAT (contextual) ================= -->
   <section class="ribbon-panel" data-panel="format">
     <div class="rgroup" data-for="shape text"><div class="rgroup-body">
@@ -291,6 +375,7 @@
     </div><div class="rgroup-label">Insert Shapes</div></div>
     <div class="rgroup" data-for="shape text icon"><div class="rgroup-body">
       <div class="style-gal" id="style-gal"></div>
+      <button class="rb gal-more" data-cmd="shape-styles" data-icon="chevron-down" title="More shape styles"></button>
       <div class="rcol">
         <button class="rb md color-btn" data-cmd="shape-fill" data-icon="paint-bucket" title="Shape fill">Fill<span class="swatch" id="sw-fill2" style="background:#D9661A"></span></button>
         <button class="rb md" data-cmd="shape-outline" data-icon="pen-line" title="Shape outline">Outline</button>
@@ -312,6 +397,21 @@
         <button class="rb md" data-cmd="pic-reset" data-icon="rotate-ccw" title="Reset crop and size">Reset</button>
       </div>
     </div><div class="rgroup-label">Picture</div></div>
+    <div class="rgroup" data-for="image icon chart shape table"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="alt-text" data-icon="image-play" title="Alt text: describe this object for screen readers, or mark it as decorative"><span>Alt Text</span></button>
+    </div><div class="rgroup-label">Accessibility</div></div>
+    <div class="rgroup" data-for="table"><div class="rgroup-body">
+      <div class="rcol">
+        <label class="rlabel check-row"><input type="checkbox" id="tbl-header" data-cmd="tbl-header"> Header Row</label>
+        <label class="rlabel check-row"><input type="checkbox" id="tbl-lastrow" data-cmd="tbl-lastrow"> Total Row</label>
+        <label class="rlabel check-row"><input type="checkbox" id="tbl-banded" data-cmd="tbl-banded"> Banded Rows</label>
+      </div>
+      <div class="rcol">
+        <label class="rlabel check-row"><input type="checkbox" id="tbl-firstcol" data-cmd="tbl-firstcol"> First Column</label>
+      </div>
+      <div class="tstyle-gal" id="tstyle-gal"></div>
+      <button class="rb gal-more" data-cmd="table-styles" data-icon="chevron-down" title="More table styles (Light, Medium, Grid, Dark, Minimal in every theme color)"></button>
+    </div><div class="rgroup-label">Table Styles</div></div>
     <div class="rgroup" data-for="table"><div class="rgroup-body">
       <div class="rcol">
         <button class="rb md" data-cmd="tbl-row-above" data-icon="between-horizontal-start" title="Insert row above">Row Above</button>
@@ -324,8 +424,6 @@
         <button class="rb md" data-cmd="tbl-del-col" data-icon="trash-2" title="Delete column">Delete Col</button>
       </div>
       <div class="rcol">
-        <label class="rlabel check-row"><input type="checkbox" id="tbl-header" data-cmd="tbl-header"> Header Row</label>
-        <label class="rlabel check-row"><input type="checkbox" id="tbl-banded" data-cmd="tbl-banded"> Banded Rows</label>
         <button class="rb md" data-cmd="tbl-color" data-icon="palette" title="Table style color">Style Color</button>
       </div>
       <button class="rb lg" data-cmd="tbl-cell-fill" data-icon="paint-bucket" title="Shade the current cell"><span>Cell Shading</span></button>
@@ -354,7 +452,6 @@
   </section>
 </div>
 
-<datalist id="font-list"></datalist>
 <datalist id="size-list"></datalist>
 
 <main id="workspace">
