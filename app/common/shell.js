@@ -293,10 +293,13 @@
         <div style="display:flex;gap:16px;align-items:center;margin-bottom:18px">${appBadge(cfg.app, 54)}<div><div style="font-size:20px;font-weight:700">${esc(cfg.name)}</div><div style="color:var(--ink-3)">Version ${esc(info.version)}</div></div></div>
         <p style="max-width:620px;line-height:1.6">BTS Office is a free, open-source office suite for students — documents, spreadsheets, presentations and PDFs, with support for the file formats your school and college already use (.docx, .xlsx, .pptx, .pdf).</p>
         <p style="max-width:620px;line-height:1.6">Released under the GNU General Public License v3. You can use, share and improve it freely. Built with Electron, HyperFormula, ExcelJS, SheetJS, docx, Mammoth, PptxGenJS, PDF.js, Chart.js and Lucide icons.</p>
+        <h2>Updates</h2>
+        ${window.BTSUpdates ? BTSUpdates.panelHTML() : ''}
         <h2>Appearance</h2>
         <div class="bs-actions" style="flex-direction:row">${['light', 'dark', 'system'].map(t => `<button class="btn ${BTS.theme === t ? 'primary' : ''}" data-theme="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}</div>
         <h2>Keyboard shortcuts</h2>
         <div style="display:grid;grid-template-columns:160px 1fr;gap:6px 14px;max-width:520px;color:var(--ink-2)">${[['Ctrl+N', 'New window'], ['Ctrl+O', 'Open'], ['Ctrl+S', 'Save'], ['Ctrl+Shift+S', 'Save a copy'], ['Ctrl+P', 'Print'], ['Ctrl+Z / Ctrl+Y', 'Undo / Redo'], ['Ctrl+F', 'Find'], ['Ctrl+H', 'Replace'], ['Ctrl+F1', 'Show or hide the ribbon'], ...(cfg.shortcuts || [])].map(([k, v]) => `<b style="color:var(--ink)">${k}</b><span>${v}</span>`).join('')}</div>`;
+      if (window.BTSUpdates) BTSUpdates.wirePanel(main);
     } else if (view === 'info') {
       main.innerHTML = `<h1>Info</h1>${cfg.infoHTML ? cfg.infoHTML() : ''}`;
     }

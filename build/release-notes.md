@@ -1,0 +1,3 @@
+- Automatic updates: BTS Office downloads new versions in the background and installs them when you close it.
+- New Updates section in File > Options & about, with Check for updates.
+- The start screen shows your version and update status.

@@ -1,0 +1,33 @@
+name: Bug report
+description: Something in BTS Office doesn't work as expected
+labels: [bug]
+body:
+  - type: dropdown
+    id: app
+    attributes:
+      label: Which app?
+      options: [BTS Docs, BTS Sheets, BTS Slides, BTS PDF, Start screen / installer / updates]
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: File > Options & about shows it
+      placeholder: "1.1.0"
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes:
+      label: What did you do, and what happened?
+      description: Steps to reproduce, what you expected, and what you saw instead. Screenshots help.
+    validations: { required: true }
+  - type: textarea
+    id: file
+    attributes:
+      label: Sample file
+      description: If a file opens or saves wrongly, attach it (remove anything private first).
+  - type: input
+    id: os
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 23H2

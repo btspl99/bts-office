@@ -3,6 +3,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu, nativeTheme, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const updater = require('./updater');
 
 const APPS = {
   start:  { page: 'index.html',  title: 'BTS Office',  color: '#172033' },
@@ -116,6 +117,7 @@ app.whenReady().then(() => {
   const files = [...pendingFiles, ...fileArgs(process.argv)];
   if (files.length) files.forEach(f => openPath(f));
   else createWindow(appArg(process.argv) || 'start');
+  updater.init({ getSettings: () => readJSON(settingsPath(), {}), getWindows: () => [...windows.values()] });
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow('start'); });
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
@@ -205,7 +207,7 @@ ipcMain.on('bts:fullscreen', (e, on) => { const w = winOf(e); if (w) w.setFullSc
 ipcMain.on('bts:close-on-open', (e, v) => { const r = recOf(e); if (r) r.closeOnOpen = !!v; });
 
 // ---------- developer test hook: BTS_SHOT=out.png [BTS_EVAL=script.js] [BTS_WAIT=ms] electron . --app=docs ----------
-if (process.env.BTS_SHOT) {
+if (process.env.BTS_SHOT && (!app.isPackaged || process.env.BTS_ALLOW_TEST_HOOK === '1')) {
   app.whenReady().then(() => setTimeout(async () => {
     const w = BrowserWindow.getAllWindows()[0];
     try {

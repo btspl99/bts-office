@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Check JavaScript syntax
+        run: |
+          for f in main.js preload.js updater.js tools/*.js $(find app -name '*.js' -not -path 'app/vendor/*'); do node --check "$f" || exit 1; done
+      - name: Check release notes match package version
+        run: node tools/assemble-site.js notes
+
+  build-windows:
+    if: github.event_name == 'push'
+    needs: check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run notes
+      - run: npm run dist:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bts-office-windows-${{ github.sha }}
+          path: dist/BTS-Office-Setup-*.exe
+          retention-days: 14

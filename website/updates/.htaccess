@@ -1,0 +1,24 @@
+# BTS Office update feed — read by every installed copy of the app.
+Options -Indexes
+RewriteEngine Off
+
+<IfModule mod_mime.c>
+  AddType text/yaml .yml
+  AddType application/octet-stream .exe .blockmap .AppImage
+</IfModule>
+
+<IfModule mod_headers.c>
+  # The feed must never be cached, or PCs won't see a new release.
+  <FilesMatch "\.yml$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Expires "0"
+  </FilesMatch>
+  # Installers and block maps never change once published (the version is in the name).
+  <FilesMatch "\.(exe|blockmap|AppImage)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+    Header set Content-Disposition "attachment"
+  </FilesMatch>
+</IfModule>
+
+# Byte-range requests (Accept-Ranges) are on by default in Apache; they let the
+# app download only the parts of a new version that changed.

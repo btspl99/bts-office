@@ -1,0 +1,14 @@
+name: Feature request
+description: Suggest something that would help students
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What are you trying to do?
+      description: Describe the task (for example, "make a bibliography for my report"), not just the button you want.
+    validations: { required: true }
+  - type: textarea
+    id: idea
+    attributes:
+      label: How should it work?

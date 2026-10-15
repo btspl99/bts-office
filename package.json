@@ -1,7 +1,7 @@
 {
   "name": "bts-office",
   "productName": "BTS Office",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Free, open-source office suite for students: documents, spreadsheets, presentations and PDF.",
   "main": "main.js",
   "license": "GPL-3.0-or-later",
@@ -9,20 +9,28 @@
     "name": "Bhoomiputra Tech Solutions Pvt Ltd",
     "email": "btspl99@gmail.com"
   },
-  "homepage": "https://github.com/bts-office/bts-office",
+  "homepage": "https://office.btspl.tech",
   "scripts": {
     "start": "electron .",
     "icons": "node tools/build-icons.js",
-    "dist:win": "electron-builder --win nsis --x64",
-    "dist:linux": "electron-builder --linux AppImage deb"
+    "dist:win": "electron-builder --win nsis --x64 --publish never",
+    "dist:linux": "electron-builder --linux AppImage deb --publish never",
+    "release": "bash tools/release.sh",
+    "notes": "node tools/assemble-site.js notes",
+    "assemble": "node tools/assemble-site.js",
+    "deploy": "node tools/deploy-ftp.js"
   },
-  "dependencies": {},
+  "dependencies": {
+    "electron-log": "^5.4.4",
+    "electron-updater": "^6.8.9"
+  },
   "devDependencies": {
-    "electron": "^33.4.11",
-    "electron-builder": "^25.1.8",
     "@fontsource/figtree": "^5.3.0",
+    "basic-ftp": "^5.3.1",
     "chart.js": "^4.5.1",
     "docx": "^9.11.0",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
     "exceljs": "^4.4.0",
     "file-saver": "^2.0.5",
     "hyperformula": "^2.7.1",
@@ -45,10 +53,10 @@
     "files": [
       "main.js",
       "preload.js",
+      "updater.js",
       "app/**/*",
       "build/icon.png",
-      "LICENSE",
-      "!node_modules/**/*"
+      "LICENSE"
     ],
     "asar": true,
     "fileAssociations": [
@@ -145,7 +153,8 @@
       "include": "build/installer.nsh",
       "artifactName": "BTS-Office-Setup-${version}.${ext}",
       "uninstallDisplayName": "BTS Office",
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "differentialPackage": true
     },
     "linux": {
       "target": [
@@ -154,7 +163,8 @@
       ],
       "icon": "build/icon.png",
       "category": "Office",
-      "maintainer": "btspl99@gmail.com"
+      "maintainer": "btspl99@gmail.com",
+      "artifactName": "BTS-Office-${version}.${ext}"
     },
     "extraResources": [
       {
@@ -165,10 +175,22 @@
         ]
       }
     ],
-    "publish": null
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://office.btspl.tech/updates/",
+        "channel": "latest"
+      }
+    ],
+    "releaseInfo": {
+      "releaseNotesFile": "build/release-notes.md"
+    }
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/bts-office/bts-office.git"
+    "url": "https://github.com/YOUR-GITHUB-ACCOUNT/bts-office.git"
+  },
+  "bugs": {
+    "url": "https://github.com/YOUR-GITHUB-ACCOUNT/bts-office/issues"
   }
 }

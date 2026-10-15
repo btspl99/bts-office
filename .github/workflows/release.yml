@@ -1,0 +1,68 @@
+name: Release
+
+# Push a tag like v1.2.0 to publish:
+#   1. builds the Windows installer
+#   2. creates a GitHub Release with the installer attached
+#   3. uploads the website + update feed to office.btspl.tech (if FTP secrets are set)
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      - name: Check the tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          v=$(node -p "require('./package.json').version")
+          [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "Tag ${GITHUB_REF_NAME} does not match package.json version $v"; exit 1; }
+
+      - run: npm run notes
+      - name: Build installer
+        run: npm run dist:win
+        env:
+          # Optional code signing: add these secrets and remove "signAndEditExecutable": false from package.json
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+      - run: npm run assemble
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: build/release-notes.md
+          files: |
+            dist/BTS-Office-Setup-*.exe
+            dist/BTS-Office-Setup-*.exe.blockmap
+            dist/latest.yml
+
+      - name: Publish to office.btspl.tech
+        shell: bash
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_DIR: ${{ secrets.FTP_DIR }}
+          FTP_SECURE: ${{ secrets.FTP_SECURE }}
+        run: |
+          if [ -z "$FTP_HOST" ]; then echo "FTP secrets not set; skipping upload. Download dist/site from the artifact and upload it by hand."; exit 0; fi
+          node tools/deploy-ftp.js
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site-${{ github.ref_name }}
+          path: dist/site
+          retention-days: 30

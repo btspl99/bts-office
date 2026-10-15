@@ -61,3 +61,13 @@ then saves a screenshot. Renderer console errors are printed. Example:
 Then look at the PNG with the Read tool. In tests, call internal functions / BTS.cfg.save(ext) directly
 (native dialogs can't be clicked). You can verify generated files by writing them via `bts.writeFile('/tmp/...', data)`
 then inspecting them with Python (python-docx, openpyxl, python-pptx may be pip-installable with --break-system-packages).
+
+## Automatic updates
+
+`updater.js` (main process) uses electron-updater with a generic feed at `https://office.btspl.tech/updates/`.
+It checks 8 s after launch and every 4 h, downloads in the background, verifies SHA-512, and installs silently on quit
+(or immediately via "Restart now", which first refuses if any window has unsaved changes). State is broadcast to every
+window over `bts:update-state`. `app/common/updates.js` (loaded by every page) shows the "Update ready" card and the
+Updates panel on File ▸ Options & about. Overrides: env `BTS_UPDATE_URL`, or `updateUrl` / `autoUpdate` in
+`%APPDATA%\BTS Office\settings.json`. Dev runs (`npm start`) don't check unless `BTS_UPDATE_URL` is set (they use
+`dev-app-update.yml`). See docs/RELEASING.md for publishing and docs/HOSTING.md for the server.

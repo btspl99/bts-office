@@ -1,0 +1,4 @@
+provider: generic
+url: https://office.btspl.tech/updates/
+channel: latest
+updaterCacheDirName: bts-office-updater-dev

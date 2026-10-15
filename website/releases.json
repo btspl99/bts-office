@@ -1,0 +1,20 @@
+[
+  {
+    "version": "1.1.0",
+    "date": "2026-10-15",
+    "notes": [
+      "Automatic updates: BTS Office downloads new versions in the background and installs them when you close it.",
+      "New Updates section in File > Options & about, with Check for updates.",
+      "The start screen shows your version and update status."
+    ]
+  },
+  {
+    "version": "1.0.0",
+    "date": "2026-10-14",
+    "notes": [
+      "First release: BTS Docs, BTS Sheets, BTS Slides and BTS PDF.",
+      "Opens and saves .docx, .xlsx and .pptx files; exports PDF from every app.",
+      "Student templates: resume, assignment cover, marks sheet, attendance tracker, class presentation and more."
+    ]
+  }
+]

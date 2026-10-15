@@ -25,5 +25,10 @@ contextBridge.exposeInMainWorld('bts', {
   closeNow: () => ipcRenderer.send('bts:close-now'),
   fullscreen: (on) => ipcRenderer.send('bts:fullscreen', on),
   closeOnOpen: (v) => ipcRenderer.send('bts:close-on-open', v),
+  updateState: () => ipcRenderer.invoke('bts:update-state'),
+  checkForUpdates: () => ipcRenderer.invoke('bts:update-check'),
+  installUpdate: () => ipcRenderer.invoke('bts:update-install'),
+  dismissUpdate: () => ipcRenderer.invoke('bts:update-dismiss'),
+  onUpdateState: (cb) => ipcRenderer.on('bts:update-state', (e, s) => cb(s)),
   onSaveThenClose: (cb) => ipcRenderer.on('bts:save-then-close', () => cb()),
 });
