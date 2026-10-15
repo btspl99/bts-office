@@ -14,7 +14,7 @@
   $$('[data-github]').forEach(a => { a.href = S.github; a.target = '_blank'; a.rel = 'noopener'; });
   $$('[data-github-issues]').forEach(a => { a.href = S.github + '/issues'; a.target = '_blank'; a.rel = 'noopener'; });
   $$('[data-mail]').forEach(a => { a.href = 'mailto:' + S.supportEmail; });
-  $$('[data-org]').forEach(e => { e.textContent = S.organisation || e.textContent; });
+  $$('[data-org]').forEach(e => { e.textContent = S.organisation || e.textContent; if (e.tagName === 'A' && S.organisationUrl) e.href = S.organisationUrl; });
 
   // sticky header border
   const top = document.querySelector('.top');

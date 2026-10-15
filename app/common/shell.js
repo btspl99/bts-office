@@ -292,6 +292,7 @@
       main.innerHTML = `<h1>About BTS Office</h1>
         <div style="display:flex;gap:16px;align-items:center;margin-bottom:18px">${appBadge(cfg.app, 54)}<div><div style="font-size:20px;font-weight:700">${esc(cfg.name)}</div><div style="color:var(--ink-3)">Version ${esc(info.version)}</div></div></div>
         <p style="max-width:620px;line-height:1.6">BTS Office is a free, open-source office suite for students — documents, spreadsheets, presentations and PDFs, with support for the file formats your school and college already use (.docx, .xlsx, .pptx, .pdf).</p>
+        <div style="display:grid;grid-template-columns:110px 1fr;gap:6px 14px;max-width:620px;margin:0 0 16px;padding:12px 16px;border:1px solid var(--line);border-radius:10px;background:var(--surface)"><span style="color:var(--ink-3)">Developer</span><b>Bhoomiputra Tech Solutions Private Limited</b><span style="color:var(--ink-3)">Website</span><a href="#" data-ext="https://btspl.tech" style="color:var(--accent);font-weight:600">btspl.tech</a></div>
         <p style="max-width:620px;line-height:1.6">Released under the GNU General Public License v3. You can use, share and improve it freely. Built with Electron, HyperFormula, ExcelJS, SheetJS, docx, Mammoth, PptxGenJS, PDF.js, Chart.js and Lucide icons.</p>
         <h2>Updates</h2>
         ${window.BTSUpdates ? BTSUpdates.panelHTML() : ''}
@@ -349,6 +350,7 @@
       const ap = e.target.closest('[data-app]'); if (ap) { closeBackstage(); BTS.newWindow(ap.dataset.app); return; }
       const f = e.target.closest('[data-fmt]'); if (f) { if (f.hasAttribute('data-pdf')) BTS.exportPDF(); else BTS.saveAs(f.dataset.fmt); return; }
       const r = e.target.closest('[data-path]'); if (r) { closeBackstage(); const file = await bts.readFile(r.dataset.path); if (extOf(file.name || '') && appOfExt(extOf(file.name)) === BTS.cfg.app && !BTS.dirty && !BTS.hasContent?.()) loadFile(file); else bts.openApp(null, r.dataset.path); return; }
+      const ex = e.target.closest('[data-ext]'); if (ex) { e.preventDefault(); if (desktop) bts.openExternal(ex.dataset.ext); else window.open(ex.dataset.ext); return; }
       const th = e.target.closest('[data-theme]'); if (th) { BTS.setTheme(th.dataset.theme); renderBackstage('about'); }
     });
   }

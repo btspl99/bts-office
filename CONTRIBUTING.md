@@ -7,7 +7,7 @@ Open an issue using the **Bug report** form. Include the app, the version (File 
 
 ## Working on the code
 ```bash
-git clone https://github.com/YOUR-GITHUB-ACCOUNT/bts-office.git
+git clone https://github.com/btspl99/bts-office.git
 cd bts-office
 npm install
 npm start                # opens the start screen

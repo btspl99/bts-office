@@ -4,8 +4,9 @@
  * can't be read (for example when you open index.html straight from your computer). */
 window.BTS_SITE = {
   // Change this once the GitHub repository exists.
-  github: 'https://github.com/YOUR-GITHUB-ACCOUNT/bts-office',
+  github: 'https://github.com/btspl99/bts-office',
   supportEmail: 'btspl99@gmail.com',
-  organisation: 'Bhoomiputra Tech Solutions Pvt Ltd',
-  fallback: { version: '1.1.0', file: 'BTS-Office-Setup-1.1.0.exe', size: 85005066, date: '2026-10-15' },
+  organisation: 'Bhoomiputra Tech Solutions Private Limited',
+  organisationUrl: 'https://btspl.tech',
+  fallback: { version: '1.1.0', file: 'BTS-Office-Setup-1.1.0.exe', size: 85005710, date: '2026-10-15' },
 };

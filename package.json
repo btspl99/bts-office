@@ -6,8 +6,9 @@
   "main": "main.js",
   "license": "GPL-3.0-or-later",
   "author": {
-    "name": "Bhoomiputra Tech Solutions Pvt Ltd",
-    "email": "btspl99@gmail.com"
+    "name": "Bhoomiputra Tech Solutions Private Limited",
+    "email": "btspl99@gmail.com",
+    "url": "https://btspl.tech"
   },
   "homepage": "https://office.btspl.tech",
   "scripts": {
@@ -45,7 +46,7 @@
   "build": {
     "appId": "in.btspl.office",
     "productName": "BTS Office",
-    "copyright": "Copyright \u00a9 2026 Bhoomiputra Tech Solutions Pvt Ltd \u2014 GPL-3.0",
+    "copyright": "Copyright \u00a9 2026 Bhoomiputra Tech Solutions Private Limited. Released under GPL-3.0.",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -188,9 +189,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/YOUR-GITHUB-ACCOUNT/bts-office.git"
+    "url": "https://github.com/btspl99/bts-office.git"
   },
   "bugs": {
-    "url": "https://github.com/YOUR-GITHUB-ACCOUNT/bts-office/issues"
+    "url": "https://github.com/btspl99/bts-office/issues"
   }
 }

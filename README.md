@@ -5,7 +5,7 @@
 
 <p align="center">
 <a href="../../actions/workflows/ci.yml"><img src="../../actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-<a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/YOUR-GITHUB-ACCOUNT/bts-office?label=release" alt="Latest release"></a>
+<a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/btspl99/bts-office?label=release" alt="Latest release"></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="GPL-3.0"></a>
 </p>
 
@@ -69,4 +69,6 @@ Start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before changing code.
 
 GPL-3.0-or-later. See [LICENSE](LICENSE). Third-party components keep their own licenses: Electron (MIT), electron-updater (MIT), HyperFormula (GPL-3.0), ExcelJS (MIT), SheetJS Community (Apache-2.0), docx (MIT), Mammoth (BSD-2), PptxGenJS (MIT), JSZip (MIT/GPL-3.0), PDF.js (Apache-2.0), pdf-lib (MIT), Chart.js (MIT), Lucide icons (ISC), and Figtree and the bundled slide fonts (SIL OFL 1.1).
 
-BTS Office is an independent project by Bhoomiputra Tech Solutions Pvt Ltd. It is not affiliated with Microsoft or The Document Foundation; product names belong to their owners.
+**Developer:** Bhoomiputra Tech Solutions Private Limited ([btspl.tech](https://btspl.tech)).
+
+BTS Office is an independent project. It is not affiliated with Microsoft or The Document Foundation; product names belong to their owners.

@@ -47,7 +47,7 @@
   .rec .bs-row { border-radius: 0; border-bottom: 1px solid var(--line); padding: 12px 16px; }
   .rec .bs-row:last-child { border-bottom: 0; }
   .rec .empty { padding: 34px; text-align: center; color: var(--ink-3); }
-  .about-line { margin-top: 28px; color: var(--ink-3); font-size: 12.5px; display: flex; gap: 10px; align-items: center; }
+  .about-line { margin-top: 28px; color: var(--ink-3); font-size: 12.5px; display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; }
   .about-line button { border: 0; background: none; color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; padding: 0; cursor: default; font-size: 12.5px; }
   .drop-hint { margin-top: 14px; color: var(--ink-3); font-size: 12.5px; display: flex; gap: 8px; align-items: center; }
   body.dragging .rec { outline: 2px dashed var(--ink-3); outline-offset: 4px; }
@@ -134,8 +134,9 @@
     const el = document.getElementById('about-line'); if (!desktop || !el) return;
     const info = await bts.info(); const s = await bts.updateState();
     const msg = { checking: 'Checking for updates…', downloading: `Downloading update ${s.version || ''} (${s.percent || 0}%)`, ready: `Update ${s.version} ready, installs when you close BTS Office`, uptodate: 'Up to date', error: s.error || '' }[s.status] || '';
-    el.innerHTML = `<span>BTS Office ${esc(info.version)}</span>${msg ? '<span>' + esc(msg) + '</span>' : ''}${s.supported && !['checking', 'downloading', 'ready'].includes(s.status) ? '<button id="chk-upd">Check for updates</button>' : ''}`;
+    el.innerHTML = `<span>BTS Office ${esc(info.version)}</span><span>Developed by Bhoomiputra Tech Solutions Private Limited, <button id="dev-site">btspl.tech</button></span>${msg ? '<span>' + esc(msg) + '</span>' : ''}${s.supported && !['checking', 'downloading', 'ready'].includes(s.status) ? '<button id="chk-upd">Check for updates</button>' : ''}`;
     const b = document.getElementById('chk-upd'); if (b) b.onclick = () => bts.checkForUpdates();
+    const d = document.getElementById('dev-site'); if (d) d.onclick = () => bts.openExternal('https://btspl.tech');
   }
   if (desktop) { renderAbout(); bts.onUpdateState(renderAbout); }
 
