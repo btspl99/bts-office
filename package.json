@@ -1,7 +1,7 @@
 {
   "name": "bts-office",
   "productName": "BTS Office",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Free, open-source office suite for students: documents, spreadsheets, presentations and PDF.",
   "main": "main.js",
   "license": "GPL-3.0-or-later",
@@ -78,6 +78,9 @@
     "@fontsource/tiro-devanagari-hindi": "^5.3.0",
     "@fontsource/work-sans": "^5.3.0",
     "@fontsource/yatra-one": "^5.3.0",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "@tesseract.js-data/hin": "^1.0.0",
+    "@tesseract.js-data/mar": "^1.0.0",
     "basic-ftp": "^5.3.1",
     "chart.js": "^4.5.1",
     "docx": "^9.11.0",
@@ -92,12 +95,15 @@
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^4.10.38",
     "pptxgenjs": "^3.12.0",
+    "tesseract.js": "^7.0.0",
+    "tesseract.js-core": "^6.1.2",
+    "vosk-browser": "^0.0.8",
     "xlsx": "^0.18.5"
   },
   "build": {
     "appId": "in.btspl.office",
     "productName": "BTS Office",
-    "copyright": "Copyright \u00a9 2026 Bhoomiputra Tech Solutions Private Limited. Released under GPL-3.0.",
+    "copyright": "Copyright © 2026 Bhoomiputra Tech Solutions Private Limited. Released under GPL-3.0.",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -106,6 +112,7 @@
       "main.js",
       "preload.js",
       "updater.js",
+      "main/**/*",
       "app/**/*",
       "build/icon.png",
       "LICENSE"

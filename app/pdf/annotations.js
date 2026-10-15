@@ -7,6 +7,7 @@
  *   arrow:   { a:[x,y], b:[x,y], color, w }
  *   note:    { x, y, text, color }            (x,y = top-left of the note icon)
  *   textbox: { x, y, text, color, size }      (x,y = top-left of the first line)
+ *   image:   { r:[x1,y1,x2,y2], img }         (picture / signature, upright in the display frame; img = key in S.images)
  * "Display frame" = the page as it normally appears (its own /Rotate applied, no view rotation).
  */
 import { S, $, $$, esc, clamp, newId, clientToPdf, MARKUP, NOTE, wrapText, measureHelv, isTyping } from './state.js';
@@ -58,6 +59,7 @@ function dispBox(p, a) {
       return [Math.min(...bs.map(b => b[0])), Math.min(...bs.map(b => b[1])), Math.max(...bs.map(b => b[2])), Math.max(...bs.map(b => b[3]))];
     }
     case 'pen': { const q = a.pts.map(([x, y]) => V(vpN, x, y)); const hw = a.w / 2; return [Math.min(...q.map(v => v[0])) - hw, Math.min(...q.map(v => v[1])) - hw, Math.max(...q.map(v => v[0])) + hw, Math.max(...q.map(v => v[1])) + hw]; }
+    case 'image': return vpBox(vpN, a.r);
     case 'rect': case 'ellipse': { const b = vpBox(vpN, a.r); const hw = a.w / 2; return [b[0] - hw, b[1] - hw, b[2] + hw, b[3] + hw]; }
     case 'arrow': { const A = V(vpN, ...a.a), B = V(vpN, ...a.b); const hs = headSize(a); return [Math.min(A[0], B[0]) - hs, Math.min(A[1], B[1]) - hs, Math.max(A[0], B[0]) + hs, Math.max(A[1], B[1]) + hs]; }
     case 'note': { const [x, y] = V(vpN, a.x, a.y); return [x, y, x + NOTE.icon, y + NOTE.icon]; }
@@ -82,7 +84,7 @@ function hit(p, a, x, y, tol) {
     case 'rect': { const b = vpBox(vpN, a.r); if (!inBox(b)) return false; return Math.min(Math.abs(x - b[0]), Math.abs(x - b[2]), Math.abs(y - b[1]), Math.abs(y - b[3])) < a.w / 2 + tol; }
     case 'ellipse': { const b = vpBox(vpN, a.r); const cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2, rx = Math.max(1, (b[2] - b[0]) / 2), ry = Math.max(1, (b[3] - b[1]) / 2); const d = Math.hypot((x - cx) / rx, (y - cy) / ry); return Math.abs(d - 1) * Math.min(rx, ry) < a.w / 2 + tol; }
     case 'arrow': { const A = V(vpN, ...a.a), B = V(vpN, ...a.b); return distSeg(x, y, ...A, ...B) < a.w / 2 + tol + 2; }
-    case 'note': case 'textbox': return inBox(dispBox(p, a), 1);
+    case 'note': case 'textbox': case 'image': return inBox(dispBox(p, a), 1);
   }
   return false;
 }
@@ -125,6 +127,11 @@ export function svgContent(p, vp, part, opts = {}) {
         const A = V(vp, ...a.a), B = V(vp, ...a.b); const g = arrowGeom(A, B, a);
         out.push(`<g ${id}><line x1="${A[0]}" y1="${A[1]}" x2="${g.base[0]}" y2="${g.base[1]}" stroke="${c}" stroke-width="${a.w}" stroke-linecap="round"/><polygon points="${g.head.map(q => q.join(',')).join(' ')}" fill="${c}"/></g>`); break;
       }
+      case 'image': {
+        const im = S.images.get(a.img); if (!im) break;
+        const m = imageMatrix(p, a, vp);
+        out.push(`<image ${id} href="${im.url}" x="0" y="0" width="1" height="1" preserveAspectRatio="none" transform="matrix(${m.map(n => +n.toFixed(4)).join(' ')})"/>`); break;
+      }
       case 'textbox': {
         const L = textLayout(a); const [x, y] = V(vp, a.x, a.y);
         out.push(`<g ${id} transform="translate(${x} ${y}) rotate(${dr})"><rect class="tb-frame" x="-2" y="-2" width="${L.w + 4}" height="${L.h + 4}" fill="transparent"/><text font-family='${FONT}' font-size="${L.size}" fill="${c}" xml:space="preserve">${L.lines.map((l, i) => `<tspan x="0" y="${L.base + i * L.lh}">${esc(l) || ' '}</tspan>`).join('')}</text></g>`); break;
@@ -148,10 +155,31 @@ export function svgContent(p, vp, part, opts = {}) {
       const pad = 3 / S.scale;
       const xs = P.map(q => q[0]), ys = P.map(q => q[1]);
       out.push(`<rect class="selbox" x="${Math.min(...xs) - pad}" y="${Math.min(...ys) - pad}" width="${Math.max(...xs) - Math.min(...xs) + 2 * pad}" height="${Math.max(...ys) - Math.min(...ys) + 2 * pad}" fill="none" stroke-width="${1.25 / S.scale}" stroke-dasharray="${4 / S.scale} ${3 / S.scale}"/>`);
+      if (a.type === 'image') {   // corner handles for resizing
+        const hs = 8 / S.scale;
+        for (const [x, y] of P) out.push(`<rect class="rhandle" x="${x - hs / 2}" y="${y - hs / 2}" width="${hs}" height="${hs}" rx="${1.5 / S.scale}" stroke-width="${1.25 / S.scale}"/>`);
+      }
     }
   }
   return out.join('');
 }
+/** Affine matrix mapping the unit square (image space, y down) onto the picture's box in viewport vp. */
+export function imageMatrix(p, a, vp) {
+  const vpN = nativeVp(p); const [l, t, r, b] = vpBox(vpN, a.r);
+  const toVp = (x, y) => V(vp, ...vpN.convertToPdfPoint(x, y));
+  const o = toVp(l, t), u = toVp(r, t), w = toVp(l, b);
+  return [u[0] - o[0], u[1] - o[1], w[0] - o[0], w[1] - o[1], o[0], o[1]];
+}
+/** Same in PDF user space for pdf-lib (unit square, y up): [a b c d e f] for the cm operator. */
+export function imagePdfMatrix(p, a) {
+  const vpN = nativeVp(p); const [l, t, r, b] = vpBox(vpN, a.r);
+  const D = (x, y) => vpN.convertToPdfPoint(x, y);
+  const o = D(l, b), u = D(r, b), w = D(l, t);
+  return [u[0] - o[0], u[1] - o[1], w[0] - o[0], w[1] - o[1], o[0], o[1]];
+}
+/** Display-frame box of an annotation (points). */
+export const displayBox = (p, a) => dispBox(p, a);
+
 export function arrowGeom(A, B, a) {
   const hs = headSize(a); const ang = Math.atan2(B[1] - A[1], B[0] - A[0]);
   const len = Math.hypot(B[0] - A[0], B[1] - A[1]); const h = Math.min(hs, len * 0.6);
@@ -397,6 +425,9 @@ export function initInteractions() {
     if (e.target.closest('.note-pop, .tb-editor, .linkLayer a')) return;
     hideSelPop();
     const p = pageOf(e.target); if (!p) return;
+    const selA = S.anns.find(x => x.id === S.sel && x.p === p.i && x.type === 'image');
+    const corner = selA ? handleAt(p, selA, e.clientX, e.clientY) : -1;
+    if (corner >= 0) { e.preventDefault(); getSelection().removeAllRanges(); resizeImage(p, selA, corner, e); return; }
     const a = hitTest(p, e.clientX, e.clientY);
     if (!a) { if (S.sel) select(null); closeNotePopup(); return; }
     if (MARKUP.has(a.type)) {   // let text selection start; select highlight on click without drag
@@ -516,6 +547,45 @@ export function initInteractions() {
     if (e.key === 'Escape') { if (S.sel) select(null); hideSelPop(); }
   });
   viewer.addEventListener('scroll', hideSelPop, { passive: true });
+  host.addEventListener('mousemove', hoverCursor, { passive: true });
+}
+
+/* ---------------- picture resizing ---------------- */
+function dispPoint(p, cx, cy) { return V(nativeVp(p), ...clientToPdf(p, cx, cy)); }
+/** Which corner handle (0 tl, 1 tr, 2 br, 3 bl in the display frame) is under the pointer, or -1. */
+function handleAt(p, a, cx, cy) {
+  const [x, y] = dispPoint(p, cx, cy); const b = dispBox(p, a); const tol = 7 / S.scale;
+  const cs = [[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]];
+  return cs.findIndex(([hx, hy]) => Math.abs(x - hx) <= tol && Math.abs(y - hy) <= tol);
+}
+function resizeImage(p, a, corner, e) {
+  const vpN = nativeVp(p); const b0 = dispBox(p, a);
+  const fixed = [[b0[2], b0[3]], [b0[0], b0[3]], [b0[0], b0[1]], [b0[2], b0[1]]][corner];
+  const ratio = (b0[2] - b0[0]) / Math.max(0.01, b0[3] - b0[1]);
+  let moved = false;
+  const mv = (ev) => {
+    if (!moved) { pushUndo(); moved = true; }
+    const [x, y] = dispPoint(p, ev.clientX, ev.clientY);
+    let w = Math.max(6, Math.abs(x - fixed[0])), h = Math.max(6, Math.abs(y - fixed[1]));
+    if (!ev.shiftKey) { if (w / h > ratio) h = w / ratio; else w = h * ratio; }   // keep the shape unless Shift is held
+    const sx = x >= fixed[0] ? 1 : -1, sy = y >= fixed[1] ? 1 : -1;
+    const A = vpN.convertToPdfPoint(fixed[0], fixed[1]), B = vpN.convertToPdfPoint(fixed[0] + sx * w, fixed[1] + sy * h);
+    a.r = [Math.min(A[0], B[0]), Math.min(A[1], B[1]), Math.max(A[0], B[0]), Math.max(A[1], B[1])].map(n => +n.toFixed(2));
+    renderPage(p.i);
+  };
+  const up = () => { window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up); if (moved) changed(); };
+  window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up);
+}
+/** Cursor feedback over pictures in the select tool. */
+function hoverCursor(e) {
+  if (S.tool !== 'text' || e.buttons) return;
+  const p = pageOf(e.target); if (!p) return;
+  let cur = '';
+  const selA = S.anns.find(x => x.id === S.sel && x.p === p.i && x.type === 'image');
+  const c = selA ? handleAt(p, selA, e.clientX, e.clientY) : -1;
+  if (c >= 0) cur = c % 2 ? 'nesw-resize' : 'nwse-resize';
+  else { const a = S.anns.length && hitTest(p, e.clientX, e.clientY); if (a && !MARKUP.has(a.type)) cur = 'move'; }
+  if ((document.body.dataset.hcur || '') !== cur) { if (cur) document.body.dataset.hcur = cur; else delete document.body.dataset.hcur; }
 }
 
 function snap45(a, b) {
@@ -546,7 +616,7 @@ function handDrag(e, viewer) {
 }
 
 export function resetAnnotations() {
-  S.anns = []; S.sel = null; S.undo = []; S.redo = []; draft = null;
+  S.anns = []; S.sel = null; S.undo = []; S.redo = []; draft = null; S.images.clear();
   closeNotePopup(); closeTextEditor(); hideSelPop();
 }
 export const annCount = () => S.anns.length;

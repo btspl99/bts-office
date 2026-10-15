@@ -1,12 +1,13 @@
 /* BTS PDF — saving (annotations burned in with pdf-lib), printing, and page tools */
 import { S, $, esc, loadPdfLib, hexToRgb01, NOTE, wrapText, measureHelv, baseViewport } from './state.js';
-import { nativeVp, markupLine, textLayout, noteLayout, arrowGeom, svgContent, TB } from './annotations.js';
+import { nativeVp, markupLine, textLayout, noteLayout, arrowGeom, svgContent, TB, imagePdfMatrix } from './annotations.js';
+import * as Forms from './forms.js';
 
 /* ======================= burn-in ======================= */
 const f2 = (n) => +(+n).toFixed(3);
 
 /** Build the pdf-lib operators that draw all annotations of page p (in PDF user space). */
-function pageOps(L, page, p, font) {
+function pageOps(L, page, p, font, imgNames = {}) {
   const ops = [];
   const { pushGraphicsState: q, popGraphicsState: Q, setStrokingRgbColor: SC, setFillingRgbColor: FC, setLineWidth: W, moveTo: M, lineTo: Lt, closePath: h, stroke: S_, fill: f, appendBezierCurve: C, setLineCap, setLineJoin, LineCapStyle, LineJoinStyle, concatTransformationMatrix: cm } = L;
   const col = (hex) => hexToRgb01(hex);
@@ -68,6 +69,10 @@ function pageOps(L, page, p, font) {
         ops.push(q(), SC(...c), FC(...c), W(f2(a.w)), setLineCap(LineCapStyle.Round), M(f2(a.a[0]), f2(a.a[1])), Lt(f2(g.base[0]), f2(g.base[1])), S_());
         poly(g.head); ops.push(f(), Q()); break;
       }
+      case 'image': {
+        const name = imgNames[a.img]; if (!name) break;
+        ops.push(q(), cm(...imagePdfMatrix(p, a).map(f2)), L.drawObject(name), Q()); break;
+      }
       case 'textbox': {
         const Lay = textLayout(a);
         const [dx, dy] = Vp(a.x, a.y);
@@ -107,32 +112,59 @@ function makeFont(doc, L) {
   return (page) => { let k = null; return { enc, get key() { return (k ||= page.node.newFontDictionary('Helv', font.ref)); } }; };
 }
 
-/** Bytes of the document with annotations burned in. */
-export async function buildAnnotatedPdf() {
-  if (!S.anns.length && !S.modified) return S.bytes;
+/** Embed the pictures used on page p; returns { imgId: XObject name } for pageOps. */
+async function embedImages(doc, page, p, cache) {
+  const out = {};
+  for (const a of S.anns) {
+    if (a.p !== p.i || a.type !== 'image' || out[a.img]) continue;
+    const im = S.images.get(a.img); if (!im) continue;
+    if (!cache.has(a.img)) {
+      const bytes = BTS.dataURLToBytes(im.url);
+      cache.set(a.img, /jpe?g/.test(im.mime) ? await doc.embedJpg(bytes) : await doc.embedPng(bytes));
+    }
+    out[a.img] = page.node.newXObject('Im', cache.get(a.img).ref);
+  }
+  return out;
+}
+
+/** Bytes of the document with form answers, pictures and annotations written in.
+ *  opts.base: only fill in form answers (no annotations, no locking) — used before page changes / OCR. */
+export async function buildAnnotatedPdf(opts = {}) {
+  const formWork = Forms.needsSave(opts.base);
+  if (opts.base && !formWork) return S.bytes;
+  if (!S.anns.length && !S.modified && !formWork) return S.bytes;
   const L = await loadPdfLib();
   let doc;
   try { doc = await L.PDFDocument.load(S.bytes, { updateMetadata: false }); }
   catch (e) {
-    if (e instanceof L.EncryptedPDFError || /encrypt/i.test(e.message)) return rasterPdf(L);
+    if (e instanceof L.EncryptedPDFError || /encrypt/i.test(e.message)) {
+      if (opts.base) throw new Error('This PDF is password-protected, so it can’t be changed.');
+      return rasterPdf(L);
+    }
     throw e;
   }
-  if (!S.anns.length) return await doc.save({ useObjectStreams: false });
+  if (formWork) await Forms.applyToDoc(doc, L, { flatten: !opts.base && S.form.lock });
+  if (opts.base || !S.anns.length) return await doc.save({ useObjectStreams: false });
   const pages = doc.getPages();
   const fontFor = makeFont(doc, L);
+  const cache = new Map();
   for (const p of S.pages) {
     if (!S.anns.some(a => a.p === p.i)) continue;
     const page = pages[p.i]; if (!page) continue;
-    const ops = pageOps(L, page, p, fontFor(page));
+    const imgs = await embedImages(doc, page, p, cache);
+    const ops = pageOps(L, page, p, fontFor(page), imgs);
     page.pushOperators(L.pushGraphicsState(), ...ops, L.popGraphicsState());
   }
   return await doc.save({ useObjectStreams: false });
 }
+/** The document with form answers filled in, without annotations (for page tools and OCR). */
+export const buildBaseBytes = () => buildAnnotatedPdf({ base: true });
 
 /** Fallback for encrypted PDFs: rebuild from page images + vector annotations. */
 async function rasterPdf(L) {
   const doc = await L.PDFDocument.create();
   const fontFor = makeFont(doc, L);
+  const cache = new Map();
   for (const p of S.pages) {
     const vpN = nativeVp(p);
     const scale = 2;
@@ -147,7 +179,8 @@ async function rasterPdf(L) {
     page.drawImage(img, { x: 0, y: 0, width: W, height: H });
     if (S.anns.some(a => a.p === p.i)) {
       const [a, b, cc, d, e, f] = vpN.transform;   // user -> display (y down)
-      page.pushOperators(L.pushGraphicsState(), L.concatTransformationMatrix(a, -b, cc, -d, e, H - f), ...pageOps(L, page, p, fontFor(page)), L.popGraphicsState());
+      const imgs = await embedImages(doc, page, p, cache);
+      page.pushOperators(L.pushGraphicsState(), L.concatTransformationMatrix(a, -b, cc, -d, e, H - f), ...pageOps(L, page, p, fontFor(page), imgs), L.popGraphicsState());
     }
   }
   return await doc.save();
@@ -196,15 +229,19 @@ export function cleanupPrint() {
 }
 
 /* ======================= tools ======================= */
-async function saveBytes(name, bytes, label, ext) {
+const MIME = { pdf: 'application/pdf', png: 'image/png', txt: 'text/plain', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+/** Ask where to save and write the bytes. Returns the saved path (desktop), true (browser download) or false. */
+export async function saveBytes(name, bytes, label, ext, { quiet = false } = {}) {
+  name = name.replace(/[/\\:*?"<>|]+/g, '-');
   if (window.bts?.isDesktop) {
     const path = await bts.saveDialog(name, [{ name: label, extensions: [ext] }]);
     if (!path) return false;
     const r = await bts.writeFile(path, bytes);
     if (r.error) { BTS.toast('Couldn’t save: ' + r.error, { error: true }); return false; }
-    BTS.toast('Saved ' + r.name); return true;
+    if (!quiet) BTS.toast('Saved ' + r.name);
+    return r.path || path;
   }
-  BTS.download(name, bytes, ext === 'pdf' ? 'application/pdf' : 'image/png'); return true;
+  BTS.download(name, bytes, MIME[ext] || 'application/octet-stream'); return true;
 }
 
 export async function extractPage(i) {

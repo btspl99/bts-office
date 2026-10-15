@@ -33,10 +33,16 @@ export const S = {
   meta: null,           // cached document properties
   fileName: '', fileSize: 0,
   darkRead: false,
+  images: new Map(),    // image annotations' pictures: id -> { url (data URL), w, h, mime }
+  form: { has: false, values: new Map(), lock: false, highlight: true },  // fillable form state (forms.js)
+  stamp: null,          // pending picture/text to place with a click (sign.js)
 };
 
+/* Cross-module hooks filled in by app.js (avoids circular imports): openBytes, setTool, updateStatus */
+export const APP = {};
+
 export const MARKUP = new Set(['highlight', 'underline', 'strike']);
-export const DRAW_TOOLS = new Set(['pen', 'rect', 'ellipse', 'arrow', 'note', 'textbox', 'eraser']);
+export const DRAW_TOOLS = new Set(['pen', 'rect', 'ellipse', 'arrow', 'note', 'textbox', 'eraser', 'stamp']);
 
 let nextId = 1;
 export const newId = () => 'a' + (nextId++) + '_' + Date.now().toString(36);
@@ -72,6 +78,22 @@ export function loadPdfLib() {
   });
   return pdfLibPromise;
 }
+
+/** Lazily load a classic (UMD) script from app/vendor once. */
+const scriptPromises = new Map();
+export function loadScript(rel, globalName) {
+  if (globalName && window[globalName]) return Promise.resolve(window[globalName]);
+  if (!scriptPromises.has(rel)) scriptPromises.set(rel, new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = new URL('../vendor/' + rel, import.meta.url).href;
+    s.onload = () => res(globalName ? window[globalName] : true);
+    s.onerror = () => { scriptPromises.delete(rel); rej(new Error('Could not load ' + rel)); };
+    document.head.appendChild(s);
+  }));
+  return scriptPromises.get(rel);
+}
+
+export const fmtSize = (n) => n >= 1048576 ? (n / 1048576).toFixed(n >= 10485760 ? 0 : 1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
 
 export function hexToRgb01(hex) {
   const h = hex.replace('#', '');

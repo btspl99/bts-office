@@ -1,10 +1,17 @@
 /* BTS PDF — modern PDF reader & light annotator. Entry module: shell config, loading, commands, keys. */
-import { S, pdfjsLib, CSS_UNITS, $, $$, esc, isTyping, MARKUP } from './state.js';
+import { S, pdfjsLib, CSS_UNITS, $, $$, esc, isTyping, MARKUP, APP, loadPdfLib } from './state.js';
 import * as V from './viewer.js';
 import * as A from './annotations.js';
 import * as Find from './find.js';
 import * as SB from './sidebar.js';
 import * as IO from './io.js';
+import * as Forms from './forms.js';
+import * as Sign from './sign.js';
+import * as Org from './organize.js';
+import * as Compress from './compress.js';
+import * as Images from './images.js';
+import * as OCR from './ocr.js';
+import * as Word from './word.js';
 
 const ASSETS = {
   standardFontDataUrl: new URL('../vendor/pdfjs/standard_fonts/', import.meta.url).href,
@@ -44,6 +51,9 @@ async function openBytes(bytes, { keepAnns = false, keepView = false } = {}) {
   closeDoc({ keepAnns });
   S.doc = doc; S.loadingTask = task; S.bytes = bytes;
   try { const md = await doc.getMetadata(); S.meta = md; S.encrypted ||= !!md?.info?.IsEncrypted; } catch { S.meta = null; }
+  const hadForm = S.form.has;
+  await Forms.detect();
+  if (S.form.has && !hadForm && !keepView) setTimeout(() => BTS.toast(`This PDF is a form — click a box to fill it in (${Forms.fieldCount()} fields)`, { ms: 3800 }), 400);
   document.body.classList.remove('nodoc');
   await V.buildPages();
   if (keepView) { S.fit = prevFit; V.setScale(prevScale, { fit: prevFit }); }
@@ -63,6 +73,7 @@ function closeDoc({ keepAnns = false } = {}) {
   Find.resetFind();
   SB.resetSidebar();
   if (!keepAnns) A.resetAnnotations();
+  Sign.stopPlacing(); if (S.tool === 'stamp') setTool('text');
   S.textCache.clear();
   if (S.doc) { const d = S.doc; S.doc = null; d.destroy().catch(() => {}); }
   S.meta = null; S.cur = 0; S._curInit = false;
@@ -100,18 +111,20 @@ function updateStatus() {
   $('#hud-page').textContent = `${S.cur + 1} / ${S.pages.length}`;
 }
 V.hooks.current.push(updateStatus);
+V.hooks.pageRendered.push(p => Forms.buildLayer(p));
 V.hooks.layout.push(() => A.renderAll());
 A.listeners.change.push(() => { updateStatus(); updateToolUI(); });
 
 
 /* ======================= tools ======================= */
-function setTool(t) {
-  if (S.tool === t && t !== 'text') t = 'text';         // clicking an active tool turns it off
+function setTool(t, customHint) {
+  if (S.tool === t && t !== 'text' && t !== 'stamp') t = 'text';         // clicking an active tool turns it off
+  if (t !== 'stamp') Sign.stopPlacing();
   A.closeTextEditor();
   S.tool = t; document.body.dataset.tool = t;
   if (MARKUP.has(t) && getSelection().toString().trim()) A.markupFromSelection(t);
   updateToolUI();
-  const hint = { highlight: 'Select text to highlight it', underline: 'Select text to underline it', strike: 'Select text to strike it out', note: 'Click on the page to add a sticky note', textbox: 'Click on the page to type', pen: 'Draw on the page · hold Shift for straight shapes', rect: 'Drag to draw a rectangle · Shift for a square', ellipse: 'Drag to draw an ellipse · Shift for a circle', arrow: 'Drag to draw an arrow · Shift snaps to 45°', eraser: 'Click or drag over annotations to remove them', hand: 'Drag to move around the page' }[t];
+  const hint = customHint || { highlight: 'Select text to highlight it', underline: 'Select text to underline it', strike: 'Select text to strike it out', note: 'Click on the page to add a sticky note', textbox: 'Click on the page to type', pen: 'Draw on the page · hold Shift for straight shapes', rect: 'Drag to draw a rectangle · Shift for a square', ellipse: 'Drag to draw an ellipse · Shift for a circle', arrow: 'Drag to draw an arrow · Shift snaps to 45°', eraser: 'Click or drag over annotations to remove them', hand: 'Drag to move around the page' }[t];
   BTS.setStatus('tool', hint ? `<span class="tool-hint">${icon('info', 14)}${esc(hint)}</span>` : '');
 }
 function currentColorKey() {
@@ -179,6 +192,39 @@ async function combine() {
     BTS.toast(`Added ${added} page${added === 1 ? '' : 's'} from ${f.name}`);
   } catch (e) { console.warn(e); BTS.toast(e.message || String(e), { error: true, ms: 4500 }); }
 }
+/** Start screen "Combine PDFs": choose several PDFs, join them in that order and open the result. */
+async function combineFiles() {
+  const files = await new Promise(res => {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.accept = '.pdf,application/pdf';
+    inp.onchange = async () => res(await Promise.all([...inp.files].map(async f => ({ name: f.name, data: new Uint8Array(await f.arrayBuffer()) }))));
+    inp.addEventListener('cancel', () => res([])); inp.click();
+  });
+  if (!files.length) return;
+  if (files.length === 1) return BTS.loadFile(files[0]);
+  try {
+    const L = await loadPdfLib();
+    const out = await L.PDFDocument.create();
+    for (const f of files) {
+      let src; try { src = await L.PDFDocument.load(f.data); } catch { throw new Error(`“${f.name}” is password-protected or damaged`); }
+      (await out.copyPages(src, src.getPageIndices())).forEach(pg => out.addPage(pg));
+    }
+    const bytes = await out.save({ useObjectStreams: false });
+    await BTS.loadFile({ name: 'Combined.pdf', data: bytes });
+    BTS.markDirty();
+    BTS.toast(`Combined ${files.length} PDFs · ${out.getPageCount()} pages · save it with Ctrl+S`, { ms: 3500 });
+  } catch (e) { BTS.toast(e.message || String(e), { error: true, ms: 4500 }); }
+}
+/** Start screen shortcuts that need a PDF first: open one, then run the tool. */
+async function openThen(fn) {
+  let f;
+  if (window.bts?.isDesktop) { f = await bts.openDialog('pdf'); if (!f || f.handledElsewhere) return; if (f.error) return BTS.toast(f.error, { error: true }); }
+  else f = await BTS.pickFile('.pdf,application/pdf');
+  if (!f) return;
+  await BTS.loadFile(f);
+  if (S.doc) setTimeout(fn, 300);
+}
+const guard = (p) => Promise.resolve(p).catch(e => { console.warn(e); BTS.toast(e.message || String(e), { error: true, ms: 4500 }); });
+
 async function copyPageText() {
   const tc = await V.getText(S.cur);
   let s = ''; for (const it of tc.items) { if (it.str === undefined) continue; s += it.str + (it.hasEOL ? '\n' : ''); }
@@ -256,6 +302,32 @@ function onCommand(cmd, el) {
     case 'extract-page': return IO.extractPage(S.cur).catch(e => BTS.toast(e.message || String(e), { error: true }));
     case 'page-image': return IO.pageImage(S.cur).catch(e => BTS.toast(e.message || String(e), { error: true }));
     case 'copy-page-text': return copyPageText();
+    case 'form-fill': return Forms.startFilling();
+    case 'form-clear': return Forms.clearAll();
+    case 'form-lock': return Forms.toggleLock();
+    case 'form-highlight': return Forms.toggleHighlight();
+    case 'sign': return guard(Sign.sign());
+    case 'add-image': return guard(Sign.addImage());
+    case 'mark-tick': return Sign.addMark('tick');
+    case 'mark-cross': return Sign.addMark('cross');
+    case 'add-date': return Sign.addDate();
+    case 'organize': return guard(Org.openGrid());
+    case 'page-rotl': return Org.rotatePage(-90);
+    case 'page-rotr': return Org.rotatePage(90);
+    case 'page-delete': return Org.deletePage();
+    case 'page-dup': return Org.duplicatePage();
+    case 'page-blank': return Org.insertBlank();
+    case 'insert-images': return Org.insertImages();
+    case 'split': return guard(Org.splitDialog());
+    case 'extract': return guard(Org.extractDialog());
+    case 'compress': return guard(Compress.compressDialog());
+    case 'img2pdf': return guard(Images.imagesToPdfDialog());
+    case 'ocr': return guard(OCR.ocrDialog());
+    case 'to-word': return guard(Word.pdfToWord());
+    case 'start-combine': return guard(combineFiles());
+    case 'start-compress': return guard(openThen(() => Compress.compressDialog()));
+    case 'start-fill': return guard(openThen(() => Forms.startFilling()));
+    case 'start-ocr': return guard(openThen(() => OCR.ocrDialog()));
     case 'properties': return BTS.dialog({ title: 'Document properties', body: infoHTML(), buttons: [{ label: 'Close', primary: true, value: true }], width: 520 });
   }
 }
@@ -351,7 +423,9 @@ const shellPrint = BTS.print;
 BTS.print = async () => { if (!S.doc) { BTS.closeBackstage(); return BTS.toast('Open a PDF first'); } return shellPrint(); };
 
 // wiring
+Object.assign(APP, { openBytes, setTool, goTo: (i) => V.goTo(i), updateStatus });
 A.initInteractions();
+Sign.initPlacing();
 Find.initFind();
 const sidePref = SB.initSidebar();
 document.addEventListener('keydown', onKey);
@@ -397,4 +471,4 @@ setTool('text');
 fillRecent();
 
 // testing / debugging handle
-window.BTSPDF = { S, V, A, Find, SB, IO, setTool, setMode, openBytes, toggleDarkRead, setFullscreen };
+window.BTSPDF = { S, V, A, Find, SB, IO, Forms, Sign, Org, Compress, Images, OCR, Word, setTool, setMode, openBytes, toggleDarkRead, setFullscreen };

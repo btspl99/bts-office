@@ -120,6 +120,13 @@ app.whenReady().then(() => {
   if (files.length) files.forEach(f => openPath(f));
   else createWindow(appArg(process.argv) || 'start');
   updater.init({ getSettings: () => readJSON(settingsPath(), {}), getWindows: () => [...windows.values()] });
+  // feature modules in ./main (spelling menu, online lookups, voice models, ...)
+  try {
+    for (const f of fs.readdirSync(path.join(__dirname, 'main')).filter(f => f.endsWith('.js')).sort()) {
+      try { require('./main/' + f).init({ app, ipcMain, BrowserWindow, dialog, shell, readJSON, writeJSON, settingsPath }); }
+      catch (err) { console.error('module', f, 'failed', err); }
+    }
+  } catch (err) { console.error('modules', err); }
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow('start'); });
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

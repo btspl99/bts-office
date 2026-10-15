@@ -16,6 +16,8 @@
   <button class="file-tab">File</button>
   <button data-tab="home">Home</button>
   <button data-tab="comment">Comment</button>
+  <button data-tab="fill">Fill &amp; Sign</button>
+  <button data-tab="organize">Organize</button>
   <button data-tab="tools">Tools</button>
   <button data-tab="view">View</button>
 </nav>
@@ -127,15 +129,83 @@
     </div><div class="rgroup-label">Edit</div></div>
   </section>
 
-  <!-- ================= TOOLS ================= -->
-  <section class="ribbon-panel" data-panel="tools">
+  <!-- ================= FILL & SIGN ================= -->
+  <section class="ribbon-panel" data-panel="fill">
+    <div class="rgroup needs-doc"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="form-fill" data-icon="text-cursor-input" title="Fill in the form boxes of this PDF"><span>Fill form</span></button>
+      <div class="rstack tight">
+        <button class="rb md" data-cmd="form-highlight" data-icon="highlighter" title="Show the form boxes in light blue">Highlight boxes</button>
+        <button class="rb md" data-cmd="form-clear" data-icon="eraser" title="Empty every form box">Clear answers</button>
+        <button class="rb md" data-cmd="form-lock" data-icon="lock" title="When saving, lock the answers so they can’t be changed (flatten the form)">Lock answers</button>
+      </div>
+    </div><div class="rgroup-label">Form</div></div>
+
+    <div class="rgroup needs-doc"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="sign" data-icon="signature" title="Draw, type or upload your signature and place it on the page"><span>Sign</span></button>
+      <button class="rb lg" data-cmd="add-image" data-icon="image-plus" title="Add a picture, e.g. a passport photo for an admission form"><span>Add picture</span></button>
+    </div><div class="rgroup-label">Sign</div></div>
+
+    <div class="rgroup needs-doc"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="tool" data-tool="textbox" data-icon="type" title="Click anywhere on the page and type"><span>Add text</span></button>
+      <div class="rstack tight">
+        <button class="rb md" data-cmd="mark-tick" data-icon="check" title="Click on boxes to tick them">Tick ✓</button>
+        <button class="rb md" data-cmd="mark-cross" data-icon="x" title="Click on boxes to cross them">Cross ✗</button>
+        <button class="rb md" data-cmd="add-date" data-icon="calendar-days" title="Put today’s date on the page">Today’s date</button>
+      </div>
+    </div><div class="rgroup-label">Fill in</div></div>
+
+    <div class="rgroup needs-doc"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="tool" data-tool="text" data-icon="mouse-pointer-2" title="Select, move and resize what you added"><span>Select</span></button>
+      <button class="rb lg" data-cmd="delete-annot" data-icon="trash-2" title="Delete the selected item (Delete)"><span>Delete</span></button>
+      <div class="rstack tight">
+        <button class="rb md" data-cmd="undo" data-icon="undo-2" title="Undo (Ctrl+Z)">Undo</button>
+        <button class="rb md" data-cmd="redo" data-icon="redo-2" title="Redo (Ctrl+Y)">Redo</button>
+      </div>
+    </div><div class="rgroup-label">Edit</div></div>
+  </section>
+
+  <!-- ================= ORGANIZE ================= -->
+  <section class="ribbon-panel" data-panel="organize">
+    <div class="rgroup needs-doc"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="organize" data-icon="layout-grid" title="See all pages: drag to reorder, rotate, delete, insert"><span>Organize pages</span></button>
+    </div><div class="rgroup-label">All pages</div></div>
+
+    <div class="rgroup needs-doc"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="page-rotl" data-icon="rotate-ccw" title="Turn the current page to the left (saved in the PDF)"><span>Rotate left</span></button>
+      <button class="rb lg" data-cmd="page-rotr" data-icon="rotate-cw" title="Turn the current page to the right (saved in the PDF)"><span>Rotate right</span></button>
+      <div class="rstack tight">
+        <button class="rb md" data-cmd="page-dup" data-icon="copy" title="Make a copy of the current page">Duplicate</button>
+        <button class="rb md" data-cmd="page-blank" data-icon="file-plus-2" title="Add a blank page after the current page">Blank page</button>
+        <button class="rb md" data-cmd="page-delete" data-icon="trash-2" title="Delete the current page">Delete page</button>
+      </div>
+    </div><div class="rgroup-label">Current page</div></div>
+
     <div class="rgroup needs-doc"><div class="rgroup-body">
       <button class="rb lg" data-cmd="combine" data-icon="combine" title="Add the pages of another PDF to the end of this one"><span>Combine PDFs</span></button>
-      <button class="rb lg" data-cmd="extract-page" data-icon="file-output" title="Save the current page as a separate PDF"><span>Extract page</span></button>
-      <button class="rb lg" data-cmd="page-image" data-icon="image" title="Save the current page as a PNG picture"><span>Page as image</span></button>
-    </div><div class="rgroup-label">Pages</div></div>
+      <button class="rb lg" data-cmd="insert-images" data-icon="image-plus" title="Add pictures as new pages after the current page"><span>Insert pictures</span></button>
+    </div><div class="rgroup-label">Insert</div></div>
+
     <div class="rgroup needs-doc"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="split" data-icon="scissors" title="Split this PDF into several files"><span>Split</span></button>
+      <button class="rb lg" data-cmd="extract" data-icon="file-output" title="Save some pages as a new PDF"><span>Extract pages</span></button>
+    </div><div class="rgroup-label">Split</div></div>
+  </section>
+
+  <!-- ================= TOOLS ================= -->
+  <section class="ribbon-panel" data-panel="tools">
+    <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg needs-doc" data-cmd="to-word" data-icon="file-type" title="Turn this PDF into a Word document you can edit"><span>PDF to Word</span></button>
+      <button class="rb lg" data-cmd="img2pdf" data-icon="images" title="Make a PDF from photos or scanned pictures"><span>Pictures to PDF</span></button>
+      <button class="rb lg needs-doc" data-cmd="page-image" data-icon="image" title="Save the current page as a PNG picture"><span>Page as image</span></button>
+    </div><div class="rgroup-label">Convert</div></div>
+    <div class="rgroup needs-doc"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="compress" data-icon="shrink" title="Make the PDF file smaller"><span>Compress</span></button>
+    </div><div class="rgroup-label">File size</div></div>
+    <div class="rgroup needs-doc"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="ocr" data-icon="scan-text" title="Read the text in scanned pages (English, Hindi, Marathi) so you can search and copy it"><span>Recognize text</span></button>
       <button class="rb lg" data-cmd="copy-page-text" data-icon="clipboard-copy" title="Copy all text on the current page"><span>Copy page text</span></button>
+    </div><div class="rgroup-label">Text</div></div>
+    <div class="rgroup needs-doc"><div class="rgroup-body">
       <button class="rb lg" data-cmd="properties" data-icon="info" title="Document properties"><span>Properties</span></button>
     </div><div class="rgroup-label">Document</div></div>
   </section>
@@ -180,8 +250,14 @@
         <div class="drop">
           <div class="drop-art" aria-hidden="true"><div class="sheet s1"></div><div class="sheet s2"></div><div class="sheet s3"><span>PDF</span></div></div>
           <h1>Open a PDF to start reading</h1>
-          <p>Drag a PDF file here, or choose one from your computer.<br>Highlight, draw and add notes, then save a copy with your annotations.</p>
+          <p>Drag a PDF file here, or choose one from your computer.<br>Read, highlight, fill in forms, sign, organize pages and more.</p>
           <button class="btn primary big" data-cmd="open" data-icon="folder-open">Open a PDF</button>
+          <div class="quick-acts">
+            <button class="qa" data-cmd="img2pdf"><span class="qa-ic" data-icon="images" data-icon-size="22"></span><b>Pictures to PDF</b><small>Photos or scans into one PDF</small></button>
+            <button class="qa" data-cmd="start-fill"><span class="qa-ic" data-icon="signature" data-icon-size="22"></span><b>Fill &amp; sign</b><small>Forms, ticks, signature</small></button>
+            <button class="qa" data-cmd="start-combine"><span class="qa-ic" data-icon="combine" data-icon-size="22"></span><b>Combine PDFs</b><small>Join several PDFs into one</small></button>
+            <button class="qa" data-cmd="start-compress"><span class="qa-ic" data-icon="shrink" data-icon-size="22"></span><b>Compress</b><small>Shrink for uploads</small></button>
+          </div>
           <div class="recent-wrap hidden" id="recent-wrap"><h2>Recent PDFs</h2><div id="recent-list"></div></div>
         </div>
       </div>

@@ -32,5 +32,8 @@ contextBridge.exposeInMainWorld('bts', {
   installUpdate: () => ipcRenderer.invoke('bts:update-install'),
   dismissUpdate: () => ipcRenderer.invoke('bts:update-dismiss'),
   onUpdateState: (cb) => ipcRenderer.on('bts:update-state', (e, s) => cb(s)),
+  // feature modules (main/*.js) register 'bts:ext:<name>' handlers and send 'bts:ext-ev:<name>' events
+  ext: (name, payload) => ipcRenderer.invoke('bts:ext:' + name, payload),
+  onExt: (name, cb) => { const ch = 'bts:ext-ev:' + name; const f = (e, d) => cb(d); ipcRenderer.on(ch, f); return () => ipcRenderer.removeListener(ch, f); },
   onSaveThenClose: (cb) => ipcRenderer.on('bts:save-then-close', () => cb()),
 });

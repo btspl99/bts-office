@@ -132,7 +132,7 @@ export async function renderPage(p) {
     c.className = 'pg-canvas';
     c.width = Math.floor(vp.width * dpr); c.height = Math.floor(vp.height * dpr);
     const ctx = c.getContext('2d', { alpha: false });
-    const task = p.proxy.render({ canvasContext: ctx, viewport: vp, transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null, annotationMode: pdfjsLib.AnnotationMode.ENABLE });
+    const task = p.proxy.render({ canvasContext: ctx, viewport: vp, transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null, annotationMode: S.form.has ? pdfjsLib.AnnotationMode.ENABLE_FORMS : pdfjsLib.AnnotationMode.ENABLE });   // form boxes are drawn by forms.js
     p.task = task;
     await task.promise;
     p.task = null;
@@ -362,7 +362,7 @@ export function setMode(mode) {
 
 /** Re-render everything (after theme / dark-read changes nothing needed; after doc changes yes). */
 export function invalidateAll() {
-  S.pages.forEach(p => { p.renderedScale = 0; p.textRot = -1; p.linkRot = -1; p.annotsCache = null; });
+  S.pages.forEach(p => { p.renderedScale = 0; p.textRot = -1; p.linkRot = -1; p.formRot = -1; p.annotsCache = null; });
   S.pages.forEach(q => { if (q.near || visible.has(q.i)) schedule(q); });
 }
 
