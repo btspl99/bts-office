@@ -4,6 +4,8 @@ const { app, BrowserWindow, ipcMain, dialog, shell, Menu, nativeTheme, session }
 const path = require('path');
 const fs = require('fs');
 const updater = require('./updater');
+const crypto = require('crypto');
+const os = require('os');
 
 const APPS = {
   start:  { page: 'index.html',  title: 'BTS Office',  color: '#172033' },
@@ -174,8 +176,37 @@ ipcMain.handle('bts:write-file', async (e, { file, data }) => {
     fs.writeFileSync(file, buf);
     const r = recOf(e); if (r && !file.toLowerCase().endsWith('.pdf')) r.file = file;
     addRecent(file);
+    snapshotVersion(file, buf);
     return { ok: true, path: file, name: path.basename(file) };
   } catch (err) { return { error: String(err.message || err) }; }
+});
+
+// ---------- version history: every save of a .docx/.xlsx/.pptx keeps a copy (last 30 per file) ----------
+const VERSION_EXT = ['.docx', '.xlsx', '.pptx'];
+const versionsDir = (file) => path.join(app.getPath('userData'), 'versions', crypto.createHash('sha1').update(path.resolve(file).toLowerCase()).digest('hex').slice(0, 16));
+function snapshotVersion(file, buf) {
+  try {
+    const ext = path.extname(file).toLowerCase(); if (!VERSION_EXT.includes(ext)) return;
+    if (readJSON(settingsPath(), {}).versionHistory === false) return;
+    const dir = versionsDir(file); fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, Date.now() + ext), buf);
+    writeJSON(path.join(dir, 'meta.json'), { path: file });
+    const all = fs.readdirSync(dir).filter(f => f.endsWith(ext)).sort();
+    for (const old of all.slice(0, Math.max(0, all.length - 30))) fs.unlinkSync(path.join(dir, old));
+  } catch (err) { console.error('version snapshot failed', err); }
+}
+ipcMain.handle('bts:versions', (e, file) => {
+  try {
+    if (!file) return []; const dir = versionsDir(file); if (!fs.existsSync(dir)) return [];
+    return fs.readdirSync(dir).filter(f => /^\d+\./.test(f)).map(f => ({ id: f, time: +f.split('.')[0], size: fs.statSync(path.join(dir, f)).size })).sort((a, b) => b.time - a.time);
+  } catch { return []; }
+});
+ipcMain.handle('bts:version-open', (e, { file, id }) => {
+  const src = path.join(versionsDir(file), path.basename(id)); if (!fs.existsSync(src)) return false;
+  const d = new Date(+id.split('.')[0]); const stamp = d.toISOString().slice(0, 16).replace('T', ' ').replace(':', '');
+  const outDir = path.join(os.tmpdir(), 'bts-office-versions'); fs.mkdirSync(outDir, { recursive: true });
+  const out = path.join(outDir, `${path.basename(file, path.extname(file))} (version ${stamp})${path.extname(file)}`);
+  fs.copyFileSync(src, out); createWindow(appForFile(out), out); return true;
 });
 
 ipcMain.handle('bts:print-pdf', async (e, opts = {}) => {

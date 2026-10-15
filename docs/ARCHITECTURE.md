@@ -71,3 +71,18 @@ window over `bts:update-state`. `app/common/updates.js` (loaded by every page) s
 Updates panel on File ▸ Options & about. Overrides: env `BTS_UPDATE_URL`, or `updateUrl` / `autoUpdate` in
 `%APPDATA%\BTS Office\settings.json`. Dev runs (`npm start`) don't check unless `BTS_UPDATE_URL` is set (they use
 `dev-app-update.yml`). See docs/RELEASING.md for publishing and docs/HOSTING.md for the server.
+
+## Fonts, command search, properties, versions (1.2)
+
+* **Font library:** `tools/build-fonts.js` copies 50 OFL/Apache families from `@fontsource/*` into `app/fonts/lib/` and generates
+  `app/common/fonts.css` (@font-face + local-first aliases: Calibri→Carlito, Cambria→Caladea, Arial→Arimo, Times New Roman→Tinos,
+  Courier New→Cousine, Georgia→Gelasio) and `app/common/fonts.js` (`window.BTS_FONTS` registry: `{name, cat, bundled, weights, italic, alias}`,
+  categories in `BTS_FONT_CATEGORIES`, helpers `btsFontStack(name)`, `btsFontAvailable(name)`, `btsRecentFonts(add?)`).
+  Docs/Sheets/Slides include both files. Use `BTS.fontPicker(anchor, { current, theme:[{label,name}] })` → Promise(name|null) for every font dropdown.
+* **Command search:** `BTS.commandSearch()` (Alt+Q, Ctrl+Shift+P, lightbulb in title bar) indexes every `#ribbon [data-cmd]` button by its title/text,
+  group and tab. Give every ribbon button a clear `title` so it is findable.
+* **Properties:** `BTS.props = {title, subject, author, company, keywords, comments, category}` is edited on File ▸ Info. Apps must write it into
+  saved files (docx/xlsx/pptx core properties) and fill it with `BTS.setProps({...})` when loading. `BTS.resetProps()` runs before `cfg.load` and on new.
+  `BTS.userName` (File ▸ Options) is the default author and the name to use for comments and tracked changes.
+* **Version history:** every save of .docx/.xlsx/.pptx is copied by `main.js` to `userData/versions/` (last 30 per file). File ▸ Info lists them;
+  clicking one opens it as a copy in a new window. Nothing for apps to do.

@@ -1,0 +1,54 @@
+# Bundled fonts
+
+All fonts are free to use, embed and redistribute. Sources: https://fontsource.org (Google Fonts).
+
+- **Carlito** — OFL-1.1 (metric-compatible with Calibri)
+- **Caladea** — OFL-1.1 (metric-compatible with Cambria)
+- **Arimo** — OFL-1.1 (metric-compatible with Arial)
+- **Tinos** — OFL-1.1 (metric-compatible with Times New Roman)
+- **Cousine** — OFL-1.1 (metric-compatible with Courier New)
+- **Gelasio** — OFL-1.1 (metric-compatible with Georgia)
+- **Inter** — OFL-1.1
+- **Roboto** — OFL-1.1
+- **Open Sans** — OFL-1.1
+- **Lato** — OFL-1.1
+- **Source Sans 3** — OFL-1.1
+- **Noto Sans** — OFL-1.1
+- **IBM Plex Sans** — OFL-1.1
+- **PT Sans** — OFL-1.1
+- **Work Sans** — OFL-1.1
+- **Nunito** — OFL-1.1
+- **DM Sans** — OFL-1.1
+- **Manrope** — OFL-1.1
+- **Montserrat** — OFL-1.1
+- **Poppins** — OFL-1.1
+- **Raleway** — OFL-1.1
+- **Outfit** — OFL-1.1
+- **Sora** — OFL-1.1
+- **Source Serif 4** — OFL-1.1
+- **Merriweather** — OFL-1.1
+- **Lora** — OFL-1.1
+- **Noto Serif** — OFL-1.1
+- **IBM Plex Serif** — OFL-1.1
+- **PT Serif** — OFL-1.1
+- **EB Garamond** — OFL-1.1
+- **Libre Baskerville** — OFL-1.1
+- **Crimson Pro** — OFL-1.1
+- **Roboto Slab** — Apache-2.0
+- **Playfair Display** — OFL-1.1
+- **Cormorant Garamond** — OFL-1.1
+- **Oswald** — OFL-1.1
+- **Bebas Neue** — OFL-1.1
+- **Roboto Mono** — OFL-1.1
+- **JetBrains Mono** — OFL-1.1
+- **Fira Code** — OFL-1.1
+- **IBM Plex Mono** — OFL-1.1
+- **Noto Sans Devanagari** — OFL-1.1
+- **Noto Serif Devanagari** — OFL-1.1
+- **Mukta** — OFL-1.1
+- **Hind** — OFL-1.1
+- **Tiro Devanagari Hindi** — OFL-1.1
+- **Baloo 2** — OFL-1.1
+- **Rozha One** — OFL-1.1
+- **Yatra One** — OFL-1.1
+- **Kalam** — OFL-1.1
