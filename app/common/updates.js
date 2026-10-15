@@ -33,7 +33,7 @@
 
   function statusText(s) {
     if (!s) return '';
-    if (!s.supported) return 'Automatic updates aren’t available for this copy (developer build or package-managed install).';
+    if (!s.supported) return s.store ? 'This copy was installed from Microsoft Store, which keeps it up to date automatically.' : 'Automatic updates aren’t available for this copy (developer build or package-managed install).';
     switch (s.status) {
       case 'checking': return 'Checking for updates…';
       case 'downloading': return `Downloading version ${esc(s.version)}… ${s.percent || 0}%`;

@@ -19,7 +19,8 @@
     "release": "bash tools/release.sh",
     "notes": "node tools/assemble-site.js notes",
     "assemble": "node tools/assemble-site.js",
-    "deploy": "node tools/deploy-ftp.js"
+    "deploy": "node tools/deploy-ftp.js",
+    "dist:store": "electron-builder --win appx --x64 --publish never"
   },
   "dependencies": {
     "electron-log": "^5.4.4",
@@ -235,6 +236,22 @@
     ],
     "releaseInfo": {
       "releaseNotesFile": "build/release-notes.md"
+    },
+    "appx": {
+      "identityName": "PENDING.BTSOffice",
+      "publisher": "CN=PENDING",
+      "publisherDisplayName": "Bhoomiputra Tech Solutions Private Limited",
+      "displayName": "BTS Office",
+      "applicationId": "BTSOffice",
+      "backgroundColor": "#172033",
+      "languages": [
+        "en-US",
+        "en-IN",
+        "hi-IN"
+      ],
+      "artifactName": "BTS-Office-Store-${version}.${ext}",
+      "showNameOnTiles": true,
+      "setBuildNumber": false
     }
   },
   "repository": {

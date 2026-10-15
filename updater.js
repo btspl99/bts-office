@@ -16,7 +16,7 @@ const FIRST_CHECK_MS = 8 * 1000;
 const RECHECK_MS = 4 * 60 * 60 * 1000;
 
 let autoUpdater = null;
-let state = { status: 'idle', version: null, percent: 0, notes: '', error: null, current: app.getVersion(), supported: false };
+let state = { status: 'idle', version: null, percent: 0, notes: '', error: null, current: app.getVersion(), supported: false, store: !!process.windowsStore };
 let getSettings = () => ({});
 let getWindows = () => [];
 let timer = null;
@@ -33,6 +33,7 @@ function notesToText(n) {
 }
 
 function supportedPlatform() {
+  if (process.windowsStore) return false;                                // Microsoft Store installs update through the Store
   if (!app.isPackaged && !process.env.BTS_UPDATE_URL) return false;     // dev runs never update
   if (process.platform === 'win32') return true;                         // NSIS installer
   if (process.platform === 'linux') return !!process.env.APPIMAGE;       // AppImage only (.deb uses apt)

@@ -1,0 +1,28 @@
+name: Microsoft Store package
+
+# Builds the MSIX/AppX package for Microsoft Store. Microsoft signs it during certification,
+# so no code-signing certificate is needed. Run it from Actions ▸ Microsoft Store package ▸ Run workflow,
+# then upload the .appx from the run's artifacts in Partner Center ▸ BTS Office ▸ Packages.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*.*.*']
+
+jobs:
+  appx:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run notes
+      - name: Build Store package
+        run: npx electron-builder --win appx --x64 --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bts-office-store-${{ github.ref_name }}
+          path: dist/*.appx
+          retention-days: 90
