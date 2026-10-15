@@ -49,6 +49,8 @@ office suite · word processor · spreadsheet · presentation · pdf reader · s
 - Website: https://office.btspl.tech
 - Store ID: 9PNM51QX7C96  (https://apps.microsoft.com/detail/9PNM51QX7C96)
 - Package identity: BTSPL.BTSOffice / CN=1083D034-8784-47FC-A79A-FB1BC9BE8E80 / BTSPL
+- Store ID: 9PNM51QX7C96  (https://apps.microsoft.com/detail/9PNM51QX7C96)
+- Package identity: BTSPL.BTSOffice / CN=1083D034-8784-47FC-A79A-FB1BC9BE8E80 / BTSPL
 - Support contact: btspl99@gmail.com
 - Privacy policy URL: https://office.btspl.tech/privacy.html
 - Category: Productivity  (subcategory none)
