@@ -33,6 +33,18 @@
     return c.toDataURL('image/png');
   }
   X.svgToPNG = svgToPNG;
+  X.processImage = (el) => processImage(el);
+  /* custom shape path (el.path, box-relative px) → PptxGenJS custGeom points (inches) */
+  X.pathPoints = (el) => {
+    const g = SL.geom('custom', el.w, el.h, el); const out = [];
+    SL.pathSegs(g.d).forEach(s => {
+      if (s.c === 'M') out.push({ x: IN(s.p[0]), y: IN(s.p[1]), moveTo: true });
+      else if (s.c === 'L') out.push({ x: IN(s.p[0]), y: IN(s.p[1]) });
+      else if (s.c === 'C') out.push({ x: IN(s.p[4]), y: IN(s.p[5]), curve: { type: 'cubic', x1: IN(s.p[0]), y1: IN(s.p[1]), x2: IN(s.p[2]), y2: IN(s.p[3]) } });
+      else if (s.c === 'Z') out.push({ close: true });
+    });
+    return out;
+  };
   async function processImage(el) {
     const url = SL.assetURL(el.src); if (!url) return null;
     const crop = el.crop || { l: 0, t: 0, r: 0, b: 0 };
@@ -49,6 +61,7 @@
     g.drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
     return c.toDataURL(/jpe?g/.test(url.slice(0, 20)) && !el.radius ? 'image/jpeg' : 'image/png', .92);
   }
+  X.bgImage = (bg, W, H) => bgImage(bg, W, H);
   async function bgImage(bg, W, H) {
     const url = SL.assetURL(bg.src); if (!url) return null;
     if (bg.fit === 'stretch') return url;
@@ -238,6 +251,8 @@
       });
       if (el.autofit === 'shrink') o.fit = 'shrink'; else if (el.autofit === 'resize') o.fit = 'resize';
       if (el.kind === 'roundRect') o.rectRadius = Math.min(el.w, el.h) * (el.adj ?? .1667) / 96;
+      if (el.kind === 'trapezoid' && el.adj != null) o.rectRadius = Math.min(el.w, el.h) * el.adj / 96; // PptxGenJS writes it as the shape's "adj" guide
+      if (el.type === 'shape' && el.kind === 'custom' && el.path) { o.shape = 'custGeom'; o.points = X.pathPoints(el); }
       if (el.dir === 'vert') o.vert = 'vert'; else if (el.dir === 'vert270') o.vert = 'vert270';
       if (el.lh && el.lh !== 1) o.lineSpacingMultiple = el.lh;
       if (!o.fill) delete o.fill; if (!o.line) delete o.line; if (!o.shadow) delete o.shadow;
@@ -245,6 +260,12 @@
     } else if (el.type === 'image') {
       const data = await processImage(el); if (!data) return;
       const o = Object.assign(g, { data, objectName: name, altText: el.alt || '' });
+      if (el.opacity != null && el.opacity < 1) o.transparency = Math.round((1 - el.opacity) * 100);
+      slide.addImage(o);
+    } else if (el.type === 'equation') {
+      if (!SL.equationPNG) return;
+      const data = await SL.equationPNG(el, pres, 4);
+      const o = Object.assign(g, { data, objectName: name, altText: 'Equation: ' + (el.eq || '') });
       if (el.opacity != null && el.opacity < 1) o.transparency = Math.round((1 - el.opacity) * 100);
       slide.addImage(o);
     } else if (el.type === 'icon') {

@@ -115,7 +115,7 @@
     Object.assign(show, {
       on: true, idx: from, step: 0, steps: [], windowed: !!opts.windowed, ended: false, num: '', pen: null, strokes: {}, order,
       loop: kiosk || !!(opts.loop ?? $('#show-loop')?.checked), timings: !opts.rehearse && (kiosk || (opts.useTimings ?? $('#show-timings')?.checked !== false)),
-      anims: !setup.noAnims && $('#show-anims')?.checked !== false, kiosk, rehearse: !!opts.rehearse, presenter: !!(opts.presenter ?? (setup.presenter && !opts.windowed)),
+      anims: !setup.noAnims && $('#show-anims')?.checked !== false, kiosk, rehearse: !!opts.rehearse, narrate: !!opts.narrate, presenter: !!(opts.presenter ?? (setup.presenter && !opts.windowed)),
       elapsed: 0, paused: false, rec: {}, visits: [], last: performance.now(), cover: null, gridOpen: false,
     });
     await SL.ensureFonts(P());
@@ -157,6 +157,7 @@
     const rs = r.querySelector('.rh-slide'); if (rs) rs.textContent = fmt(show.rec[P().slides[show.idx]?.id] || 0);
     const rt = r.querySelector('.rh-total'); if (rt) rt.textContent = fmt(show.elapsed);
     r.classList.toggle('timer-paused', !!show.paused);
+    if (FX.onShowTick) FX.onShowTick(show);
   }
   FX.end = () => {
     if (!show.on) return;
@@ -166,7 +167,8 @@
     if (!show.windowed && BTS.desktop) bts.fullscreen(false);
     if (show.idx != null && show.idx < P().slides.length && !show.ended) E.goto(show.idx);
     $('#stage')?.focus();
-    if (show.rehearse && FX.onRehearseEnd) setTimeout(() => FX.onRehearseEnd(Object.assign({}, show.rec), show.elapsed, show.order.slice()), 30);
+    if (show.narrate && FX.onNarrateEnd) setTimeout(() => FX.onNarrateEnd(Object.assign({}, show.rec), show.elapsed, show.order.slice()), 30);
+    else if (show.rehearse && FX.onRehearseEnd) setTimeout(() => FX.onRehearseEnd(Object.assign({}, show.rec), show.elapsed, show.order.slice()), 30);
   };
   function fitShow() {
     if (!show.on) return;
@@ -213,6 +215,7 @@
     const slide = P().slides[i]; show.idx = i; show.ended = false;
     if (!show.order.includes(i) && !show.customOrder) { /* jumped to a hidden slide: keep navigating from here */ }
     show.visits.push(i);
+    if (FX.onShowSlide) FX.onShowSlide(i, show);
     show.steps = show.anims ? FX.buildSteps(slide) : []; show.step = 0;
     const built = opts.built || !show.anims;
     const hidden = built ? new Set() : FX.hiddenAtStart(slide);
@@ -264,8 +267,9 @@
   FX.goto = (i) => { if (show.on) goSlide(i, { transition: false }); };
   function endScreen() {
     show.ended = true; clearTimeout(show.autoT);
+    if (FX.onShowSlide) FX.onShowSlide(-1, show);
     const stage = show.root.querySelector('.show-stage'); const old = stage.querySelector('.show-slide');
-    const n = document.createElement('div'); n.className = 'show-end'; n.style.cssText = `width:${SL.W(P())}px;height:${SL.H(P())}px`; n.innerHTML = `<div>${show.rehearse ? 'End of rehearsal. Click to see your timings.' : 'End of slide show. Click to exit.'}</div>`;
+    const n = document.createElement('div'); n.className = 'show-end'; n.style.cssText = `width:${SL.W(P())}px;height:${SL.H(P())}px`; n.innerHTML = `<div>${show.narrate ? 'End of narration. Click to finish.' : show.rehearse ? 'End of rehearsal. Click to see your timings.' : 'End of slide show. Click to exit.'}</div>`;
     FX.transition(stage, old, n, { type: 'fade', dur: 300 });
     const c = show.root.querySelector('.show-count'); if (c) c.textContent = 'End';
     const pc = show.root.querySelector('.pv-count'); if (pc) pc.textContent = 'End of show';

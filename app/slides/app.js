@@ -11,7 +11,7 @@
     if (E.editing) { E.editing = null; }
     FX.show.on && FX.end();
     if (E.view === 'master' && SLX.masterAbort) SLX.masterAbort();
-    SL.pres = p; SL.cur = 0; E.sel = []; E.railSel = new Set([0]); E.fit = true;
+    SL.pres = p; SL.cur = 0; E.sel = []; E.railSel = new Set([0]); E.fit = true; SL.narration = {};
     if (!opts.keepAssets) { /* assets are additive; unused ones are dropped at save time */ }
     SL.resetHistory(); C.buildThemeGallery(); E.renderAll(); requestAnimationFrame(E.layout);
     // thumbnails and the canvas are redrawn once the bundled fonts this presentation uses are loaded
@@ -47,6 +47,7 @@
     if (E.editing) E.endEdit();
     if (E.view === 'master') SLX.masterClose();
     if (ext === 'pptx') return await PPTXExport.build(P());
+    if (ext === 'odp') return await ODPExport.build(P());
     if (ext === 'json') { const used = {}; JSON.stringify(P()).replace(/"(a[\w]+)"/g, (m, id) => { if (SL.assets[id]) used[id] = SL.assets[id]; }); return JSON.stringify({ bts: 'slides', version: 1, pres: P(), assets: used }); }
     throw new Error('Unsupported format: ' + ext);
   }
@@ -451,7 +452,7 @@
     BTS.hasContent = () => P().slides.length > 1 || P().slides.some(s => s.elements.some(e => (e.html && !SL.isEmptyText(e)) || !e.ph));
     BTS.init({
       app: 'slides', name: 'BTS Slides', letter: 'P', defaultTitle: 'Presentation',
-      saveFormats: [{ ext: 'pptx', label: 'PowerPoint presentation (.pptx)', icon: 'presentation' }],
+      saveFormats: [{ ext: 'pptx', label: 'PowerPoint presentation (.pptx)', icon: 'presentation' }, { ext: 'odp', label: 'OpenDocument presentation (.odp)', icon: 'file-box' }],
       openAccept: '.pptx',
       onCommand, load, save, newDocument, search, onZoom, zoom: 100, minZoom: 10, maxZoom: 400,
       exportPDF, afterExportPDF, infoHTML,

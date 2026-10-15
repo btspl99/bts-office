@@ -11,6 +11,7 @@
 <script src="common/fonts.js"></script>
 <script src="common/updates.js"></script>
 <script src="common/shell.js"></script>
+<script src="common/smartart.js" defer></script>
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/pptxgen.bundle.js"></script>
 <script src="slides/themes.js" defer></script>
@@ -27,6 +28,10 @@
 <script src="slides/review.js" defer></script>
 <script src="slides/showtools.js" defer></script>
 <script src="slides/export-extra.js" defer></script>
+<script src="slides/insert-extra.js" defer></script>
+<script src="slides/media.js" defer></script>
+<script src="slides/odp-export.js" defer></script>
+<script src="slides/autosave.js" defer></script>
 <script src="slides/app.js" defer></script>
 </head>
 <body data-app="slides">
@@ -150,6 +155,7 @@
     </div><div class="rgroup-label">Images</div></div>
     <div class="rgroup"><div class="rgroup-body">
       <button class="rb lg" data-cmd="shapes-menu" data-icon="shapes" title="Insert a shape"><span>Shapes</span></button>
+      <button class="rb lg" data-cmd="insert-smartart" data-icon="network" title="SmartArt: a diagram (process, cycle, org chart, pyramid, Venn…) made from a list of text"><span>SmartArt</span></button>
       <button class="rb lg" data-cmd="insert-chart" data-icon="chart-column" title="Insert a chart"><span>Chart</span></button>
     </div><div class="rgroup-label">Illustrations</div></div>
     <div class="rgroup"><div class="rgroup-body">
@@ -162,6 +168,7 @@
       </div>
     </div><div class="rgroup-label">Text</div></div>
     <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="insert-equation" data-icon="sigma" title="Equation: type maths like x^2, (a)/(b), sqrt(x), \pi"><span>Equation</span></button>
       <button class="rb lg" data-cmd="insert-symbol" data-icon="omega" title="Insert a symbol"><span>Symbol</span></button>
     </div><div class="rgroup-label">Symbols</div></div>
     <div class="rgroup"><div class="rgroup-body">
@@ -252,6 +259,7 @@
       <button class="rb lg" data-cmd="setup-show" data-icon="settings-2" title="Set up slide show: kiosk/loop, range of slides, custom show, timings and presenter view"><span>Set Up Slide Show</span></button>
       <button class="rb lg" data-cmd="hide-slide" data-icon="eye-off" title="Hide this slide during the slide show" id="b-hide"><span>Hide Slide</span></button>
       <button class="rb lg" data-cmd="rehearse" data-icon="timer" title="Rehearse timings: practise the show and record how long you spend on each slide"><span>Rehearse Timings</span></button>
+      <button class="rb lg" data-cmd="record-narration" data-icon="mic" title="Record narration: play the show and record your voice for each slide, with timings. Used when you export a video."><span>Record Narration</span></button>
       <div class="rcol">
         <label class="rlabel check-row" title="Play the show again from the start until you press Esc"><input type="checkbox" id="show-loop" data-cmd="show-loop"> Loop until Esc</label>
         <label class="rlabel check-row" title="Play with timings: advance slides automatically using the recorded timings"><input type="checkbox" id="show-timings" data-cmd="show-timings" checked> Use timings</label>
@@ -328,7 +336,11 @@
       <button class="rb lg" data-cmd="export-png-all" data-icon="images" title="Save all slides as PNG pictures in one .zip file"><span>All Slides as Pictures</span></button>
     </div><div class="rgroup-label">Pictures</div></div>
     <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="export-video" data-icon="clapperboard" title="Export the slide show as a video (MP4): 720p or 1080p, with transitions, timings and narration"><span>Video</span></button>
+    </div><div class="rgroup-label">Video</div></div>
+    <div class="rgroup"><div class="rgroup-body">
       <button class="rb lg" data-cmd="saveas" data-icon="presentation" title="Save a copy as a PowerPoint presentation (.pptx)"><span>PowerPoint</span></button>
+      <button class="rb lg" data-cmd="save-odp" data-icon="file-box" title="Save a copy as an OpenDocument presentation (.odp) for LibreOffice Impress"><span>OpenDocument</span></button>
       <button class="rb lg" data-cmd="export-outline" data-icon="file-text" title="Export the slide text and notes as a plain-text outline (.txt)"><span>Outline</span></button>
     </div><div class="rgroup-label">Files</div></div>
     <div class="rgroup"><div class="rgroup-body">
@@ -397,7 +409,7 @@
         <button class="rb md" data-cmd="pic-reset" data-icon="rotate-ccw" title="Reset crop and size">Reset</button>
       </div>
     </div><div class="rgroup-label">Picture</div></div>
-    <div class="rgroup" data-for="image icon chart shape table"><div class="rgroup-body">
+    <div class="rgroup" data-for="image icon chart shape table equation"><div class="rgroup-body">
       <button class="rb lg" data-cmd="alt-text" data-icon="image-play" title="Alt text: describe this object for screen readers, or mark it as decorative"><span>Alt Text</span></button>
     </div><div class="rgroup-label">Accessibility</div></div>
     <div class="rgroup" data-for="table"><div class="rgroup-body">
@@ -428,6 +440,14 @@
       </div>
       <button class="rb lg" data-cmd="tbl-cell-fill" data-icon="paint-bucket" title="Shade the current cell"><span>Cell Shading</span></button>
     </div><div class="rgroup-label">Table</div></div>
+    <div class="rgroup" data-for="smartart"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="smartart-edit" data-icon="network" title="Change the SmartArt layout or edit its text"><span>Layout &amp; Text</span></button>
+      <button class="rb lg" data-cmd="smartart-convert" data-icon="shapes" title="Convert the SmartArt to plain shapes (it can no longer change layout)"><span>Convert to Shapes</span></button>
+    </div><div class="rgroup-label">SmartArt</div></div>
+    <div class="rgroup" data-for="equation"><div class="rgroup-body">
+      <button class="rb lg" data-cmd="equation-edit" data-icon="sigma" title="Edit the equation"><span>Edit Equation</span></button>
+      <button class="rb lg" data-cmd="equation-color" data-icon="palette" title="Equation colour"><span>Colour</span></button>
+    </div><div class="rgroup-label">Equation</div></div>
     <div class="rgroup" data-for="chart"><div class="rgroup-body">
       <button class="rb lg" data-cmd="chart-edit" data-icon="sheet" title="Edit chart data"><span>Edit Data</span></button>
       <button class="rb lg" data-cmd="chart-type" data-icon="chart-pie" title="Change chart type"><span>Chart Type</span></button>
@@ -454,6 +474,7 @@
 
 <datalist id="size-list"></datalist>
 
+<div id="recover-bar" class="hidden"></div>
 <main id="workspace">
   <aside id="rail" tabindex="0" aria-label="Slides"></aside>
   <div id="center">

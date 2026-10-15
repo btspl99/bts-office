@@ -754,6 +754,8 @@
     const alpha = blip && desc(blip, 'alphaModFix'); if (alpha) el.opacity = +attr(alpha, 'amt') / 100000;
     if (desc(spPr, 'outerShdw')) el.shadow = true;
     if (info && env.level === 'slide' && info.type === 'pic') el.ph = 'pic';
+    // an equation exported by BTS Slides (picture + "Equation: …" alt text) becomes editable again
+    if (el.alt && /^Equation: ./.test(el.alt) && env.level === 'slide') return SL.newElement('equation', { x: el.x, y: el.y, w: el.w, h: el.h, rot: el.rot, eq: el.alt.slice(10), size: Math.max(8, Math.round(el.h / 2.2)), color: 'text', name: 'Equation' });
     return el;
   }
 

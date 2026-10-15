@@ -903,6 +903,7 @@
       const el = SL.findEl(elNode.dataset.id); if (!el) return;
       if (el.type === 'image') { if (!el.src) BTS.dispatch('insert-picture'); else E.startCrop(el.id); return; }
       if (el.type === 'chart') { BTS.dispatch('chart-edit'); return; }
+      if (el.type === 'equation') { BTS.dispatch('equation-edit'); return; }
       E.startEdit(el.id, { at: ev });
     });
     stage.addEventListener('contextmenu', e => e.preventDefault());

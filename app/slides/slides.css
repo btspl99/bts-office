@@ -38,6 +38,10 @@
 .sl-slide .icon-wrap { position: absolute; inset: 0; }
 .sl-slide .icon-svg { display: block; overflow: visible; }
 .sl-slide .chart { display: block; overflow: visible; }
+.sl-slide .eqx, .eq-measure { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: "Cambria Math", Cambria, "STIX Two Math", "Times New Roman", serif; font-style: italic; white-space: nowrap; line-height: 1.25; }
+.eq-measure { inset: auto; left: -9999px; top: 0; visibility: hidden; padding: 0; }
+.sl-slide .eqx .frac, .eq-measure .frac, .eq-prev .frac { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; font-size: 90%; line-height: 1.1; }
+.sl-slide .eqx .frac > span:first-child, .eq-measure .frac > span:first-child, .eq-prev .frac > span:first-child { border-bottom: 1px solid currentColor; padding: 0 2px; }
 .sl-slide .tbl { width: 100%; border-collapse: collapse; table-layout: fixed; height: 100%; }
 .sl-slide .tbl td { border: 1.5px solid #fff; padding: 0; overflow: hidden; }
 .sl-slide .tbl .cell { padding: 5px 9px; outline: none; min-height: 1.2em; line-height: 1.2; overflow-wrap: break-word; }
@@ -541,3 +545,26 @@ html[data-theme="dark"] .a11y-sec.warn { color: #f0b04a; } html[data-theme="dark
 .np-title { position: absolute; left: 20mm; right: 20mm; font-size: 11pt; font-weight: 700; color: #333; }
 .np-text { position: absolute; left: 20mm; right: 20mm; font-size: 12pt; line-height: 1.5; color: #222; overflow: hidden; }
 .np-empty { color: #999; font-style: italic; }
+
+/* ---- v1.3: equations, SmartArt, video export, narration, recovery ---- */
+.eq-prev { border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-height: 64px; display: flex; align-items: center; justify-content: center; font: italic 26px "Cambria Math", Cambria, "Times New Roman", serif; background: #fff; color: #111; text-align: center; white-space: nowrap; overflow: auto; }
+.eq-tpls { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+.eq-tpls button { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 4px 9px; font: italic 13px "Cambria Math", Cambria, "Times New Roman", serif; }
+.eq-tpls button:hover { border-color: var(--accent); }
+.eq-dlg .hint { font-size: 12px; color: var(--ink-2); margin-top: 8px; line-height: 1.45; }
+.eq-dlg .field-row { margin-top: 10px; }
+#recover-bar { display: flex; align-items: center; gap: 10px; padding: 7px 14px; background: color-mix(in srgb, #f2b705 18%, var(--surface)); border-bottom: 1px solid var(--line); font-weight: 500; }
+#recover-bar.hidden { display: none; }
+#recover-bar .btn { height: 28px; }
+.vid-dlg .field-row { display: flex; gap: 12px; }
+.vid-dlg .field-row .field { flex: 1; }
+.vid-dlg .check { margin: 6px 0; }
+.vid-dlg .pf-note { margin: 8px 0 0; }
+.vid-prog { display: flex; flex-direction: column; gap: 10px; min-width: 380px; }
+.vid-prog .bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.vid-prog .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.vid-prog canvas { width: 100%; border-radius: 6px; border: 1px solid var(--line); background: #000; }
+.vid-prog .st { font-size: 12.5px; color: var(--ink-2); }
+#show .nar-bar { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 20px; background: rgba(20,20,24,.82); color: #fff; font: 600 13px/1 var(--font-ui, sans-serif); z-index: 6; pointer-events: none; }
+#show .nar-bar i { width: 10px; height: 10px; border-radius: 50%; background: #e5484d; animation: narPulse 1.2s infinite; }
+@keyframes narPulse { 50% { opacity: .35; } }

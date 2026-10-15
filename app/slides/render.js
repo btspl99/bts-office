@@ -43,7 +43,7 @@
       case 'rtTriangle': return { d: poly([[0, 0], [w, h], [0, h]]), inset: [.08, .5, .5, .08] };
       case 'diamond': return { d: poly([[w / 2, 0], [w, h / 2], [w / 2, h], [0, h / 2]]), inset: [.25, .25, .25, .25] };
       case 'parallelogram': { const o = m * .25; return { d: poly([[o, 0], [w, 0], [w - o, h], [0, h]]), inset: [o / w, 0, o / w, 0] }; }
-      case 'trapezoid': { const o = m * .25; return { d: poly([[o, 0], [w - o, 0], [w, h], [0, h]]), inset: [o / w, 0, o / w, 0] }; }
+      case 'trapezoid': { const o = Math.min(w / 2, m * (el.adj ?? .25)); return { d: poly([[o, 0], [w - o, 0], [w, h], [0, h]]), inset: [o / w, 0, o / w, 0] }; }
       case 'pentagon': return { d: poly([[w / 2, 0], [w, h * .382], [w * .809, h], [w * .191, h], [0, h * .382]]), inset: [.19, .3, .19, 0] };
       case 'hexagon': { const o = m * .25; return { d: poly([[o, 0], [w - o, 0], [w, h / 2], [w - o, h], [o, h], [0, h / 2]]), inset: [o / w, .1, o / w, .1] }; }
       case 'octagon': { const o = m * .2929; return { d: poly([[o, 0], [w - o, 0], [w, o], [w, h - o], [w - o, h], [o, h], [0, h - o], [0, o]]), inset: [.15, .15, .15, .15] }; }
@@ -78,6 +78,46 @@
       case 'custom': if (el.path) { const sx = w / (el.path.w || 1), sy = h / (el.path.h || 1); return { d: el.path.d.replace(/(-?\d*\.?\d+(?:e-?\d+)?),(-?\d*\.?\d+(?:e-?\d+)?)/g, (_, a, b) => f2(a * sx) + ' ' + f2(b * sy)), inset: [0, 0, 0, 0], noFillPaths: el.path.noFill } } // falls through
       default: return { d: `M0 0 H${f2(w)} V${f2(h)} H0 Z`, inset: [0, 0, 0, 0] };
     }
+  };
+
+  /* SVG path data → absolute segments [{ c:'M'|'L'|'C'|'Z', p:[…] }] (H/V/Q/S/A converted to L/C). Used by the
+   * .pptx (custom geometry) and .odp (enhanced path) exporters. */
+  SL.pathSegs = (d) => {
+    const toks = String(d || '').match(/[a-zA-Z]|-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/g) || [];
+    const out = []; let i = 0, cmd = '', x = 0, y = 0, sx = 0, sy = 0, lc = null;
+    const num = () => +toks[i++];
+    const isNum = () => i < toks.length && !/^[a-zA-Z]$/.test(toks[i]);
+    while (i < toks.length) {
+      if (/^[a-zA-Z]$/.test(toks[i])) cmd = toks[i++]; else if (!cmd) { i++; continue; }
+      const rel = cmd === cmd.toLowerCase(), C = cmd.toUpperCase();
+      const ox = rel ? x : 0, oy = rel ? y : 0;
+      if (C === 'Z') { out.push({ c: 'Z' }); x = sx; y = sy; lc = null; if (!isNum()) continue; }
+      if (!isNum()) continue;
+      if (C === 'M') { x = ox + num(); y = oy + num(); sx = x; sy = y; out.push({ c: 'M', p: [x, y] }); cmd = rel ? 'l' : 'L'; lc = null; }
+      else if (C === 'L') { x = ox + num(); y = oy + num(); out.push({ c: 'L', p: [x, y] }); lc = null; }
+      else if (C === 'H') { x = ox + num(); out.push({ c: 'L', p: [x, y] }); lc = null; }
+      else if (C === 'V') { y = (rel ? y : 0) + num(); out.push({ c: 'L', p: [x, y] }); lc = null; }
+      else if (C === 'C') { const p = [ox + num(), oy + num(), ox + num(), oy + num(), ox + num(), oy + num()]; out.push({ c: 'C', p }); lc = [p[2], p[3]]; x = p[4]; y = p[5]; }
+      else if (C === 'S') { const c1 = lc ? [2 * x - lc[0], 2 * y - lc[1]] : [x, y]; const p = [c1[0], c1[1], ox + num(), oy + num(), ox + num(), oy + num()]; out.push({ c: 'C', p }); lc = [p[2], p[3]]; x = p[4]; y = p[5]; }
+      else if (C === 'Q') { const qx = ox + num(), qy = oy + num(), ex = ox + num(), ey = oy + num(); out.push({ c: 'C', p: [x + 2 / 3 * (qx - x), y + 2 / 3 * (qy - y), ex + 2 / 3 * (qx - ex), ey + 2 / 3 * (qy - ey), ex, ey] }); x = ex; y = ey; lc = null; }
+      else if (C === 'A') {
+        let rx = Math.abs(num()), ry = Math.abs(num()); const phi = num() * Math.PI / 180, fa = num(), fs = num(), ex = ox + num(), ey = oy + num();
+        if (!rx || !ry) { out.push({ c: 'L', p: [ex, ey] }); x = ex; y = ey; continue; }
+        const cp = Math.cos(phi), sp = Math.sin(phi), dx = (x - ex) / 2, dy = (y - ey) / 2;
+        const x1 = cp * dx + sp * dy, y1 = -sp * dx + cp * dy; const lam = x1 * x1 / (rx * rx) + y1 * y1 / (ry * ry); if (lam > 1) { rx *= Math.sqrt(lam); ry *= Math.sqrt(lam); }
+        let k = Math.sqrt(Math.max(0, (rx * rx * ry * ry - rx * rx * y1 * y1 - ry * ry * x1 * x1) / (rx * rx * y1 * y1 + ry * ry * x1 * x1))); if (fa == fs) k = -k;
+        const cxp = k * rx * y1 / ry, cyp = -k * ry * x1 / rx, cx = cp * cxp - sp * cyp + (x + ex) / 2, cy = sp * cxp + cp * cyp + (y + ey) / 2;
+        const ang = (ux, uy, vx, vy) => { const a = Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy); return a; };
+        const t1 = ang(1, 0, (x1 - cxp) / rx, (y1 - cyp) / ry); let dt = ang((x1 - cxp) / rx, (y1 - cyp) / ry, (-x1 - cxp) / rx, (-y1 - cyp) / ry);
+        if (!+fs && dt > 0) dt -= 2 * Math.PI; if (+fs && dt < 0) dt += 2 * Math.PI;
+        const n = Math.max(1, Math.ceil(Math.abs(dt) / (Math.PI / 2))), dd = dt / n, kk = 4 / 3 * Math.tan(dd / 4);
+        const P2 = (t) => [cx + rx * Math.cos(t) * cp - ry * Math.sin(t) * sp, cy + rx * Math.cos(t) * sp + ry * Math.sin(t) * cp];
+        const D2 = (t) => [-rx * Math.sin(t) * cp - ry * Math.cos(t) * sp, -rx * Math.sin(t) * sp + ry * Math.cos(t) * cp];
+        for (let j = 0; j < n; j++) { const a = t1 + dd * j, b = a + dd; const pa = P2(a), pb = P2(b), da = D2(a), db = D2(b); out.push({ c: 'C', p: [pa[0] + kk * da[0], pa[1] + kk * da[1], pb[0] - kk * db[0], pb[1] - kk * db[1], pb[0], pb[1]] }); }
+        x = ex; y = ey; lc = null;
+      } else i++;
+    }
+    return out;
   };
 
   // Make SVG ids unique per render: the same slide is drawn many times (rail, gallery, canvas) and
@@ -294,6 +334,20 @@
     return `<svg class="icon-svg" width="100%" height="100%" viewBox="0 0 24 24" preserveAspectRatio="none" fill="${el.fillIcon ? SL.color(el.color || 'accent1', pres) : 'none'}" stroke="${SL.color(el.color || 'accent1', pres)}" stroke-width="${el.strokeWidth || 1.75}" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke">${body}</svg>`;
   };
 
+  /* ---------- equations (same linear format as BTS Docs) ----------
+   * x^2, x_i, x^{n+1}, (a)/(b), a/b, sqrt(x), \\alpha, \\pi, \\sum, \\int, \\pm, \\le … */
+  SL.EQ_TEX = { alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ε', theta: 'θ', lambda: 'λ', mu: 'μ', pi: 'π', sigma: 'σ', phi: 'φ', omega: 'ω', Delta: 'Δ', Sigma: 'Σ', Omega: 'Ω', sum: '∑', prod: '∏', int: '∫', inf: '∞', infty: '∞', pm: '±', times: '×', div: '÷', le: '≤', ge: '≥', ne: '≠', approx: '≈', to: '→', deg: '°', cdot: '·', partial: '∂', nabla: '∇', in: '∈', forall: '∀', exists: '∃' };
+  SL.eqToHTML = (s) => {
+    let t = esc(s);
+    t = t.replace(/\\([a-zA-Z]+)/g, (m, w) => SL.EQ_TEX[w] || m);
+    t = t.replace(/sqrt\(([^()]*)\)/g, '√<span style="text-decoration:overline">$1</span>');
+    t = t.replace(/\(([^()]+)\)\/\(([^()]+)\)/g, '<span class="frac"><span>$1</span><span>$2</span></span>');
+    t = t.replace(/(\w+)\/(\w+)/g, '<span class="frac"><span>$1</span><span>$2</span></span>');
+    t = t.replace(/\^\{([^}]*)\}/g, '<sup>$1</sup>').replace(/\^(-?[\w.]+)/g, '<sup>$1</sup>');
+    t = t.replace(/_\{([^}]*)\}/g, '<sub>$1</sub>').replace(/_([\w.]+)/g, '<sub>$1</sub>');
+    return t;
+  };
+
   /* ---------- elements ---------- */
   SL.renderElement = (el, pres, opts = {}) => {
     const d = document.createElement('div');
@@ -340,6 +394,8 @@
       d.innerHTML = SL.chartSVG(el.chart, el.w, el.h, pres);
     } else if (el.type === 'icon') {
       d.innerHTML = `<div class="icon-wrap" style="${flip}">${SL.iconSVG(el, pres)}</div>`;
+    } else if (el.type === 'equation') {
+      d.innerHTML = `<div class="eqx" style="font-size:${el.size || 28}pt;color:${SL.color(el.color || 'text', pres)}"><span>${SL.eqToHTML(el.eq || '')}</span></div>`;
     }
     return d;
   };

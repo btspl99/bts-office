@@ -265,8 +265,10 @@
     tabF.classList.toggle('hidden', !showFmt);
     if (showFmt) {
       const types = new Set(els.map(e => SL.isLine(e) ? 'shape' : e.type));
-      tabF.textContent = types.size === 1 ? ({ image: 'Picture Format', table: 'Table Design', chart: 'Chart Design', icon: 'Graphics Format' }[[...types][0]] || 'Shape Format') : 'Shape Format';
-      $$('#ribbon [data-panel="format"] .rgroup').forEach(g => { const f = g.dataset.for.split(' '); g.classList.toggle('hidden', !(f.includes('any') || [...types].some(x => f.includes(x)))); });
+      const smart = els.some(e => e.smart);
+      tabF.textContent = smart ? 'SmartArt Design' : types.size === 1 ? ({ image: 'Picture Format', table: 'Table Design', chart: 'Chart Design', icon: 'Graphics Format', equation: 'Equation' }[[...types][0]] || 'Shape Format') : 'Shape Format';
+      const vis = new Set(types); if (smart) vis.add('smartart');
+      $$('#ribbon [data-panel="format"] .rgroup').forEach(g => { const f = g.dataset.for.split(' '); g.classList.toggle('hidden', !(f.includes('any') || [...vis].some(x => f.includes(x)))); });
       if (el) { const w = $('#size-w'), h = $('#size-h'); if (document.activeElement !== w) w.value = f2(el.w / 96); if (document.activeElement !== h) h.value = f2(el.h / 96); $('#size-lock').checked = !!el.lockAspect || el.type === 'image' || el.type === 'icon'; }
       if (el && el.type === 'table') { $('#tbl-header').checked = !!el.header; $('#tbl-banded').checked = !!el.banded; }
       $('#b-crop').classList.toggle('on', !!E.cropping);
@@ -632,6 +634,8 @@
       if (isTextual(el) && els.length === 1) items.push({ label: el.type === 'table' ? 'Edit table' : 'Edit text', icon: 'text-cursor-input', action: () => E.startEdit(el.id) });
       if (el.type === 'image' && el.src) items.push({ label: 'Crop', icon: 'crop', action: () => E.startCrop(el.id) }, { label: 'Change picture…', icon: 'image-plus', action: () => BTS.dispatch('pic-replace') }, { label: 'Save picture as…', icon: 'image-down', action: () => C.savePicture(el) });
       if (el.type === 'chart') items.push({ label: 'Edit data…', icon: 'sheet', action: () => BTS.dispatch('chart-edit') });
+      if (el.type === 'equation') items.push({ label: 'Edit equation…', icon: 'sigma', action: () => BTS.dispatch('equation-edit') });
+      if (els.some(e => e.smart)) items.push({ label: 'Change SmartArt layout or text…', icon: 'network', action: () => BTS.dispatch('smartart-edit') });
       items.push({ label: 'Bring to front', icon: 'bring-to-front', action: () => E.zorder('front') }, { label: 'Bring forward', icon: 'arrow-up-from-line', action: () => E.zorder('forward') }, { label: 'Send backward', icon: 'arrow-down-from-line', action: () => E.zorder('backward') }, { label: 'Send to back', icon: 'send-to-back', action: () => E.zorder('back') }, { sep: 1 });
       if (els.length > 1) items.push({ label: 'Group', icon: 'group', kbd: 'Ctrl+G', action: () => E.group() });
       if (els.some(e => e.g)) items.push({ label: 'Ungroup', icon: 'ungroup', kbd: 'Ctrl+Shift+G', action: () => E.ungroup() });
