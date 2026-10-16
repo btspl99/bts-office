@@ -470,7 +470,7 @@
       <button class="tb-btn" data-cmd="redo" title="Redo (Ctrl+Y)">${icon('redo-2', 16)}</button>
       <div class="tb-name"><input id="tb-docname" spellcheck="false" title="Rename"><span class="tb-state" id="tb-state"></span></div>
       <span style="margin-left:auto"></span>
-      ${window.BTSIndic ? `<button class="tb-btn tb-indic" data-cmd="indic-typing" data-search="Type in Hindi or Marathi (phonetic typing)" data-search-icon="languages" title="Type in Hindi or Marathi (Ctrl+Alt+H / Ctrl+Alt+M)"><span class="tb-indic-l">अ</span></button>` : ''}
+      ${window.BTSIndic && cfg.app !== 'docs' ? `<button class="tb-btn tb-indic" data-cmd="indic-typing" data-search="Type in Hindi or Marathi (phonetic typing)" data-search-icon="languages" title="Type in Hindi or Marathi (Ctrl+Alt+H / Ctrl+Alt+M)"><span class="tb-indic-l">अ</span></button>` : ''}
       ${window.BTSVoice ? `<button class="tb-btn tb-voice" data-cmd="voice-typing" data-search="Voice typing (dictate)" data-search-icon="mic" title="Voice typing (Alt+Shift+D)">${icon('mic', 16)}</button>` : ''}
       <button class="tb-btn tb-tell" data-cmd="command-search" title="Search commands (Alt+Q)">${icon('lightbulb', 16)}</button>
       ${cfg.search ? `<label class="tb-search" style="margin-left:6px">${icon('search', 15)}<input id="tb-search" placeholder="Search in ${esc(cfg.defaultTitle.toLowerCase())}"></label>` : ''}`;

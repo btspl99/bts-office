@@ -12,6 +12,8 @@
 <script src="common/updates.js"></script>
 <script src="common/voice.js"></script>
 <script src="common/shell.js"></script>
+<script src="common/legacy-fonts.js"></script>
+<script src="common/indic.js"></script>
 <script src="vendor/hyperformula.full.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="vendor/exceljs.min.js"></script>
@@ -461,7 +463,7 @@
 </div>
 
 <div id="fbar">
-  <input id="namebox" spellcheck="false" title="Name box — type a cell, range or name and press Enter">
+  <input id="namebox" data-indic="off" spellcheck="false" title="Name box — type a cell, range or name and press Enter">
   <button class="nb-drop" id="namebox-drop" title="Defined names">&#9662;</button>
   <div class="fb-btns"><button id="fb-cancel" title="Cancel (Esc)" class="hidden"></button><button id="fb-ok" title="Enter" class="hidden"></button><button id="fb-fx" title="Insert function (Shift+F3)"><i>fx</i></button></div>
   <div id="fx-wrap"><textarea id="fx" spellcheck="false" rows="1"></textarea><div id="fx-hl" aria-hidden="true"></div></div>

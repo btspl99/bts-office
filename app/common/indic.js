@@ -334,8 +334,11 @@
     setOptions, get options() { return Object.assign({}, opts); },
     setHandler: (fn) => { handler = fn; },
     rangeBefore: (el, n) => before(el, n),
+    /* App hook: the last `latin` characters before the caret in `el` were typed while focus was elsewhere
+       (e.g. the first key that opens a spreadsheet cell editor) — convert them and continue the word from there. */
+    adopt: (el, latin) => { if (!lang || !el || !latin) return; const b = before(el, latin.length); if (!b || b.text !== latin) return; const out = render(latin, false); replace(el, latin.length, out, true); st = { el, buf: latin, out, literal: false }; },
     menuItems, help, lastLang: () => lastLang,
     toggle: (l) => enable(lang ? false : (normLang(l) || lastLang)),
-    skip: '[data-indic="off"], #ribbon input, #ribbon select, input[type="number"]',
+    skip: '[data-indic="off"], #ribbon input, #ribbon select, input[type="number"], #gkeys',
   };
 })();
