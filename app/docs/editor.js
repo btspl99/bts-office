@@ -825,7 +825,7 @@
       const sel = D.range(); const selWords = sel && !sel.collapsed ? D.countWords(sel.toString()) : 0;
       BTS.setStatus('page', `<button class="sb-btn" data-cmd="goto-page" title="Go to page">Page ${D.caretPage()} of ${D.pageCount}</button>`);
       BTS.setStatus('words', `<button class="sb-btn" data-cmd="word-count" title="Word count">${selWords ? selWords.toLocaleString('en-IN') + ' of ' : ''}${words.toLocaleString('en-IN')} word${words === 1 ? '' : 's'}</button>`);
-      BTS.setStatus('lang', `${icon('languages', 14)}<span title="Proofing language">English (India)</span>`);
+      if (!document.querySelector('#statusbar [data-sb="lang"]')) { BTS.setStatus('lang', `${icon('languages', 14)}<span title="Proofing language">English (India)</span>`); D.mountIndicPill && D.mountIndicPill(); }
       BTS.setStatusRight(`<button class="sb-btn ${D.focusMode ? 'on' : ''}" data-cmd="focus-mode" title="Focus mode">${icon('scan', 14)}</button><button class="sb-btn" data-cmd="read-aloud" title="Read aloud">${icon('volume-2', 14)}</button>`);
     }, 60);
   };

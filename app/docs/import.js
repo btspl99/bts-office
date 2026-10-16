@@ -6,7 +6,7 @@
   /* ================= sanitizing HTML ================= */
   const ALLOWED_TAGS = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'DEL', 'INS', 'SUB', 'SUP', 'SPAN', 'FONT', 'A', 'BR', 'HR', 'UL', 'OL', 'LI', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TD', 'TH', 'COLGROUP', 'COL', 'CAPTION', 'IMG', 'BLOCKQUOTE', 'PRE', 'CODE', 'DIV', 'SECTION', 'ARTICLE', 'MARK', 'SMALL', 'BIG', 'CENTER', 'DL', 'DT', 'DD', 'FIGURE', 'FIGCAPTION', 'KBD', 'Q', 'CITE', 'ABBR', 'TT', 'HEADER', 'FOOTER', 'MAIN', 'ASIDE', 'NAV', 'ADDRESS']);
   const DROP_TAGS = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'NOSCRIPT', 'TEMPLATE', 'FORM', 'INPUT', 'BUTTON', 'SELECT', 'TEXTAREA', 'SVG', 'MATH', 'CANVAS', 'VIDEO', 'AUDIO', 'TITLE', 'HEAD', 'BASE', 'FRAME', 'FRAMESET', 'APPLET']);
-  const ALLOWED_ATTR = new Set(['href', 'src', 'alt', 'title', 'style', 'class', 'colspan', 'rowspan', 'width', 'height', 'id', 'align', 'valign', 'color', 'face', 'size', 'start', 'type', 'span', 'contenteditable', 'data-eq', 'data-fn', 'data-text', 'data-cid', 'data-fld', 'data-style', 'data-target', 'data-cap', 'data-nw', 'data-nh', 'data-own-drop', 'data-src', 'data-page', 'data-seq', 'data-field', 'data-author', 'data-time', 'data-tcid', 'data-label', 'data-title', 'data-head', 'data-decorative']);
+  const ALLOWED_ATTR = new Set(['href', 'src', 'alt', 'title', 'style', 'class', 'colspan', 'rowspan', 'width', 'height', 'id', 'align', 'valign', 'color', 'face', 'size', 'start', 'type', 'span', 'contenteditable', 'data-eq', 'data-fn', 'data-text', 'data-cid', 'data-fld', 'data-style', 'data-target', 'data-cap', 'data-nw', 'data-nh', 'data-own-drop', 'data-src', 'data-page', 'data-seq', 'data-field', 'data-author', 'data-time', 'data-tcid', 'data-label', 'data-title', 'data-head', 'data-decorative', 'data-smartart']);
   D.sanitize = (html, { keepClasses = true } = {}) => {
     const doc = new DOMParser().parseFromString('<!doctype html><body>' + html, 'text/html');
     const walk = (el) => {
@@ -640,45 +640,211 @@ ${$('#fn-area').innerHTML}
     return out.join('');
   }
 
-  /* ================= ODT import (basic) ================= */
+  /* ================= ODT import ================= */
   D.importOdt = async (bytes) => {
     const zip = await JSZip.loadAsync(bytes);
-    const x = new DOMParser().parseFromString(await zip.file('content.xml').async('string'), 'application/xml');
-    const auto = {}; // automatic styles → css
-    [...x.getElementsByTagName('style:style')].forEach(s => {
-      const name = s.getAttribute('style:name'); const tp = s.getElementsByTagName('style:text-properties')[0]; const pp = s.getElementsByTagName('style:paragraph-properties')[0];
-      let css = ''; let tag = '';
-      if (tp) { if (tp.getAttribute('fo:font-weight') === 'bold') css += 'font-weight:bold;'; if (tp.getAttribute('fo:font-style') === 'italic') css += 'font-style:italic;'; if (tp.getAttribute('style:text-underline-style') && tp.getAttribute('style:text-underline-style') !== 'none') css += 'text-decoration:underline;'; if (tp.getAttribute('fo:color')) css += 'color:' + tp.getAttribute('fo:color') + ';'; if (tp.getAttribute('fo:font-size') && /pt$/.test(tp.getAttribute('fo:font-size'))) css += 'font-size:' + tp.getAttribute('fo:font-size') + ';'; if (tp.getAttribute('fo:background-color') && tp.getAttribute('fo:background-color') !== 'transparent') css += 'background-color:' + tp.getAttribute('fo:background-color') + ';'; if (tp.getAttribute('style:font-name')) css += 'font-family:' + tp.getAttribute('style:font-name') + ';'; }
-      if (pp && pp.getAttribute('fo:text-align')) css += 'text-align:' + ({ start: 'left', end: 'right' }[pp.getAttribute('fo:text-align')] || pp.getAttribute('fo:text-align')) + ';';
-      const parent = s.getAttribute('style:parent-style-name') || '';
-      if (/^Title$/i.test(parent)) tag = 'title'; else if (/^Subtitle$/i.test(parent)) tag = 'subtitle';
-      auto[name] = { css, tag };
+    const parse = async (n) => { const f = zip.file(n); return f ? new DOMParser().parseFromString(await f.async('string'), 'application/xml') : null; };
+    const x = await parse('content.xml'); if (!x) throw new Error('This isn’t a valid .odt file.');
+    const sx = await parse('styles.xml'), mx = await parse('meta.xml');
+    const att = (e, n) => (e && e.getAttribute(n)) || '';
+    const kids = (e, n) => e ? [...e.children].filter(c => c.nodeName === n) : [];
+    const first = (e, n) => e ? e.getElementsByTagName(n)[0] || null : null;
+    const styles = {}, lists = {}, sections = {};
+    const NAMED_TAG = { Title: 'title', Subtitle: 'subtitle', Quotations: 'quote', Quote: 'quote', Intense_20_Quote: 'quote', Preformatted_20_Text: 'pre', Source_20_Text: 'pre', Caption: 'caption', No_20_Spacing: 'nospace', Footnote: 'footnote' };
+    const readStyles = (doc, isAuto) => {
+      if (!doc) return;
+      [...doc.getElementsByTagName('style:style')].forEach(s => {
+        const name = att(s, 'style:name'); const tp = first(s, 'style:text-properties'), pp = first(s, 'style:paragraph-properties'), cp = first(s, 'style:table-cell-properties'), gp = first(s, 'style:graphic-properties'), colp = first(s, 'style:table-column-properties'), sp = first(s, 'style:section-properties');
+        const auto = isAuto || (s.parentNode && s.parentNode.nodeName === 'office:automatic-styles');
+        let css = '', pcss = '';
+        if (tp) {
+          const g = (n) => att(tp, n);
+          if (g('fo:font-weight') === 'bold' || +g('fo:font-weight') >= 600) css += 'font-weight:bold;'; else if (g('fo:font-weight') === 'normal' && auto) css += 'font-weight:normal;';
+          if (g('fo:font-style') === 'italic') css += 'font-style:italic;';
+          const deco = []; if (g('style:text-underline-style') && g('style:text-underline-style') !== 'none') deco.push('underline'); if (g('style:text-line-through-style') && g('style:text-line-through-style') !== 'none') deco.push('line-through'); if (deco.length) css += 'text-decoration:' + deco.join(' ') + ';';
+          if (g('fo:color')) css += 'color:' + g('fo:color') + ';';
+          if (/pt$/.test(g('fo:font-size'))) css += 'font-size:' + g('fo:font-size') + ';';
+          if (g('fo:background-color') && g('fo:background-color') !== 'transparent') css += 'background-color:' + g('fo:background-color') + ';';
+          const fn = g('style:font-name') || g('fo:font-family'); if (fn) css += 'font-family:' + D.fontStack(fn.replace(/^['"]|['"]$/g, '')).replace(/"/g, "'") + ';';
+          const pos = g('style:text-position'); if (/^super|^\d/.test(pos) && !/^0/.test(pos)) css += 'vertical-align:super;font-size:smaller;'; else if (/^sub|^-/.test(pos)) css += 'vertical-align:sub;font-size:smaller;';
+          if (g('fo:text-transform') === 'uppercase') css += 'text-transform:uppercase;';
+          if (g('fo:font-variant') === 'small-caps') css += 'font-variant:small-caps;';
+        }
+        if (pp) {
+          const g = (n) => att(pp, n);
+          if (g('fo:text-align')) pcss += 'text-align:' + ({ start: 'left', end: 'right', left: 'left', right: 'right', center: 'center', justify: 'justify' }[g('fo:text-align')] || 'left') + ';';
+          if (auto) {
+            if (g('fo:margin-left') && parseFloat(g('fo:margin-left'))) pcss += 'margin-left:' + g('fo:margin-left') + ';';
+            if (g('fo:margin-right') && parseFloat(g('fo:margin-right'))) pcss += 'margin-right:' + g('fo:margin-right') + ';';
+            if (g('fo:text-indent') && parseFloat(g('fo:text-indent'))) pcss += 'text-indent:' + g('fo:text-indent') + ';';
+            if (g('fo:margin-top')) pcss += 'margin-top:' + g('fo:margin-top') + ';';
+            if (g('fo:margin-bottom')) pcss += 'margin-bottom:' + g('fo:margin-bottom') + ';';
+            if (/%$/.test(g('fo:line-height'))) pcss += 'line-height:' + (parseFloat(g('fo:line-height')) / 100) + ';';
+            if (g('fo:background-color') && g('fo:background-color') !== 'transparent') pcss += 'background-color:' + g('fo:background-color') + ';';
+            ['top', 'bottom', 'left', 'right'].forEach(sd => { const b = g('fo:border-' + sd) || g('fo:border'); if (b && b !== 'none') pcss += `border-${sd}:${b.replace(/([\d.]+)pt/, (m, v) => Math.max(1, Math.round(v * 4 / 3)) + 'px')};`; });
+            if (pcss.includes('border') || pcss.includes('background')) pcss += 'padding:2pt 4pt;';
+          }
+        }
+        let cell = '';
+        if (cp) {
+          const g = (n) => att(cp, n);
+          if (g('fo:background-color') && g('fo:background-color') !== 'transparent') cell += 'background-color:' + g('fo:background-color') + ';';
+          ['top', 'bottom', 'left', 'right'].forEach(sd => { const b = g('fo:border-' + sd) || g('fo:border'); if (b) cell += `border-${sd}:${b === 'none' ? 'none' : b.replace(/([\d.]+)pt/, (m, v) => Math.max(1, Math.round(v * 4 / 3)) + 'px')};`; });
+          if (g('style:vertical-align') === 'middle') cell += 'vertical-align:middle;'; else if (g('style:vertical-align') === 'bottom') cell += 'vertical-align:bottom;';
+        }
+        const parent = att(s, 'style:parent-style-name');
+        styles[name] = { css, pcss, cell, parent, auto, family: att(s, 'style:family'), breakBefore: pp && att(pp, 'fo:break-before') === 'page', listStyle: att(s, 'style:list-style-name'), hpos: gp ? att(gp, 'style:horizontal-pos') : '', wrap: gp ? att(gp, 'style:wrap') : '', colWidth: colp ? att(colp, 'style:column-width') : '', cols: sp ? +(att(first(sp, 'style:columns'), 'fo:column-count') || 1) : 0, outline: att(s, 'style:default-outline-level') };
+      });
+      [...doc.getElementsByTagName('text:list-style')].forEach(ls => {
+        const lv = [];
+        [...ls.children].forEach(l => { const i = (+att(l, 'text:level') || 1) - 1; if (l.nodeName === 'text:list-level-style-number') lv[i] = { num: true, fmt: att(l, 'style:num-format') || '1', start: +att(l, 'text:start-value') || 1, pre: att(l, 'style:num-prefix'), suf: att(l, 'style:num-suffix') }; else if (l.nodeName === 'text:list-level-style-bullet') lv[i] = { num: false, ch: att(l, 'text:bullet-char') }; });
+        lists[att(ls, 'style:name')] = lv;
+      });
+    };
+    readStyles(sx, false); readStyles(x, true);
+    const named = (n) => { for (let i = 0; n && i < 12; i++) { if (NAMED_TAG[n]) return NAMED_TAG[n]; const h = /^Heading_20_(\d)$/.exec(n); if (h) return 'h' + h[1]; n = styles[n] && styles[n].parent; } return ''; };
+    const css = (n) => { let out = ''; const chain = []; for (let i = 0; n && styles[n] && i < 12; i++) { if (!styles[n].auto) break; chain.unshift(styles[n]); n = styles[n].parent; } chain.forEach(s => { out += s.css; }); return out; };
+    const pcssOf = (n) => { let out = ''; for (let i = 0; n && styles[n] && i < 12; i++) { if (styles[n].auto) out = styles[n].pcss + out; n = styles[n].parent; } return out; };
+    const LT = { '1': 'decimal', a: 'lower-alpha', A: 'upper-alpha', i: 'lower-roman', I: 'upper-roman' };
+    const BUL = { '•': 'disc', '●': 'disc', '◦': 'circle', '○': 'circle', '▪': 'square', '■': 'square', '–': '"– "', '-': '"- "' };
+    // tracked changes & BTS settings
+    const regions = {};
+    [...x.getElementsByTagName('text:changed-region')].forEach(r => {
+      const id = att(r, 'text:id') || att(r, 'xml:id'); const k = r.firstElementChild; if (!k) return;
+      const ci = first(k, 'office:change-info'); regions[id] = { kind: k.nodeName === 'text:insertion' ? 'ins' : k.nodeName === 'text:deletion' ? 'del' : 'fmt', author: ci ? (first(ci, 'dc:creator') || {}).textContent || '' : '', time: ci ? (first(ci, 'dc:date') || {}).textContent || '' : '', text: k.nodeName === 'text:deletion' ? kids(k, 'text:p').map(p => p.textContent).join(' ') : '' };
     });
-    const pics = {};
-    const conv = async (node) => {
+    const ud = {}; if (mx) [...mx.getElementsByTagName('meta:user-defined')].forEach(u => { ud[att(u, 'meta:name')] = u.textContent; });
+    let bts = null; try { bts = ud['BTS.settings'] ? JSON.parse(ud['BTS.settings']) : null; } catch { }
+    const pics = {}; const comments = {}; let fnN = 0, tcN = 0;
+    const tcTag = (id) => { const r = regions[id] || {}; return `data-author="${esc(r.author || 'Unknown')}" data-time="${esc(r.time ? new Date(r.time + (/Z|[+-]\d\d:?\d\d$/.test(r.time) ? '' : 'Z')).toISOString() : new Date().toISOString())}" data-tcid="t${esc(id)}"`; };
+    const conv = async (node, ctx = {}) => {
       let out = '';
       for (const c of node.childNodes) {
         if (c.nodeType === 3) { out += esc(c.data); continue; }
         if (c.nodeType !== 1) continue;
-        const n = c.nodeName; const st = auto[c.getAttribute('text:style-name')] || { css: '', tag: '' };
-        if (n === 'text:h') { const l = Math.min(3, +c.getAttribute('text:outline-level') || 1); out += `<h${l}${st.css ? ` style="${st.css}"` : ''}>${await conv(c) || '<br>'}</h${l}>`; }
-        else if (n === 'text:p') out += `<p${st.tag ? ` class="${st.tag}"` : ''}${st.css ? ` style="${st.css}"` : ''}>${await conv(c) || '<br>'}</p>`;
-        else if (n === 'text:span') out += st.css ? `<span style="${st.css}">${await conv(c)}</span>` : await conv(c);
-        else if (n === 'text:a') out += `<a href="${esc(c.getAttribute('xlink:href') || '')}">${await conv(c)}</a>`;
-        else if (n === 'text:s') out += ' '.repeat(+c.getAttribute('text:c') || 1);
+        const n = c.nodeName; const sn = att(c, 'text:style-name');
+        if (n === 'text:h' || n === 'text:p') {
+          const tag = n === 'text:h' ? 'h' + Math.max(1, Math.min(6, +att(c, 'text:outline-level') || +((styles[sn] || {}).outline) || 1)) : named(sn);
+          const st = (styles[sn] || {}); let pre = ''; for (let s2 = sn, i = 0; s2 && styles[s2] && i < 12; i++, s2 = styles[s2].parent) if (styles[s2].breakBefore) { pre = '<hr class="page-break">'; break; }
+          if (ctx.inList && !pre && st) pre = '';
+          const bm = [...c.children].find(k => k.nodeName === 'text:bookmark' || k.nodeName === 'text:bookmark-start');
+          const id = bm && /^[A-Za-z][\w-]*$/.test(att(bm, 'text:name')) ? ` id="${esc(att(bm, 'text:name'))}"` : '';
+          const pc = pcssOf(sn), tc = css(sn); const style = pc + tc ? ` style="${esc(pc + tc)}"` : '';
+          let inner = await conv(c, ctx);
+          if (ctx.raw) { out += inner; continue; }
+          if (/^h\d$/.test(tag)) out += `${pre}<${tag}${id}${style}>${inner || '<br>'}</${tag}>`;
+          else if (tag === 'pre') out += `${pre}<pre${id}>${inner}</pre>`;
+          else if (tag === 'quote') out += `${pre}<blockquote><p${id}${style}>${inner || '<br>'}</p></blockquote>`;
+          else out += `${pre}<p${id}${['title', 'subtitle', 'caption', 'nospace'].includes(tag) ? ` class="${tag}"` : ''}${style}>${inner || '<br>'}</p>`;
+        }
+        else if (n === 'text:span') { const s = css(sn); const inner = await conv(c, ctx); out += s ? `<span style="${esc(s)}">${inner}</span>` : inner; }
+        else if (n === 'text:a') out += `<a href="${esc(att(c, 'xlink:href'))}">${await conv(c, ctx)}</a>`;
+        else if (n === 'text:s') out += '&nbsp;'.repeat(Math.max(0, (+att(c, 'text:c') || 1) - 1)) + ' ';
         else if (n === 'text:tab') out += '<span class="tab">\t</span>';
         else if (n === 'text:line-break') out += '<br>';
-        else if (n === 'text:list') { const items = []; for (const li of c.children) if (li.nodeName === 'text:list-item' || li.nodeName === 'text:list-header') items.push(`<li>${(await conv(li)).replace(/^<p[^>]*>([\s\S]*?)<\/p>/, '$1')}</li>`); const ordered = /Numbering|num|L\d/i.test(c.getAttribute('text:style-name') || '') && !/bullet/i.test(c.getAttribute('text:style-name') || ''); out += `<${ordered ? 'ol' : 'ul'}>${items.join('')}</${ordered ? 'ol' : 'ul'}>`; }
-        else if (n === 'table:table') { const rows = []; for (const r of c.getElementsByTagName('table:table-row')) { const cells = []; for (const cell of r.children) { if (cell.nodeName === 'table:table-cell') { const cs = cell.getAttribute('table:number-columns-spanned'), rs = cell.getAttribute('table:number-rows-spanned'); cells.push(`<td${cs > 1 ? ` colspan="${cs}"` : ''}${rs > 1 ? ` rowspan="${rs}"` : ''}>${await conv(cell) || '<p><br></p>'}</td>`); } } rows.push('<tr>' + cells.join('') + '</tr>'); } out += `<table class="tbl t-plain"><tbody>${rows.join('')}</tbody></table>`; }
-        else if (n === 'draw:frame') { const img = c.getElementsByTagName('draw:image')[0]; if (img) { const href = img.getAttribute('xlink:href'); const f = href && zip.file(href); if (f) { const b = await f.async('uint8array'); const url = await BTS.bytesToDataURL(b, D.sniffImage(b)); const w = D.toPx(c.getAttribute('svg:width')), h = D.toPx(c.getAttribute('svg:height')); out += `<img src="${url}"${w ? ` style="width:${Math.round(w)}px;height:${Math.round(h)}px"` : ''}>`; } } }
-        else if (n === 'text:soft-page-break' || n === 'office:annotation' || n === 'text:sequence-decls' || n === 'office:forms' || n === 'text:tracked-changes') { }
-        else out += await conv(c);
+        else if (n === 'text:page-number') out += '<span class="fld" data-fld="page" contenteditable="false">1</span>';
+        else if (n === 'text:page-count') out += '<span class="fld" data-fld="pages" contenteditable="false">1</span>';
+        else if (n === 'text:note') {
+          const body = first(c, 'text:note-body'); const text = body ? kids(body, 'text:p').map(p => p.textContent).join('\n').trim() : '';
+          out += `<sup class="fn-ref" data-fn="fo${++fnN}" contenteditable="false" data-text="${esc(text)}">${fnN}</sup>`;
+        }
+        else if (n === 'office:annotation') {
+          const nm = att(c, 'office:name'); const txt = kids(c, 'text:p').map(p => p.textContent).join('\n');
+          const id = 'c' + (nm || Math.random().toString(36).slice(2, 8)).replace(/[^\w-]/g, '');
+          comments[id] = { text: txt, author: (first(c, 'dc:creator') || {}).textContent || 'Unknown', time: Date.parse((first(c, 'dc:date') || {}).textContent || '') || Date.now(), quote: '', name: nm };
+          if (nm) out += `\u0001cs:${id}\u0001`;
+        }
+        else if (n === 'office:annotation-end') { const nm = att(c, 'office:name'); const id = Object.keys(comments).find(k => comments[k].name === nm); if (id) out += `\u0001ce:${id}\u0001`; }
+        else if (n === 'text:change-start') out += `\u0001ts:${att(c, 'text:change-id')}\u0001`;
+        else if (n === 'text:change-end') out += `\u0001te:${att(c, 'text:change-id')}\u0001`;
+        else if (n === 'text:change') { const r = regions[att(c, 'text:change-id')]; if (r && r.kind === 'del' && r.text) out += `<del class="tc-del" ${tcTag(att(c, 'text:change-id'))}>${esc(r.text)}</del>`; }
+        else if (n === 'text:list') {
+          const lsName = sn || ctx.listStyle || ''; const lv = (lists[lsName] || [])[ctx.level || 0];
+          const ordered = lv ? lv.num : (/Numbering|num/i.test(lsName) && !/bullet/i.test(lsName));
+          const items = [];
+          for (const li of c.children) if (li.nodeName === 'text:list-item' || li.nodeName === 'text:list-header') items.push(`<li>${(await conv(li, { ...ctx, listStyle: lsName, level: (ctx.level || 0) + 1, inList: true })).replace(/^<p( style="[^"]*")?>([\s\S]*?)<\/p>/, '$2')}</li>`);
+          const type = lv ? (lv.num ? (lv.pre === '(' ? 'paren-' : '') + (LT[lv.fmt] || 'decimal') : (BUL[lv.ch] || '')) : '';
+          const defType = ordered ? ['decimal', 'lower-alpha', 'lower-roman'][(ctx.level || 0) % 3] : ['disc', 'circle', 'square'][(ctx.level || 0) % 3];
+          const st = type && type !== defType ? ` style="list-style-type:${esc(type)}"` : '';
+          const start = lv && lv.num && lv.start > 1 ? ` start="${lv.start}"` : '';
+          out += `<${ordered ? 'ol' : 'ul'}${start}${st}>${items.join('')}</${ordered ? 'ol' : 'ul'}>`;
+        }
+        else if (n === 'table:table') {
+          const colsW = []; const colEls = []; [...c.children].forEach(k => { if (k.nodeName === 'table:table-column') colEls.push(k); else if (/^table:table-(header-)?columns$/.test(k.nodeName)) colEls.push(...kids(k, 'table:table-column')); });
+          for (const col of colEls) { const cw = (styles[att(col, 'table:style-name')] || {}).colWidth || ''; const w = parseFloat(cw) || 0; const unit = cw.replace(/[\d.]/g, ''); const rep = Math.min(64, +att(col, 'table:number-columns-repeated') || 1); for (let i = 0; i < rep; i++) colsW.push(unit === 'in' ? w * 2.54 : unit === 'mm' ? w / 10 : unit === 'pt' ? w / 72 * 2.54 : w); }
+          const total = colsW.reduce((a, b) => a + b, 0);
+          const rows = [];
+          const rowEls = [...c.getElementsByTagName('table:table-row')].filter(r => { let p = r.parentNode; while (p && p.nodeName !== 'table:table') p = p.parentNode; return p === c; });
+          for (const r of rowEls) {
+            const cells = [];
+            for (const cell of r.children) if (cell.nodeName === 'table:table-cell') {
+              const cs = att(cell, 'table:number-columns-spanned'), rs = att(cell, 'table:number-rows-spanned'); const st = (styles[att(cell, 'table:style-name')] || {}).cell || '';
+              cells.push(`<td${cs > 1 ? ` colspan="${cs}"` : ''}${rs > 1 ? ` rowspan="${rs}"` : ''}${st ? ` style="${esc(st)}"` : ''}>${await conv(cell, ctx) || '<p><br></p>'}</td>`);
+            }
+            rows.push('<tr>' + cells.join('') + '</tr>');
+          }
+          const cg = total > 0 ? '<colgroup>' + colsW.map(w => `<col style="width:${(w / total * 100).toFixed(2)}%">`).join('') + '</colgroup>' : '';
+          const tst = styles[att(c, 'table:style-name')] || {};
+          out += `${tst.breakBefore ? '<hr class="page-break">' : ''}<table class="tbl t-plain">${cg}<tbody>${rows.join('')}</tbody></table>`;
+        }
+        else if (n === 'draw:frame') {
+          const img = first(c, 'draw:image');
+          if (img) {
+            const href = att(img, 'xlink:href'); const f = href && zip.file(href.replace(/^\.\//, ''));
+            if (f) {
+              if (!pics[href]) { const b = await f.async('uint8array'); pics[href] = await BTS.bytesToDataURL(b, D.sniffImage(b)); }
+              const w = D.toPx(att(c, 'svg:width')), h = D.toPx(att(c, 'svg:height')); const gs = styles[att(c, 'draw:style-name')] || {};
+              const cls = att(c, 'text:anchor-type') !== 'as-char' && gs.wrap && gs.wrap !== 'none' ? (gs.hpos === 'right' ? 'img-right' : gs.hpos === 'left' ? 'img-left' : '') : '';
+              const alt = ((first(c, 'svg:desc') || first(c, 'svg:title') || {}).textContent || '');
+              out += `<img src="${pics[href]}"${cls ? ` class="${cls}"` : ''}${alt ? ` alt="${esc(alt)}"` : ''}${w ? ` style="width:${Math.round(w)}px;height:${Math.round(h)}px"` : ''}>`;
+            }
+          } else { const tb = first(c, 'draw:text-box'); if (tb) out += await conv(tb, { ...ctx, raw: true }); }
+        }
+        else if (n === 'text:section') { const st = styles[sn] || {}; const inner = await conv(c, ctx); out += st.cols > 1 ? `<div class="cols cols-${Math.min(3, st.cols)}">${inner}</div>` : inner; }
+        else if (n === 'text:soft-page-break' || n === 'text:sequence-decls' || n === 'office:forms' || n === 'text:tracked-changes' || n === 'text:bookmark' || n === 'text:bookmark-start' || n === 'text:bookmark-end' || n === 'text:table-of-content-source' || n === 'svg:desc' || n === 'svg:title') { }
+        else out += await conv(c, ctx);
       }
       return out;
     };
+    // markers → comment / insertion spans when start and end are in the same paragraph
+    const finish = (h) => h
+      .replace(/\u0001cs:([\w-]+)\u0001([^\u0001]*?)\u0001ce:\1\u0001/g, (m, id, inner) => /<\/?(p|h\d|li|td|table|ul|ol|blockquote|pre)\b/.test(inner) ? inner : `<span class="cmt" data-cid="${id}">${inner}</span>`)
+      .replace(/\u0001ts:([\w-]+)\u0001([^\u0001]*?)\u0001te:\1\u0001/g, (m, id, inner) => /<\/?(p|h\d|li|td|table|ul|ol|blockquote|pre)\b/.test(inner) ? inner : `<ins class="tc-ins" ${tcTag(id)}>${inner}</ins>`)
+      .replace(/\u0001[^\u0001]*\u0001/g, '');
     const bodyEl = x.getElementsByTagName('office:text')[0];
     D.page = D.defaultPage(); D.design = D.defaultDesign(); D.comments = {};
-    D.setContent(D.sanitize(await conv(bodyEl)));
+    // page layout of the first master page
+    let hdr = '', ftr = '';
+    if (sx) {
+      const mp = sx.getElementsByTagName('style:master-page')[0];
+      if (mp) {
+        const pl = [...sx.getElementsByTagName('style:page-layout')].find(l => att(l, 'style:name') === att(mp, 'style:page-layout-name'));
+        const pp = pl && first(pl, 'style:page-layout-properties');
+        if (pp) {
+          const inch = (v) => (D.toPx(v) || 0) / PX;
+          const w = inch(att(pp, 'fo:page-width')), h = inch(att(pp, 'fo:page-height'));
+          const land = att(pp, 'style:print-orientation') === 'landscape' || w > h; const pw = Math.min(w, h), ph = Math.max(w, h);
+          const size = Object.keys(D.PAPER).find(k => Math.abs(D.PAPER[k].w - pw) < 0.08 && Math.abs(D.PAPER[k].h - ph) < 0.08) || 'A4';
+          const hp = first(first(pl, 'style:header-style'), 'style:header-properties'), fp = first(first(pl, 'style:footer-style'), 'style:footer-properties');
+          const padI = (sd) => inch(att(pp, 'fo:padding-' + sd) || att(pp, 'fo:padding')); const mt = inch(att(pp, 'fo:margin-top')) + padI('top'), mb = inch(att(pp, 'fo:margin-bottom')) + padI('bottom');
+          D.page = { size, orient: land ? 'landscape' : 'portrait', m: { t: hp ? Math.max(mt + 0.4, mt + inch(att(hp, 'fo:min-height')) + inch(att(hp, 'fo:margin-bottom')) + 0.2) : mt, b: fp ? Math.max(mb + 0.4, mb + inch(att(fp, 'fo:min-height')) + inch(att(fp, 'fo:margin-top')) + 0.2) : mb, l: inch(att(pp, 'fo:margin-left')) + padI('left'), r: inch(att(pp, 'fo:margin-right')) + padI('right') }, hdrDist: hp ? mt : 0.5, ftrDist: fp ? mb : 0.5 };
+          ['t', 'b', 'l', 'r'].forEach(k => { D.page.m[k] = Math.round(D.page.m[k] * 100) / 100; });
+          if (att(pp, 'fo:background-color') && att(pp, 'fo:background-color') !== 'transparent') D.design.pageColor = att(pp, 'fo:background-color');
+        }
+        const h = first(mp, 'style:header'), f = first(mp, 'style:footer');
+        if (h && att(h, 'style:display') !== 'false') hdr = finish(await conv(h));
+        if (f && att(f, 'style:display') !== 'false') ftr = finish(await conv(f));
+      }
+    }
+    const html = finish(await conv(bodyEl));
+    if (bts) { if (bts.page) D.page = Object.assign(D.defaultPage(), bts.page); if (bts.design) Object.assign(D.design, bts.design); }
+    D.design.track = !!(first(x, 'text:tracked-changes') && att(first(x, 'text:tracked-changes'), 'text:track-changes') === 'true');
+    Object.keys(comments).forEach(k => { if (html.includes(`data-cid="${k}"`)) { const c = comments[k]; delete c.name; D.comments[k] = c; } });
+    if (mx) {
+      const t = (n) => ((mx.getElementsByTagName(n)[0] || {}).textContent || '').trim();
+      BTS.setProps({ title: t('dc:title'), subject: t('dc:subject'), comments: t('dc:description'), author: t('meta:initial-creator') || t('dc:creator'), keywords: [...mx.getElementsByTagName('meta:keyword')].map(k => k.textContent.trim()).filter(Boolean).join(', '), company: ud.Company || '', category: ud.Category || '' });
+    }
+    D.setContent(D.sanitize(html), { hdr: D.sanitize(hdr), ftr: D.sanitize(ftr) });
   };
 
   /* ================= dispatch ================= */

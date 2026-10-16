@@ -366,6 +366,7 @@
     const cell = e.target.closest('td,th'); const cmt = e.target.closest('.cmt'); const eq = e.target.closest('.eq'); const fn = e.target.closest('.fn-ref');
     const cite = e.target.closest('.cite'); const tc = e.target.closest('ins.tc-ins, del.tc-del');
     const items = [{ label: 'Cut', icon: 'scissors', kbd: 'Ctrl+X', disabled: !hasSel && !img, action: () => document.execCommand('cut') }, { label: 'Copy', icon: 'copy', kbd: 'Ctrl+C', disabled: !hasSel && !img, action: () => document.execCommand('copy') }, { label: 'Paste', icon: 'clipboard-paste', kbd: 'Ctrl+V', action: () => pasteFromClipboard(false) }, { label: 'Paste as plain text', icon: 'clipboard-type', kbd: 'Ctrl+Shift+V', action: () => pasteFromClipboard(true) }, { sep: true }];
+    if (img && D.isSmartArt(img)) items.push({ head: 'SmartArt' }, { label: 'Edit SmartArt…', icon: 'network', action: () => D.editSmartArt(img) }, { sep: true });
     if (img) items.push({ head: 'Picture' }, { label: 'In line with text', icon: 'text-cursor', action: () => D.imgOp('wrap', 'inline') }, { label: 'Wrap text — left', icon: 'wrap-text', action: () => D.imgOp('wrap', 'left') }, { label: 'Wrap text — right', icon: 'text-wrap', action: () => D.imgOp('wrap', 'right') }, { label: 'Centered', icon: 'align-center-horizontal', action: () => D.imgOp('wrap', 'center') }, { label: e.target.alt ? 'Edit alt text…' : 'Add alt text…', icon: 'message-square-text', action: () => D.imgAlt(img) }, { label: 'Reset size', icon: 'rotate-ccw', action: () => D.imgOp('reset') }, { label: 'Delete picture', icon: 'trash-2', action: () => D.imgOp('delete') }, { sep: true });
     if (cell) items.push({ head: 'Table' }, { label: 'Insert row above', icon: 'between-horizontal-start', action: () => D.tableOp('row-above') }, { label: 'Insert row below', icon: 'between-horizontal-end', action: () => D.tableOp('row-below') }, { label: 'Insert column left', icon: 'between-vertical-start', action: () => D.tableOp('col-left') }, { label: 'Insert column right', icon: 'between-vertical-end', action: () => D.tableOp('col-right') }, { label: 'Merge cells', icon: 'table-cells-merge', disabled: $$('#doc .cell-sel').length < 2, action: () => D.tableOp('merge') }, { label: 'Split cell…', icon: 'table-cells-split', action: () => D.tableOp('split') }, { label: 'Delete row', icon: 'rows-3', action: () => D.tableOp('del-row') }, { label: 'Delete column', icon: 'columns-3', action: () => D.tableOp('del-col') }, { label: 'Delete table', icon: 'trash-2', action: () => D.tableOp('del-table') }, { sep: true });
     if (a) items.push({ label: 'Edit link…', icon: 'link', action: () => { D.selectNode(a, true); D.linkDialog(); } }, { label: 'Open link', icon: 'external-link', action: () => D.followLink(a) }, { label: 'Remove link', icon: 'unlink', action: () => D.change(() => D.unwrap(a)) }, { sep: true });
@@ -419,6 +420,13 @@
       case 'mm-finish': return D.mmFinishMenu(el);
       // review: tracking, protection, accessibility
       case 'track-toggle': return D.setTrack();
+      // Hindi & Marathi
+      case 'indic-toggle': if (ev && ev.target.closest('.caret, span')) return D.indicMenu(el); return D.indicToggle();
+      case 'indic-menu': return D.indicMenu(el);
+      case 'legacy-convert': return D.convertLegacy();
+      case 'to-krutidev': return D.convertToKruti();
+      case 'legacy-dialog': return BTSLegacyFonts.dialog();
+      case 'legacy-bar-close': return D.hideLegacyBar();
       case 'markup-menu': return D.markupMenu(el);
       case 'tc-accept': if (ev && ev.target.closest('.caret, span')) return D.acceptMenu(el, true); return D.tcResolve(true, 'next');
       case 'tc-reject': if (ev && ev.target.closest('.caret, span')) return D.acceptMenu(el, false); return D.tcResolve(false, 'next');
@@ -491,6 +499,8 @@
       case 'page-break': return D.pageBreak();
       case 'table-menu': return tableMenu(el);
       case 'picture': return D.pickPicture();
+      case 'smartart': return D.insertSmartArt();
+      case 'smartart-edit': return D.editSmartArt();
       case 'shapes-menu': return D.shapesMenu(el);
       case 'link': return D.linkDialog();
       case 'comment-new': return D.addComment();
@@ -634,7 +644,7 @@
   }
 
   function init() {
-    D.initEditor(); D.initStyles(); D.initTables(); D.initInsert(); D.initPanes(); D.initRefs(); D.initTrack(); D.initMailMerge(); D.initReview();
+    D.initEditor(); D.initStyles(); D.initTables(); D.initInsert(); D.initPanes(); D.initRefs(); D.initTrack(); D.initMailMerge(); D.initReview(); D.initIndian(); D.initSmartArt();
     renderStyles(); renderThemes();
     D.afterSettings = () => { D.renderStylesGallery(); D.renderStyleSets(); D.renderStylesPane(); D.syncTrackUI(); D.applyProtection(); D.syncCiteStyle(); };
     D.author = () => BTS.userName || BTS.props.author || 'Student';
@@ -644,16 +654,18 @@
       app: 'docs', name: 'BTS Docs', letter: 'D', defaultTitle: 'Document',
       saveFormats: [
         { ext: 'docx', label: 'Word document (.docx)', icon: 'file-text', hint: 'Opens in Microsoft Word, LibreOffice and Google Docs' },
+        { ext: 'odt', label: 'OpenDocument Text (.odt)', icon: 'file-text', hint: 'Opens in LibreOffice, Microsoft Word and Google Docs' },
         { ext: 'html', label: 'Web page (.html)', icon: 'globe', hint: 'Keeps all BTS Docs formatting; opens in any browser' },
         { ext: 'md', label: 'Markdown (.md)', icon: 'file-code', hint: 'Plain text with headings, lists, links and tables' },
         { ext: 'txt', label: 'Plain text (.txt)', icon: 'file-type', hint: 'Text only, no formatting' },
       ],
       openAccept: '.docx,.odt,.txt,.md,.markdown,.html,.htm,.rtf',
       onCommand,
-      load: (f) => D.loadFile(f),
+      load: async (f) => { await D.loadFile(f); setTimeout(() => D.checkLegacyFonts(), 50); },
       async save(ext) {
         let out;
         if (ext === 'docx') out = await D.exportDocx();
+        else if (ext === 'odt') out = await D.exportOdt();
         else if (ext === 'html') out = D.serializeNative();
         else if (ext === 'md') out = D.toMarkdown();
         else out = D.toText();
@@ -676,7 +688,7 @@
         f.arrayBuffer().then(async b => D.insertImageURL(await BTS.bytesToDataURL(new Uint8Array(b), f.type), f.name.replace(/\.[^.]+$/, '')));
         return true;
       },
-      shortcuts: [['Ctrl+B / I / U', 'Bold / italic / underline'], ['Ctrl+E / L / R / J', 'Center / left / right / justify'], ['Ctrl+K', 'Insert link'], ['Ctrl+Enter', 'Page break'], ['Ctrl+Shift+> / <', 'Bigger / smaller font'], ['Ctrl+1 / 2 / 5', 'Line spacing 1 / 2 / 1.5'], ['Ctrl+Alt+1…3', 'Heading 1–3'], ['Ctrl+Shift+N', 'Normal style'], ['Ctrl+Shift+L', 'Bullets'], ['Ctrl+Shift+V', 'Paste as plain text'], ['Ctrl+G', 'Go to page'], ['Tab / Shift+Tab', 'Indent list / next table cell'], ['F7', 'Spelling on/off']],
+      shortcuts: [['Ctrl+B / I / U', 'Bold / italic / underline'], ['Ctrl+E / L / R / J', 'Center / left / right / justify'], ['Ctrl+K', 'Insert link'], ['Ctrl+Enter', 'Page break'], ['Ctrl+Shift+> / <', 'Bigger / smaller font'], ['Ctrl+1 / 2 / 5', 'Line spacing 1 / 2 / 1.5'], ['Ctrl+Alt+1…3', 'Heading 1–3'], ['Ctrl+Shift+N', 'Normal style'], ['Ctrl+Shift+L', 'Bullets'], ['Ctrl+Shift+V', 'Paste as plain text'], ['Ctrl+G', 'Go to page'], ['Tab / Shift+Tab', 'Indent list / next table cell'], ['F7', 'Spelling on/off'], ['Ctrl+Alt+H / Ctrl+Alt+M', 'Type in Hindi / Marathi (again = off)']],
       ready() {
         D.updateStatus();
         if (!BTS.loadedExt) D.checkRecovery();
