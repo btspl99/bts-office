@@ -293,6 +293,226 @@
     } };
   }
 
+  /* ================= 1.3 student templates ================= */
+  const L = SU.colName;
+  const todaySerial = () => { const d = new Date(); return SU.dateToSerial(d.getFullYear(), d.getMonth() + 1, d.getDate()); };
+  const INPUT = { fill: '#FFF7D6' }; // cells the student types into
+  const note = (t) => ({ v: t, s: { color: '#5c6577', i: true, sz: 10 } });
+
+  /* ---- Project plan (Gantt) ---- */
+  function projectPlan() {
+    const th = TH('fresh'); const acc = th.accents;
+    const d0 = (() => { const t = new Date(); const day = (t.getDay() + 6) % 7; const m = new Date(t.getFullYear(), t.getMonth(), t.getDate() - day - 7); return SU.dateToSerial(m.getFullYear(), m.getMonth() + 1, m.getDate()); })();
+    // [task, owner, start (offset or 'after'), days, % done]
+    const tasks = [['Choose topic & get guide’s approval', 'Asha', 0, 2, 1], ['Research & literature survey', 'Rahul', 'after', 4, 1], ['Buy parts (sensor, pump, board)', 'Imran', 4, 3, 1], ['Circuit design & wiring', 'Imran', 'after', 5, 0.8], ['Write the code', 'Neha', 9, 6, 0.5], ['Assemble the model', 'Imran', 'after', 4, 0], ['Testing & fixing bugs', 'Neha', 'after', 4, 0], ['Project report', 'Rahul', 15, 10, 0.2], ['Poster & presentation slides', 'Asha', 'after', 3, 0], ['Practice the demo', 'All', 'after', 2, 0], ['Final submission & viva', 'All', 'after', 1, 0]];
+    const days = 42, C0 = 9; const R0 = 8; // first task row (1-based); timeline starts at column J
+    const NT = 14; const RN = R0 + NT - 1; // room for 14 tasks
+    const H = hdr(th, { sz: 10, wrap: true });
+    const rows = [];
+    rows.push([title(th, 'Project Plan — Smart Plant Watering System', 18)]);
+    rows.push([null, { v: 'Project start', s: { color: '#5c6577', h: 'right' } }, { v: d0, s: { ...INPUT, nf: 'ddd, d mmm yyyy', b: true, h: 'left', bB: { style: 'thin', color: '#E3C55A' } } }, null, null, { v: 'Today', s: { color: '#5c6577', h: 'right' } }, { v: '=TODAY()', s: { nf: 'd mmm', b: true, color: '#C2410C', h: 'center' } }, { v: `=COUNTIF(H${R0}:H${RN},"Done")&" of "&COUNTA(B${R0}:B${RN})&" tasks done"`, s: { color: '#5c6577' } }]);
+    rows.push([null, { v: 'Overall progress', s: { color: '#5c6577', h: 'right' } }, { v: `=IFERROR(SUMPRODUCT(E${R0}:E${RN},G${R0}:G${RN})/SUM(E${R0}:E${RN}),0)`, s: { nf: '0%', b: true, sz: 13, color: th.dk2, h: 'left' } }, null, null, { v: 'Finish', s: { color: '#5c6577', h: 'right' } }, { v: `=MAX(F${R0}:F${RN})`, s: { nf: 'd mmm', b: true, h: 'center' } }, { v: `=IF(G3="","",IF(G3<TODAY(),"Past the finish date",(G3-TODAY())&" days to go"))`, s: { color: '#5c6577' } }]);
+    rows.push([note('Type your tasks, owners, start dates and days. A start can also be a formula, like =F8+1 (the day after the task above ends). The bars and ▼ today marker move by themselves.')]);
+    // row 5: week labels, row 6: day numbers, row 7: weekday letters
+    const wk = Array(C0).fill(null); for (let k = 0; k < days; k++) wk.push(k % 7 === 0 ? { v: `=$C$2+${k}`, s: { nf: '"Week of "d mmm', sz: 9, b: true, color: th.dk2, h: 'center', fill: STheme.tint(acc[0], 0.82) } } : { s: { fill: STheme.tint(acc[0], 0.82) } }); rows.push(wk);
+    const r6 = ['#', 'Task', 'Owner', 'Start', 'Days', 'End', '% done', 'Status', null].map(v => v === null ? null : { v, s: H });
+    for (let k = 0; k < days; k++) r6.push({ v: `=$C$2+${k}`, s: { nf: 'd', sz: 8, b: true, h: 'center', color: th.dk2, fill: STheme.tint(acc[0], 0.92), ...(k % 7 === 0 ? { bL: { style: 'thin', color: '#B8C4BC' } } : {}) } });
+    rows.push(r6);
+    const r7 = [{ s: H }, { s: H }, { s: H }, { s: H }, { s: H }, { s: H }, { s: H }, { s: H }, null];
+    for (let k = 0; k < days; k++) r7.push({ v: `=CHOOSE(WEEKDAY(${L(C0 + k)}6),"S","M","T","W","T","F","S")`, s: { sz: 8, h: 'center', color: '#7a8496', fill: STheme.tint(acc[0], 0.92), bB: { style: 'thin', color: '#B8C4BC' }, ...(k % 7 === 0 ? { bL: { style: 'thin', color: '#B8C4BC' } } : {}) } });
+    rows.push(r7);
+    const line = { bB: { style: 'thin', color: '#E5E7EB' } };
+    for (let i = 0; i < NT; i++) {
+      const r = R0 + i; const t = tasks[i];
+      const start = !t ? { s: { nf: 'dd-mmm', h: 'center', ...line } } : t[2] === 'after' ? { v: `=F${r - 1}+1`, s: { nf: 'dd-mmm', h: 'center', ...line } } : { v: d0 + t[2], s: { nf: 'dd-mmm', h: 'center', ...line } };
+      const row = [{ v: t ? i + 1 : null, s: { h: 'center', color: '#7a8496', ...line } }, { v: t ? t[0] : null, s: line }, { v: t ? t[1] : null, s: { color: '#47526a', ...line } }, start,
+        { v: t ? t[3] : null, s: { h: 'center', ...line } }, { v: `=IF(OR(D${r}="",E${r}=""),"",D${r}+E${r}-1)`, s: { nf: 'dd-mmm', h: 'center', ...line } }, { v: t ? t[4] : null, s: { nf: '0%', h: 'center', ...line } },
+        { v: `=IF(B${r}="","",IF(G${r}>=1,"Done",IF(F${r}="","",IF(F${r}<TODAY(),"Late",IF(D${r}<=TODAY(),"In progress","Not started")))))`, s: { h: 'center', sz: 10, ...line } }, null];
+      for (let k = 0; k < days; k++) row.push({ s: { ...line, ...(k % 7 === 0 ? { bL: { style: 'thin', color: '#D5DBD7' } } : {}) } });
+      rows.push(row);
+    }
+    const TL = `${L(C0)}${R0}:${L(C0 + days - 1)}${RN}`; const J = L(C0);
+    const colW = { A: 30, B: 252, C: 64, D: 62, E: 44, F: 62, G: 58, H: 86, I: 10 }; for (let k = 0; k < days; k++) colW[L(C0 + k)] = 21;
+    const merges = ['A6:A7', 'B6:B7', 'C6:C7', 'D6:D7', 'E6:E7', 'F6:F7', 'G6:G7', 'H6:H7', 'C2:D2']; for (let k = 0; k < days; k += 7) merges.push(`${L(C0 + k)}5:${L(C0 + Math.min(days - 1, k + 6))}5`);
+    const rowH = { 1: 34, 2: 22, 3: 24, 4: 30, 5: 18, 6: 18, 7: 16 }; for (let r = R0; r <= RN; r++) rowH[r] = 24;
+    const sh = sheet({ name: 'Plan', rows, colW, rowH, freeze: { r: 7, c: 2 }, showGrid: false, merges, tabColor: acc[0],
+      cf: [
+        { type: 'formula', formula: `=AND($E${R0}>0,${J}$6>=$D${R0},${J}$6<$D${R0}+ROUND($E${R0}*$G${R0},0))`, range: TL, fmt: { fill: STheme.tint(acc[0], -0.1) }, stop: true },
+        { type: 'formula', formula: `=AND($E${R0}>0,$H${R0}="Late",${J}$6>=$D${R0},${J}$6<=$F${R0})`, range: TL, fmt: { fill: '#F5A3A3' }, stop: true },
+        { type: 'formula', formula: `=AND($E${R0}>0,${J}$6>=$D${R0},${J}$6<=$F${R0})`, range: TL, fmt: { fill: STheme.tint(acc[0], 0.6) }, stop: true },
+        { type: 'formula', formula: `=${J}$6=TODAY()`, range: TL, fmt: { fill: '#FDE2E4' }, stop: true },
+        { type: 'formula', formula: `=WEEKDAY(${J}$6,2)>5`, range: TL, fmt: { fill: '#F4F5F7' } },
+        { type: 'formula', formula: `=${J}6=TODAY()`, range: `${J}6:${L(C0 + days - 1)}7`, fmt: { fill: '#E11D48', color: '#FFFFFF', b: true } },
+        { type: 'eq', v1: 'Done', range: `H${R0}:H${RN}`, fmt: { fill: '#C6EFCE', color: '#006100' } }, { type: 'eq', v1: 'Late', range: `H${R0}:H${RN}`, fmt: { fill: '#FFC7CE', color: '#9C0006', b: true } }, { type: 'eq', v1: 'In progress', range: `H${R0}:H${RN}`, fmt: { fill: '#FFEB9C', color: '#9C5700' } },
+        { type: 'bar', range: `G${R0}:G${RN}`, color: STheme.tint(acc[0], 0.35) }],
+      validations: [{ range: `G${R0}:G${RN}`, type: 'decimal', op: 'between', v1: 0, v2: 1, errorTitle: '% done', errorMsg: 'Type a percentage from 0% to 100%, for example 50%.', prompt: 'How much is finished? Type 50% for half.', promptTitle: '% done', ignoreBlank: true }, { range: `E${R0}:E${RN}`, type: 'whole', op: 'between', v1: 1, v2: 365, errorTitle: 'Days', errorMsg: 'Type the number of days, from 1 to 365.', ignoreBlank: true }] });
+    return { theme: 'fresh', sheets: [sh] };
+  }
+
+  /* ---- Timeline (events by date) ---- */
+  function timeline() {
+    const th = TH('academic'); const acc = th.accents;
+    const cats = [['Uprising', '#B42318'], ['Political', '#1E3A8A'], ['Movement', '#B45309'], ['Turning point', '#6B21A8'], ['Milestone', '#166534']];
+    const ev = [[1857, 5, 10, 'First War of Independence begins at Meerut', 'Uprising', 'Sepoys rise against East India Company rule; it spreads to Delhi, Kanpur, Lucknow and Jhansi.'],
+      [1885, 12, 28, 'Indian National Congress founded', 'Political', 'First session held in Bombay, presided over by W. C. Bonnerjee.'],
+      [1905, 10, 16, 'Partition of Bengal', 'Political', 'Lord Curzon’s partition sparks the Swadeshi movement; it is reversed in 1911.'],
+      [1919, 4, 13, 'Jallianwala Bagh massacre', 'Turning point', 'Troops fire on a peaceful crowd in Amritsar; public anger grows across India.'],
+      [1920, 9, null, 'Non-Cooperation Movement adopted', 'Movement', 'Approved at the Calcutta session of Congress; called off in 1922 after Chauri Chaura.'],
+      [1930, 3, 12, 'Dandi (Salt) March begins', 'Movement', 'Gandhi walks from Sabarmati Ashram to Dandi and breaks the salt law on 6 April.'],
+      [1942, 8, 8, 'Quit India resolution passed', 'Movement', 'Passed at the Bombay session; the call is “Do or Die”.'],
+      [1947, 8, 15, 'India becomes independent', 'Milestone', 'Jawaharlal Nehru becomes the first Prime Minister.'],
+      [1950, 1, 26, 'Constitution comes into force', 'Milestone', 'India becomes a republic; 26 January is celebrated as Republic Day.']];
+    const N = 15, R0 = 7, RN = R0 + N - 1; const NB = 24, C0 = 7; // strip H..AE
+    const CN = C0 + NB - 1; const cNotes = CN + 2, cGap = CN + 3, cPos = CN + 4; const P = L(cPos), G0 = L(C0), GN = L(CN);
+    const H = hdr(th, { sz: 10, wrap: true });
+    const rows = [];
+    const r1 = [title(th, 'Timeline — India’s Freedom Struggle', 18)]; r1[cPos] = { v: '=YEAR(TODAY())+(MONTH(TODAY())-1)/12+(DAY(TODAY())-1)/365' }; rows.push(r1);
+    const r2 = [note('Type one event per row, in date order. Month and day are optional. Works for history (any year) and for project milestones (▼ marks today).')]; r2[cPos] = { v: `=IFERROR(INT(MIN(${P}${R0}:${P}${RN})),0)` }; rows.push(r2);
+    const r3 = [null, null, null, null, { v: `=IF(COUNT(${P}${R0}:${P}${RN})=0,"",${P}2&" to "&(${P}2+${NB}*${P}3)&" · each column ≈ "&IF(${P}3>=1,ROUND(${P}3,1)&" years",ROUND(${P}3*12,1)&" months"))`, s: { color: th.dk2, b: true, sz: 10 } }];
+    cats.forEach(([c, col], i) => { r3[C0 + i * 5] = { v: c, s: { fill: col, color: '#FFFFFF', b: true, sz: 9, h: 'center' } }; });
+    r3[cPos] = { v: `=IFERROR((INT(MAX(${P}${R0}:${P}${RN}))+1-${P}2)/${NB},1)` }; rows.push(r3);
+    const r4 = []; for (let k = 0; k < NB; k++) r4[C0 + k] = { v: `=$${P}$2+${k}*$${P}$3` }; rows.push(r4); // hidden: start of each column
+    const r5 = [null, null, null, null, null, null, null]; for (let k = 0; k < NB; k++) r5.push(k % 4 === 0 ? { v: `=IF($${P}$3*${NB}<=3,CHOOSE(INT(MOD(${L(C0 + k)}4,1)*12+0.0001)+1,"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")&" "&INT(${L(C0 + k)}4),INT(${L(C0 + k)}4))`, s: { sz: 9, b: true, color: th.dk2, h: 'left', bL: { style: 'thin', color: '#B9AE9C' } } } : null); rows.push(r5);
+    const r6 = ['#', 'Year', 'Month', 'Day', 'Event', 'Category', null].map(v => v === null ? null : { v, s: H });
+    for (let k = 0; k < NB; k++) r6.push({ v: `=IF(AND($${P}$1>=${L(C0 + k)}$4,$${P}$1<${L(C0 + k)}$4+$${P}$3),"▼","")`, s: { color: '#E11D48', sz: 9, h: 'center', v: 'bottom', fill: STheme.tint(acc[0], 0.9), ...(k % 4 === 0 ? { bL: { style: 'thin', color: '#B9AE9C' } } : {}) } });
+    r6.push(null, { v: 'What happened', s: H }, { v: 'Gap from previous', s: H }, { v: 'Position', s: { color: '#9aa3b2', sz: 9 } }); rows.push(r6);
+    const lane = STheme.tint(acc[0], 0.95); const line = { bB: { style: 'thin', color: '#E7E1D8' }, v: 'middle' };
+    for (let i = 0; i < N; i++) {
+      const r = R0 + i; const e = ev[i] || [];
+      const row = [{ v: e[0] ? i + 1 : null, s: { h: 'center', color: '#7a8496', ...line } }, { v: e[0] ?? null, s: { h: 'center', b: true, ...line } }, { v: e[1] ?? null, s: { h: 'center', ...line } }, { v: e[2] ?? null, s: { h: 'center', ...line } }, { v: e[3] ?? null, s: { b: true, ...line } }, { v: e[4] ?? null, s: { h: 'center', sz: 10, ...line } }, null];
+      for (let k = 0; k < NB; k++) row.push({ v: `=IF($${P}${r}="","",IF(AND($${P}${r}>=${L(C0 + k)}$4,$${P}${r}<${L(C0 + k)}$4+$${P}$3),"●",""))`, s: { h: 'center', v: 'middle', color: '#FFFFFF', fill: lane, bB: { style: 'thin', color: '#FFFFFF' }, ...(k % 4 === 0 ? { bL: { style: 'thin', color: '#D9D0C2' } } : {}) } });
+      row.push(null, { v: e[5] ?? null, s: { wrap: true, sz: 10, color: '#3f4656', ...line } });
+      row.push({ v: i === 0 ? `=IF(${P}${r}="","","Start")` : `=IF(OR(${P}${r}="",${P}${r - 1}=""),"",IF(${P}${r}-${P}${r - 1}<1,"+"&ROUND((${P}${r}-${P}${r - 1})*365,0)&" days","+"&ROUND(${P}${r}-${P}${r - 1},1)&" yrs"))`, s: { h: 'center', color: '#5c6577', sz: 10, ...line } });
+      row.push({ v: `=IF(B${r}="","",B${r}+(IF(C${r}="",1,C${r})-1)/12+(IF(D${r}="",1,D${r})-1)/365)`, s: { nf: '0.00', color: '#9aa3b2', sz: 9 } });
+      rows.push(row);
+    }
+    const colW = { A: 30, B: 54, C: 48, D: 40, E: 300, F: 100, G: 10 }; for (let k = 0; k < NB; k++) colW[L(C0 + k)] = 20; colW[L(CN + 1)] = 10; colW[L(cNotes)] = 380; colW[L(cGap)] = 88; colW[P] = 60;
+    const merges = []; for (let k = 0; k < NB; k += 4) merges.push(`${L(C0 + k)}5:${L(C0 + k + 3)}5`); cats.forEach((_, i) => merges.push(`${L(C0 + i * 5)}3:${L(C0 + i * 5 + 3)}3`)); merges.push('E3:F3');
+    const rowH = { 1: 34, 2: 20, 3: 20, 5: 18, 6: 30 }; for (let r = R0; r <= RN; r++) rowH[r] = 36;
+    const cf = cats.map(([c, col]) => ({ type: 'formula', formula: `=AND(${G0}${R0}="●",$F${R0}="${c}")`, range: `${G0}${R0}:${GN}${RN}`, fmt: { fill: col, color: '#FFFFFF', b: true }, stop: true }));
+    cf.push({ type: 'formula', formula: `=AND($${P}$1>=${G0}$4,$${P}$1<${G0}$4+$${P}$3)`, range: `${G0}${R0}:${GN}${RN}`, fmt: { fill: '#FCE7EA' } });
+    cf.push({ type: 'formula', formula: `=AND(${G0}${R0}="●",$F${R0}="")`, range: `${G0}${R0}:${GN}${RN}`, fmt: { fill: '#475569', color: '#FFFFFF' } });
+    cats.forEach(([c, col]) => cf.push({ type: 'eq', v1: c, range: `F${R0}:F${RN}`, fmt: { color: col, b: true } }));
+    const sh = sheet({ name: 'Timeline', rows, colW, rowH, freeze: { r: 6, c: 6 }, showGrid: false, merges, cf, tabColor: acc[0],
+      validations: [{ range: `F${R0}:F${RN}`, type: 'list', source: cats.map(c => c[0]).join(','), ignoreBlank: true, errorStyle: 'warning', errorMsg: 'Pick a category from the list (or keep your own).' }, { range: `B${R0}:B${RN}`, type: 'whole', op: 'between', v1: -5000, v2: 3000, errorTitle: 'Year', errorMsg: 'Type a year as a number, like 1947.', ignoreBlank: true }, { range: `C${R0}:C${RN}`, type: 'whole', op: 'between', v1: 1, v2: 12, errorTitle: 'Month', errorMsg: 'Type the month as a number from 1 to 12 (or leave it blank).', ignoreBlank: true }, { range: `D${R0}:D${RN}`, type: 'whole', op: 'between', v1: 1, v2: 31, errorTitle: 'Day', errorMsg: 'Type the day from 1 to 31 (or leave it blank).', ignoreBlank: true }] });
+    sh.meta.hiddenR = new Set([3]); sh.meta.hiddenC = new Set([cPos]);
+    return { theme: 'academic', sheets: [sh] };
+  }
+
+  /* ---- Grade calculator ---- */
+  function gradeCalc() {
+    const th = TH('slate'); const acc = th.accents;
+    const subj = [['Engineering Mathematics III', 4, 17, 24, null, 71], ['Data Structures', 4, 18, 26, null, 78], ['Digital Electronics', 3, 15, 21, 38, 64], ['Object Oriented Programming', 3, 19, 27, 44, 82], ['Computer Organisation', 3, 14, 18, null, 55], ['Data Structures Lab', 1, null, null, 42, null], ['Environmental Studies', 2, 16, 22, null, 48], ['Soft Skills', 1, 8, 9, null, 30]];
+    const R0 = 10, N = 12, RN = R0 + N - 1;
+    const H = hdr(th, { wrap: true, sz: 10 }); const soft = STheme.tint(acc[1], 0.9);
+    const GT = "'Grade table'!$A$5:$C$12";
+    const rows = [];
+    rows.push([title(th, 'Grade Calculator — Semester 3', 18)]);
+    rows.push([note('Type your marks in the yellow cells. Leave a part blank if your subject doesn’t have it — the weights adjust. Grades come from the Grade table sheet, which you can edit.')]);
+    rows.push([]);
+    rows.push([null, { v: 'Marks scheme', s: { b: true, color: th.dk2 } }, null, { v: 'Assignments', s: H }, { v: 'Internal / mid-term', s: H }, { v: 'Practical / lab', s: H }, { v: 'Final exam', s: H }, { v: 'Total', s: H }]);
+    rows.push([null, { v: 'Marks out of', s: { h: 'right', color: '#5c6577' } }, null, { v: 20, s: { ...INPUT, h: 'center', b: true } }, { v: 30, s: { ...INPUT, h: 'center', b: true } }, { v: 50, s: { ...INPUT, h: 'center', b: true } }, { v: 100, s: { ...INPUT, h: 'center', b: true } }, null]);
+    rows.push([null, { v: 'Weight', s: { h: 'right', color: '#5c6577' } }, null, { v: 0.15, s: { ...INPUT, nf: '0%', h: 'center', b: true } }, { v: 0.2, s: { ...INPUT, nf: '0%', h: 'center', b: true } }, { v: 0.15, s: { ...INPUT, nf: '0%', h: 'center', b: true } }, { v: 0.5, s: { ...INPUT, nf: '0%', h: 'center', b: true } }, { v: '=SUM(D6:G6)', s: { nf: '0%', h: 'center', b: true } }]);
+    rows.push([null, null, null, { v: '=IF(ROUND(H6,4)<>1,"Weights should add up to 100%","")', s: { color: '#C00000', sz: 10, b: true } }]);
+    rows.push([]);
+    rows.push(['#', 'Subject', 'Credits', 'Assign.', 'Internal', 'Practical', 'Final exam', 'Weighted %', 'Grade', 'Grade point', 'Credit points', 'Result'].map(v => ({ v, s: H })));
+    const line = { bB: { style: 'thin', color: '#E2E8F0' } };
+    for (let i = 0; i < N; i++) {
+      const r = R0 + i; const s = subj[i] || [];
+      const mk = (v) => ({ v: v ?? null, s: { ...INPUT, h: 'center', ...line } });
+      rows.push([{ v: s[0] ? i + 1 : null, s: { h: 'center', color: '#7a8496', ...line } }, { v: s[0] ?? null, s: { ...line } }, { v: s[1] ?? null, s: { h: 'center', ...line } }, mk(s[2]), mk(s[3]), mk(s[4]), mk(s[5]),
+        { v: `=IF(COUNT(D${r}:G${r})=0,"",SUMPRODUCT(ISNUMBER(D${r}:G${r})*D${r}:G${r}/$D$5:$G$5*$D$6:$G$6)/SUMPRODUCT(ISNUMBER(D${r}:G${r})*$D$6:$G$6))`, s: { nf: '0.0%', h: 'center', b: true, ...line } },
+        { v: `=IF(H${r}="","",VLOOKUP(H${r},${GT},2,TRUE))`, s: { h: 'center', b: true, ...line } },
+        { v: `=IF(H${r}="","",VLOOKUP(H${r},${GT},3,TRUE))`, s: { h: 'center', ...line } },
+        { v: `=IF(OR(H${r}="",C${r}=""),"",C${r}*J${r})`, s: { h: 'center', ...line } },
+        { v: `=IF(H${r}="","",IF(J${r}>0,"Pass","Fail"))`, s: { h: 'center', ...line } }]);
+    }
+    const sumL = (t) => ({ v: t, s: { b: true, h: 'right', color: th.dk2 } });
+    const big = (f, nf, extra = {}) => ({ v: f, s: { b: true, sz: 14, nf, h: 'center', fill: soft, bT: { style: 'thick', color: acc[1] }, ...extra } });
+    rows.push([]);
+    const S0 = RN + 2;
+    rows.push([null, sumL('Credits counted'), { v: `=SUMPRODUCT(ISNUMBER(H${R0}:H${RN})*C${R0}:C${RN})`, s: { b: true, h: 'center' } }, null, null, null, sumL('Overall percentage'), big(`=IFERROR(SUMPRODUCT(C${R0}:C${RN},H${R0}:H${RN})/C${S0},"")`, '0.00%')]);
+    rows.push([null, sumL('Credits earned (passed)'), { v: `=SUMPRODUCT(ISNUMBER(H${R0}:H${RN})*(L${R0}:L${RN}="Pass")*C${R0}:C${RN})`, s: { b: true, h: 'center' } }, null, null, null, sumL('SGPA (out of 10)'), big(`=IFERROR(ROUND(SUMPRODUCT(C${R0}:C${RN},J${R0}:J${RN})/C${S0},2),"")`, '0.00', { color: acc[1] })]);
+    rows.push([null, sumL('Subjects failed'), { v: `=COUNTIF(L${R0}:L${RN},"Fail")`, s: { b: true, h: 'center' } }, null, null, null, null, note('SGPA = Σ(credits × grade point) ÷ Σ credits')]);
+    rows.push([]);
+    rows.push([null, note('Need this as a percentage for a form? Use File ▸ New ▸ CGPA ↔ percentage converter — and always confirm the rule with your university.')]);
+    const rowH = { 1: 34, 4: 32, 9: 30 }; for (let r = R0; r <= RN; r++) rowH[r] = 22; rowH[S0] = 28; rowH[S0 + 1] = 28;
+    const book = sheet({ name: 'Grades', rows, colW: { A: 30, B: 220, C: 58, D: 88, E: 82, F: 82, G: 80, H: 90, I: 56, J: 62, K: 66, L: 64 }, rowH, freeze: { r: 9, c: 2 }, showGrid: false, tabColor: acc[1],
+      cf: [{ type: 'eq', v1: 'Fail', range: `L${R0}:L${RN}`, fmt: { fill: '#FFC7CE', color: '#9C0006', b: true } }, { type: 'eq', v1: 'Pass', range: `L${R0}:L${RN}`, fmt: { color: '#006100' } }, { type: 'eq', v1: 'F', range: `I${R0}:I${RN}`, fmt: { color: '#C00000' } }, { type: 'bar', range: `H${R0}:H${RN}`, color: STheme.tint(acc[1], 0.55) }, { type: 'formula', formula: '=ROUND($H$6,4)<>1', range: 'H6', fmt: { fill: '#FFC7CE', color: '#9C0006' } }],
+      validations: [{ range: `C${R0}:C${RN}`, type: 'decimal', op: 'between', v1: 0, v2: 40, errorTitle: 'Credits', errorMsg: 'Type the credits for this subject, for example 4.', ignoreBlank: true },
+        { range: `D${R0}:G${RN}`, type: 'decimal', op: 'ge', v1: 0, errorTitle: 'Marks', errorMsg: 'Type the marks you got as a number (or leave it blank).', ignoreBlank: true }] });
+    book.meta.cf.push({ id: 'cfover', type: 'formula', formula: `=AND(ISNUMBER(D${R0}),D${R0}>D$5)`, range: SU.parseRange(`D${R0}:G${RN}`), fmt: { fill: '#FFC7CE', color: '#9C0006', b: true } });
+    const scale = [[0, 'F', 0, 'Fail'], [0.4, 'P', 4, 'Pass'], [0.5, 'C', 5, 'Average'], [0.55, 'B', 6, 'Above average'], [0.6, 'B+', 7, 'Good'], [0.7, 'A', 8, 'Very good'], [0.8, 'A+', 9, 'Excellent'], [0.9, 'O', 10, 'Outstanding']];
+    const gt = sheet({ name: 'Grade table', rows: [[title(th, 'Grade table', 16)], [note('10-point letter grades as in the UGC CBCS guidelines. The % bands differ between universities — change the “From” column to match yours.')], [], [{ v: 'From (weighted %)', s: H }, { v: 'Grade', s: H }, { v: 'Grade point', s: H }, { v: 'Meaning', s: H }],
+      ...scale.map(([f, g, p, m]) => [{ v: f, s: { ...INPUT, nf: '0%', h: 'center', ...line } }, { v: g, s: { b: true, h: 'center', ...line } }, { v: p, s: { ...INPUT, h: 'center', ...line } }, { v: m, s: line }]), [], [note('Keep the rows in order from lowest to highest — the lookup needs that.')]],
+      colW: { A: 120, B: 70, C: 90, D: 150 }, rowH: { 1: 30, 2: 30, 4: 30 }, showGrid: false, merges: ['A2:D2'], styles: { A2: { wrap: true } }, tabColor: acc[2] });
+    return { theme: 'slate', sheets: [book, gt] };
+  }
+
+  /* ---- CGPA ↔ percentage converter ---- */
+  const CGPA_RULES = [
+    ['CBSE (CGPA × 9.5)', 'Percentage = CGPA × 9.5', 9.5, 0, 'linear', 'CBSE’s rule for the old Class 10 CGPA system (CCE). Gives an indicative percentage.'],
+    ['Delhi University (CGPA × 9.5)', 'Percentage = CGPA × 9.5', 9.5, 0, 'linear', 'Used for DU CBCS courses. Check with your university.'],
+    ['AICTE recommended ((CGPA − 0.75) × 10)', 'Percentage = (CGPA − 0.75) × 10', 10, -7.5, 'linear', 'Conversion recommended by AICTE for technical programmes on the 10-point scale. Check with your university.'],
+    ['VTU ((CGPA − 0.75) × 10)', 'Percentage = (CGPA − 0.75) × 10', 10, -7.5, 'linear', 'Visvesvaraya Technological University, Karnataka. Check with your university.'],
+    ['Anna University (CGPA × 10)', 'Percentage = CGPA × 10', 10, 0, 'linear', 'Anna University, Tamil Nadu. Check with your university.'],
+    ['GTU ((CGPA − 0.5) × 10)', 'Percentage = (CGPA − 0.5) × 10', 10, -5, 'linear', 'Gujarat Technological University. Check with your university.'],
+    ['Mumbai University (7.1 × CGPI + 11)', 'Percentage = 7.1 × CGPI + 11', 7.1, 11, 'linear', 'Mumbai University formula for the 10-point CGPI scheme (engineering). Meant for passing CGPIs. Older 7-point grade schemes used a different conversion, so this doesn’t apply to them — check with your university.'],
+    ['Mumbai University, newer schemes (7.25 × CGPI + 11)', 'Percentage = 7.25 × CGPI + 11', 7.25, 11, 'linear', 'Seen in newer Mumbai University schemes. Not confirmed here — check with your university before using it.'],
+    ['SPPU Pune (slab table)', '≥ 9.5: 20×CGPA − 100 · 8.25–9.49: 12×CGPA − 25 · 6.75–8.24: 10×CGPA − 7.5 · 5.75–6.74: 5×CGPA + 26.25 · 4.75–5.74: 10×CGPA − 2.5 · 4.0–4.74: 6.6×CGPA + 13.6', 0, 0, 'sppu', 'Savitribai Phule Pune University engineering conversion table (2015 / 2019 pattern) as commonly published. Check with your university.'],
+    ['Simple estimate (CGPA × 10)', 'Percentage = CGPA × 10', 10, 0, 'linear', 'A rough estimate only — not an official rule.'],
+    ['Custom (a × CGPA + b)', 'Percentage = a × CGPA + b (type a and b)', 9.5, 0, 'linear', 'Type your university’s own multiplier (a) and number to add (b) in the yellow cells.'],
+  ];
+  function cgpaConverter() {
+    const th = TH('saffron'); const navy = th.accents[2], green = th.accents[1], orange = th.accents[0];
+    const NR = CGPA_RULES.length; const RR = `Rules!$A$5:$A$${4 + NR}`; const col = (c) => `Rules!$${c}$5:$${c}$${4 + NR}`;
+    const H = { b: true, color: '#FFFFFF', fill: navy, h: 'center', v: 'middle', wrap: true, sz: 10 };
+    const sec = (t) => ({ v: t, s: { b: true, sz: 13, color: navy, font: th.head, bB: { style: 'medium', color: orange } } });
+    const lab = (t) => ({ v: t, s: { h: 'right', color: '#47526a' } });
+    const sppu = (x) => `IF(${x}>=9.5,20*${x}-100,IF(${x}>=8.25,12*${x}-25,IF(${x}>=6.75,10*${x}-7.5,IF(${x}>=5.75,5*${x}+26.25,IF(${x}>=4.75,10*${x}-2.5,IF(${x}>=4,6.6*${x}+13.6,NA()))))))`;
+    const sppuInv = (p) => `IF(${p}>=90,(${p}+100)/20,IF(${p}>=74,(${p}+25)/12,IF(${p}>=60,(${p}+7.5)/10,IF(${p}>=55,(${p}-26.25)/5,IF(${p}>=45,(${p}+2.5)/10,IF(${p}>=40,(${p}-13.6)/6.6,NA()))))))`;
+    const toPct = (x) => `IF(ISNUMBER(${x}),IFERROR(IF($H$2="sppu",${sppu(x)},$H$3*${x}+$H$4),"—"),"")`;
+    const rows = [];
+    const r1 = [title(th, 'CGPA ↔ Percentage Converter', 18)]; r1[7] = { v: `=INDEX(${col('E')},MATCH($C$7,${RR},0))` }; rows.push(r1); // H1 unused label slot
+    rows.push([{ v: '⚠  Always confirm with your university. Rules differ between universities, courses and schemes, and they change — use this as a guide, not as an official result.', s: { b: true, color: '#8A4B00', fill: '#FFF1DB', wrap: true, v: 'middle', bL: { style: 'thick', color: orange } } }]);
+    rows.push([]);
+    rows.push([null, sec('CGPA → percentage')]);
+    rows.push([]);
+    rows.push([null, lab('Your CGPA / CGPI / SGPA'), { v: 8.2, s: { ...INPUT, b: true, sz: 14, h: 'center', nf: '0.00', bB: { style: 'thin', color: '#E3C55A' } } }, note('out of 10')]);
+    rows.push([null, lab('Conversion rule'), { v: CGPA_RULES[0][0], s: { ...INPUT, b: true, bB: { style: 'thin', color: '#E3C55A' } } }]);
+    rows.push([null, lab('Formula'), { v: `=INDEX(${col('B')},MATCH(C7,${RR},0))`, s: { color: navy, wrap: true } }]);
+    rows.push([null, lab('Percentage'), { v: `=${toPct('C6')}`, s: { b: true, sz: 20, nf: '0.00" %"', h: 'center', color: '#FFFFFF', fill: green } }, { v: `=IF(C6="","",IF(OR(C6<0,C6>10),"CGPA should be between 0 and 10.",IF(NOT(ISNUMBER(C9)),"This rule has no value below CGPA 4 — check your university’s rules.",IF(OR(C9<0,C9>100),"That’s outside 0–100% — this rule may not fit your CGPA.",""))))`, s: { color: '#C00000', b: true, sz: 10, wrap: true } }]);
+    rows.push([null, lab('About this rule'), { v: `=INDEX(${col('F')},MATCH(C7,${RR},0))`, s: { color: '#5c6577', i: true, wrap: true, sz: 10 } }]);
+    rows.push([]);
+    rows.push([null, sec('Percentage → CGPA')]);
+    rows.push([]);
+    rows.push([null, lab('Your percentage'), { v: 75, s: { ...INPUT, b: true, sz: 14, h: 'center', nf: '0.00" %"', bB: { style: 'thin', color: '#E3C55A' } } }, note('uses the rule chosen above')]);
+    rows.push([null, lab('CGPA'), { v: `=IF(ISNUMBER(C14),IFERROR(IF($H$2="sppu",${sppuInv('C14')},(C14-$H$4)/$H$3),"—"),"")`, s: { b: true, sz: 20, nf: '0.00', h: 'center', color: '#FFFFFF', fill: navy } }, { v: '=IF(AND(ISNUMBER(C15),OR(C15<0,C15>10)),"That’s outside 0–10 — this rule may not fit.","")', s: { color: '#C00000', b: true, sz: 10 } }]);
+    rows.push([]);
+    rows.push([null, sec('Semester-wise SGPA → CGPA')]);
+    rows.push([]);
+    const T0 = rows.length + 1; rows.push([null, { v: 'Semester', s: H }, { v: 'SGPA', s: H }, { v: 'Credits', s: H }, { v: 'Percentage (rule above)', s: H }]);
+    const sg = [[7.8, 20], [8.1, 22], [8.4, 24], [7.9, 22], [8.6, 23], [8.8, 21], [null, 24], [null, 20]];
+    const line = { bB: { style: 'thin', color: '#EADFCF' } };
+    sg.forEach(([g, c], i) => { const r = T0 + 1 + i; rows.push([null, { v: 'Semester ' + (i + 1), s: { h: 'center', ...line } }, { v: g, s: { ...INPUT, h: 'center', nf: '0.00', ...line } }, { v: c, s: { ...INPUT, h: 'center', ...line } }, { v: `=${toPct('C' + r)}`, s: { h: 'center', nf: '0.00" %"', ...line } }]); });
+    const TN = T0 + sg.length;
+    rows.push([null, { v: 'CGPA (credit-weighted)', s: { b: true, h: 'right', color: navy } }, { v: `=IFERROR(ROUND(SUMPRODUCT(C${T0 + 1}:C${TN},D${T0 + 1}:D${TN})/SUMPRODUCT(ISNUMBER(C${T0 + 1}:C${TN})*D${T0 + 1}:D${TN}),2),"")`, s: { b: true, sz: 14, h: 'center', nf: '0.00', fill: STheme.tint(navy, 0.88) } }, null, { v: `=${toPct('C' + (TN + 1))}`, s: { b: true, sz: 14, h: 'center', nf: '0.00" %"', fill: STheme.tint(green, 0.85) } }]);
+    rows.push([null, { v: 'Simple average of SGPAs', s: { h: 'right', color: '#5c6577' } }, { v: `=IFERROR(ROUND(AVERAGE(C${T0 + 1}:C${TN}),2),"")`, s: { h: 'center', nf: '0.00' } }, null, note('Most universities use the credit-weighted CGPA.')]);
+    const rowH = { 1: 34, 2: 40, 4: 24, 6: 30, 7: 24, 8: 34, 9: 40, 10: 46, 12: 24, 14: 30, 15: 40, 17: 24 }; rowH[T0] = 30; rowH[TN + 1] = 28;
+    const conv = sheet({ name: 'Converter', rows, colW: { A: 24, B: 190, C: 250, D: 90, E: 170, F: 40, G: 20, H: 60 }, rowH, showGrid: false, merges: ['A2:E2', 'D9:E9', 'C10:E10', 'C8:E8'], tabColor: orange,
+      validations: [{ range: 'C7', type: 'list', source: '=' + RR, errorTitle: 'Rule', errorMsg: 'Pick a rule from the list. To add your own, use “Custom” and edit it on the Rules sheet.', prompt: 'Pick your university’s rule', promptTitle: 'Rule' }, { range: 'C6', type: 'decimal', op: 'between', v1: 0, v2: 10, errorStyle: 'warning', errorMsg: 'A CGPA is usually between 0 and 10.', ignoreBlank: true }, { range: `C${T0 + 1}:C${TN}`, type: 'decimal', op: 'between', v1: 0, v2: 10, errorStyle: 'warning', errorMsg: 'An SGPA is usually between 0 and 10.', ignoreBlank: true }] });
+    // hidden helpers: H2 type, H3 multiplier a, H4 add b
+    conv.data[1] = conv.data[1] || []; conv.data[1][7] = `=INDEX(${col('E')},MATCH($C$7,${RR},0))`; (conv.data[2] = conv.data[2] || [])[7] = `=INDEX(${col('C')},MATCH($C$7,${RR},0))`; (conv.data[3] = conv.data[3] || [])[7] = `=INDEX(${col('D')},MATCH($C$7,${RR},0))`;
+    delete conv.data[0][7]; conv.meta.hiddenC = new Set([7]);
+    for (const [k, st] of conv.meta.styles) if (!st.v) conv.meta.styles.set(k, { ...st, v: 'middle' });
+    const rl = [[title(th, 'Conversion rules', 16)], [note('Common published formulas. Rules differ by university, course and year — always confirm with your university. Edit the yellow “Custom” row for your own rule.')], [], ['Rule', 'Formula', 'Multiply by (a)', 'Add (b)', 'Type', 'Notes'].map(v => ({ v, s: H }))];
+    CGPA_RULES.forEach((r, i) => { const custom = i === NR - 1; rl.push([{ v: r[0], s: { b: true, wrap: true, v: 'top', ...line } }, { v: r[1], s: { wrap: true, v: 'top', color: navy, ...line } }, { v: r[4] === 'sppu' ? null : r[2], s: { h: 'center', v: 'top', ...(custom ? INPUT : {}), ...line } }, { v: r[4] === 'sppu' ? null : r[3], s: { h: 'center', v: 'top', ...(custom ? INPUT : {}), ...line } }, { v: r[4], s: { h: 'center', v: 'top', color: '#9aa3b2', sz: 9, ...line } }, { v: r[5], s: { wrap: true, v: 'top', sz: 10, color: '#3f4656', ...line } }]); });
+    const rrH = { 1: 30, 2: 34, 4: 40 }; CGPA_RULES.forEach((r, i) => { const lines = Math.max(2, Math.ceil(r[0].length / 24), Math.ceil(r[1].length / 34), Math.ceil(r[5].length / 52)); rrH[5 + i] = lines * 18 + 10; });
+    const rules = sheet({ name: 'Rules', rows: rl, colW: { A: 220, B: 260, C: 92, D: 70, E: 50, F: 330 }, rowH: rrH, showGrid: false, merges: ['A2:F2'], styles: { A2: { wrap: true } }, freeze: { r: 4, c: 1 }, tabColor: navy });
+    return { theme: 'saffron', sheets: [conv, rules] };
+  }
+  T.CGPA_RULES = CGPA_RULES;
+
   const mini = (title, lines, accent = ACC) => `<div style="width:100%;height:100%;padding:12px 10px;background:#fff;font:9px Carlito,Calibri,sans-serif;color:#333;text-align:left"><div style="font-weight:700;font-size:11px;color:#0B4F3E;margin-bottom:6px">${title}</div>${lines}</div>`;
   const grid = (rows, cols, hdr = true, color = ACC) => `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:1px;background:#d7dde3;border:1px solid #d7dde3">${Array.from({ length: rows * cols }, (_, i) => `<i style="display:block;height:9px;background:${hdr && i < cols ? color : (Math.floor(i / cols) % 2 ? '#f3f7f6' : '#fff')}"></i>`).join('')}</div>`;
   T.list = [
@@ -304,6 +524,10 @@
     { name: 'Gradebook with sparklines', build: gradebook, thumbHTML: mini('<span style="font-family:\'Source Serif 4\',serif;color:#3B1F1F">Gradebook</span>', Array.from({ length: 9 }, (_, i) => `<div style="display:flex;gap:2px;align-items:center;margin:2px 0"><i style="width:34px;height:7px;background:#eee"></i>${Array.from({ length: 6 }, (_, j) => `<i style="flex:1;height:7px;background:${['#F8696B', '#FFEB84', '#63BE7B', '#b5d99c', '#FFEB84', '#63BE7B'][(i + j * 2) % 6]}"></i>`).join('')}<svg width="30" height="9" viewBox="0 0 30 9"><polyline points="0,7 6,5 12,6 18,3 24,4 30,1" fill="none" stroke="#1E3A8A" stroke-width="1.3"/></svg></div>`).join('')) },
     { name: 'Project tracker (Gantt)', build: projectTracker, thumbHTML: mini('<span style="font-family:Montserrat,sans-serif;color:#111827">Project Tracker</span>', Array.from({ length: 10 }, (_, i) => `<div style="display:flex;gap:4px;align-items:center;margin:3px 0"><i style="width:38px;height:6px;background:#e3e6ea;border-radius:2px"></i><div style="flex:1;position:relative;height:7px"><i style="position:absolute;left:${[0, 5, 16, 21, 28, 33, 52, 57, 71, 83][i]}%;width:${[7, 14, 7, 19, 24, 12, 12, 19, 10, 6][i]}%;height:7px;background:${i < 3 ? '#0891B2' : '#7dd3e1'};border-radius:2px"></i></div></div>`).join('')) },
     { name: 'Sales dashboard', build: salesDashboard, thumbHTML: mini('<span style="font-family:Poppins,sans-serif;color:#012A4A">Sales Dashboard</span>', `<div style="display:flex;gap:3px;margin-bottom:5px">${['#03396C', '#0077B6', '#2A9D8F', '#E76F51'].map(c => `<i style="flex:1;height:14px;background:${c}22;border-top:2px solid ${c}"></i>`).join('')}</div><div style="display:flex;gap:6px"><div style="flex:1">${grid(6, 4, true, '#03396C')}<div style="height:4px"></div>${grid(5, 3, true, '#BFE0F2')}</div><div style="flex:1;display:flex;flex-direction:column;gap:4px"><div style="display:flex;align-items:flex-end;gap:2px;height:38px">${[60, 80, 45, 90, 70, 55].map(h => `<i style="flex:1;height:${h}%;background:#0077B6"></i>`).join('')}</div><svg viewBox="0 0 60 20" height="24"><polyline points="0,15 10,12 20,14 30,6 40,9 50,4 60,7" fill="none" stroke="#2A9D8F" stroke-width="2"/></svg></div></div>`, '#0077B6') },
+    { name: 'Project plan (Gantt)', build: projectPlan, thumbHTML: mini('<span style="font-family:Nunito,sans-serif;color:#14532D">Project Plan</span>', `<div style="display:flex;gap:4px;margin-bottom:4px"><i style="width:44px"></i><div style="flex:1;position:relative;height:8px;background:#dcfce7"><i style="position:absolute;left:37%;top:-2px;width:2px;height:120px;background:#E11D48;opacity:.7"></i></div></div>` + Array.from({ length: 10 }, (_, i) => `<div style="display:flex;gap:4px;align-items:center;margin:3px 0"><i style="width:44px;height:6px;background:#e3e6ea;border-radius:2px"></i><div style="flex:1;position:relative;height:8px"><i style="position:absolute;left:${[0, 5, 10, 17, 22, 30, 40, 36, 60, 68][i]}%;width:${[5, 10, 7, 12, 14, 10, 10, 24, 8, 5][i]}%;height:8px;background:${i < 3 ? '#118A3E' : i < 5 ? 'linear-gradient(90deg,#118A3E 55%,#8bd3a5 55%)' : '#8bd3a5'};border-radius:2px"></i></div></div>`).join(''), '#16A34A') },
+    { name: 'Timeline', build: timeline, thumbHTML: mini('<span style="font-family:\'Source Serif 4\',serif;color:#3B1F1F">Timeline</span>', Array.from({ length: 9 }, (_, i) => `<div style="display:flex;gap:4px;align-items:center;margin:3px 0"><i style="width:16px;height:6px;background:#e3e6ea"></i><i style="width:40px;height:6px;background:#efe9df"></i><div style="flex:1;position:relative;height:9px;background:#f6f2ec"><i style="position:absolute;left:${[0, 30, 52, 66, 68, 78, 90, 95, 97][i]}%;width:6px;height:9px;border-radius:2px;background:${['#B42318', '#1E3A8A', '#1E3A8A', '#6B21A8', '#B45309', '#B45309', '#B45309', '#166534', '#166534'][i]}"></i></div></div>`).join('')) },
+    { name: 'Grade calculator (SGPA)', build: gradeCalc, thumbHTML: mini('<span style="font-family:\'IBM Plex Sans\',sans-serif;color:#1E293B">Grade Calculator</span>', `<div style="display:flex;gap:2px;margin-bottom:5px">${[1, 1, 1, 1].map(() => '<i style="flex:1;height:8px;background:#FFF7D6;border:1px solid #eadb9a"></i>').join('')}</div>` + grid(8, 6, true, '#475569') + `<div style="display:flex;gap:6px;margin-top:6px"><div style="flex:1;height:18px;background:#dbe5fb;border-top:2px solid #2563EB;font:700 9px sans-serif;color:#2563EB;display:flex;align-items:center;justify-content:center">SGPA 7.9</div><div style="flex:1;height:18px;background:#dbe5fb;border-top:2px solid #2563EB;font:700 9px sans-serif;color:#333;display:flex;align-items:center;justify-content:center">71.6%</div></div>`, '#2563EB') },
+    { name: 'CGPA ↔ percentage converter', build: cgpaConverter, thumbHTML: mini('<span style="font-family:Poppins,sans-serif;color:#3A2A12">CGPA <span style="font-family:DejaVu Sans,sans-serif">↔</span> %</span>', `<div style="height:12px;background:#FFF1DB;border-left:3px solid #FF9933;margin-bottom:6px"></div><div style="display:flex;gap:4px;align-items:center;margin:4px 0"><i style="width:40px;height:6px;background:#e3e6ea"></i><i style="flex:1;height:12px;background:#FFF7D6;border:1px solid #eadb9a"></i></div><div style="display:flex;gap:4px;align-items:center;margin:4px 0"><i style="width:40px;height:6px;background:#e3e6ea"></i><i style="flex:1;height:12px;background:#FFF7D6;border:1px solid #eadb9a"></i></div><div style="display:flex;gap:4px;align-items:center;margin:4px 0"><i style="width:40px;height:6px;background:#e3e6ea"></i><div style="flex:1;height:20px;background:#138808;color:#fff;font:700 11px sans-serif;display:flex;align-items:center;justify-content:center">77.90 %</div></div><div style="height:6px"></div>` + grid(5, 3, true, '#000080'), '#FF9933') },
     { name: 'Invoice', build: invoice, thumbHTML: mini(`<span style="color:${ACC};font-size:14px">INVOICE</span>`, `<div style="height:4px;width:60%;background:#e3e6ea;margin:3px 0"></div><div style="height:4px;width:45%;background:#e3e6ea;margin:3px 0 10px"></div>` + grid(7, 4) + `<div style="margin:8px 0 0 auto;width:55%;height:12px;background:${ACC}"></div>`) },
   ];
 })();

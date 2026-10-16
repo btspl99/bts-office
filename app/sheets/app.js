@@ -45,16 +45,16 @@
       saveFormats: [
         { ext: 'xlsx', label: 'Excel workbook (.xlsx)', icon: 'file-spreadsheet', hint: 'Best for sharing with spreadsheet apps — keeps formulas, formatting and sheets' },
         { ext: 'csv', label: 'CSV — comma separated (.csv)', icon: 'file-text', hint: 'Plain values of the current sheet only' },
-        { ext: 'ods', label: 'OpenDocument spreadsheet (.ods)', icon: 'file-spreadsheet', hint: 'Values and formulas (formatting not kept)' },
+        { ext: 'ods', label: 'OpenDocument spreadsheet (.ods)', icon: 'file-spreadsheet', hint: 'For LibreOffice — keeps formulas, number formats, formatting, merged cells and sheets (not charts or pictures)' },
         { ext: 'html', label: 'Web page (.html)', icon: 'file-code', hint: 'All sheets as formatted tables' },
       ],
       openAccept: '.xlsx,.xls,.csv,.tsv,.ods,.txt',
       onCommand: (cmd, el, ev) => App.cmd(cmd, el, ev),
-      load: async (f) => { await IO.load(wb, f); await Promise.race([STheme.preloadWorkbook(wb), new Promise(r => setTimeout(r, 1500))]); afterLoad(); },
+      load: async (f) => { hideRecover(); await IO.load(wb, f); await Promise.race([STheme.preloadWorkbook(wb), new Promise(r => setTimeout(r, 1500))]); afterLoad(); },
       save: async (ext) => {
         if (Ed.isEditing()) Ed.commit();
         if (ext === 'csv') return IO.toCSV(wb.active);
-        if (ext === 'ods') return IO.toODS(wb);
+        if (ext === 'ods') { const out = await IO.toODS(wb); odsNotice(); return out; }
         if (ext === 'html') return IO.toHTML(wb);
         return IO.toXLSX(wb);
       },
@@ -63,13 +63,19 @@
       afterExportPDF: () => IO.endPrint(),
       onZoom: (z) => { Grid.setZoom(z); Ed.reposition(); },
       zoom: 100, minZoom: 25, maxZoom: 400,
-      templates: STemplates.list.map(t => ({ name: t.name, thumbHTML: t.thumbHTML, apply: () => { BTS.resetProps(); wb.resetBook(); const d = t.build(); IO.buildWorkbook(wb, d.sheets, d.names || []); if (d.theme) wb.theme = d.theme; if (d.after) d.after(wb); wb.undoStack = []; wb.redoStack = []; STheme.preloadWorkbook(wb).then(() => { Grid.render(); Charts.onFonts(); }); afterLoad(); } })),
+      templates: STemplates.list.map(t => ({ name: t.name, thumbHTML: t.thumbHTML, apply: () => { hideRecover(); BTS.resetProps(); wb.resetBook(); const d = t.build(); IO.buildWorkbook(wb, d.sheets, d.names || []); if (d.theme) wb.theme = d.theme; if (d.after) d.after(wb); wb.undoStack = []; wb.redoStack = []; STheme.preloadWorkbook(wb).then(() => { Grid.render(); Charts.onFonts(); }); afterLoad(); } })),
       blankThumb: `<div style="width:100%;height:100%;background:#fff;display:grid;grid-template-columns:18px repeat(4,1fr);grid-auto-rows:16px;font:9px Carlito,sans-serif;color:#7a8499">${Array.from({ length: 55 }, (_, i) => { const r = Math.floor(i / 5), c = i % 5; return `<div style="border-right:1px solid #e1e4e8;border-bottom:1px solid #e1e4e8;${r === 0 || c === 0 ? 'background:#f4f6f8;text-align:center' : ''}${r === 1 && c === 1 ? ';outline:2px solid #0F8A6A;outline-offset:-2px' : ''}">${r === 0 && c ? 'ABCD'[c - 1] : c === 0 && r ? r : ''}</div>`; }).join('')}</div>`,
       search: (q) => Dlg.searchFromTitlebar(q),
       infoHTML: () => infoHTML(),
       focus: () => Grid.focus(),
+      ready: () => { if (!BTS.loadedExt) { checkRecovery(); /* a window that crashed moments ago still looks alive: look again once its heartbeat is stale */ setTimeout(() => { if (!BTS.loadedExt && $('#recover-bar').classList.contains('hidden')) checkRecovery(); }, 16500); } SAuto.sweep(); },
       shortcuts: [['Ctrl+Alt+M', 'New comment'], ['Ctrl+Shift+F', 'Font picker'], ['Alt+Shift+→ / ←', 'Group / ungroup'], ['Ctrl+Arrow', 'Jump to edge of data'], ['Shift+Arrow', 'Extend selection'], ['F2', 'Edit cell'], ['F4', 'Toggle $ in formula / repeat'], ['Ctrl+D / Ctrl+R', 'Fill down / right'], ['Ctrl+;', 'Insert today’s date'], ['Ctrl+`', 'Show formulas'], ['Alt+=', 'AutoSum'], ['Ctrl+Shift+L', 'Filter'], ['Ctrl+G', 'Go to'], ['Ctrl+PgUp / PgDn', 'Previous / next sheet'], ['Shift+F11', 'New sheet'], ['Ctrl+E', 'Flash fill'], ['Alt+Enter', 'New line in cell']],
     });
+    /* autosave: every change marks the file dirty → schedule a snapshot; a save / new file / clean close removes it */
+    SAuto.init(wb);
+    const md = BTS.markDirty; BTS.markDirty = () => { md(); SAuto.schedule(); };
+    const mc = BTS.markClean; BTS.markClean = () => { mc(); SAuto.clear(); };
+    window.addEventListener('beforeunload', () => { if (!BTS.dirty) SAuto.clear(); });
     BTS.hasContent = () => wb.sheets.length > 1 || wb.sheets.some(s => s.usedRange().r1 >= 0 || s.charts.length || s.images.length) || wb.undoStack.length > 0;
     A.setMode('Ready');
     afterLoad(true);
@@ -90,6 +96,40 @@
     $('#tbl-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); Grid.focus(); } if (e.key === 'Escape') { App.refreshContext(); Grid.focus(); } });
   }
   function printSheets() { return [wb.active]; }
+
+  /* ---------- crash recovery bar ---------- */
+  function hideRecover() { const b = $('#recover-bar'); if (b) { b.classList.add('hidden'); b.innerHTML = ''; } }
+  function checkRecovery() {
+    const list = SAuto.orphans(); if (!list.length) return;
+    const best = list[0]; const bar = $('#recover-bar');
+    const when = new Date(best.t).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+    bar.innerHTML = `${icon('history', 16)}<span>Recover unsaved workbook “${SU.esc(best.title || 'Book')}” from ${SU.esc(when)}?${list.length > 1 ? ` <span class="rec-more">(${list.length - 1} more after this)</span>` : ''}</span><span style="flex:1"></span><button class="btn primary" id="rec-yes">Recover</button><button class="btn" id="rec-no">Dismiss</button>`;
+    bar.classList.remove('hidden'); App.layoutPanes && App.layoutPanes();
+    $('#rec-yes').onclick = async () => {
+      if ((BTS.dirty || BTS.hasContent()) && !(await BTS.confirm('Replace current workbook?', 'The recovered workbook will replace what is open now.', 'Recover'))) return;
+      let rec = null; try { rec = await SAuto.load(best.sid); } catch (e) { console.warn(e); }
+      if (!rec) { SAuto.discard(best.sid); hideRecover(); BTS.toast('Sorry, that copy couldn’t be read.', { error: true }); return; }
+      try {
+        if (Ed.isEditing()) Ed.cancel();
+        const snap = SAuto.restore(wb, rec.json);
+        BTS.setTitle(snap.title || 'Book'); BTS.filePath = null;
+        await Promise.race([STheme.preloadWorkbook(wb), new Promise(r => setTimeout(r, 1500))]);
+        afterLoad(); Grid.render(); Charts.onFonts && Charts.onFonts();
+        await SAuto.discard(best.sid); BTS.markDirty(); SAuto.flush();
+        hideRecover(); BTS.toast('Workbook recovered — save it to keep it');
+        if (list.length > 1) setTimeout(checkRecovery, 400);
+      } catch (e) { console.error(e); BTS.toast('Couldn’t recover: ' + (e.message || e), { error: true, ms: 5000 }); }
+    };
+    $('#rec-no').onclick = () => { SAuto.discard(best.sid); hideRecover(); if (list.length > 1) setTimeout(checkRecovery, 200); Grid.focus(); };
+  }
+  App.checkRecovery = checkRecovery;
+
+  /* ---------- .ods: tell once per window what an .ods file can't hold ---------- */
+  let odsWarned = false;
+  function odsNotice() {
+    if (odsWarned) return; const lost = SODS.lost(wb); if (!lost.length) return; odsWarned = true;
+    setTimeout(() => BTS.dialog({ title: 'Saved as OpenDocument (.ods)', body: `<p style="margin:4px 0 8px;max-width:460px;line-height:1.5">Values, formulas, number formats, cell formatting, merged cells and column widths are saved. These parts of your workbook aren’t kept in .ods:</p><ul style="margin:0 0 8px;padding-left:20px;line-height:1.6">${lost.map(l => `<li>${SU.esc(l)}</li>`).join('')}</ul><p style="margin:0;max-width:460px;line-height:1.5;color:var(--ink-2)">Keep an .xlsx copy (File ▸ Save) if you need them.</p>`, buttons: [{ label: 'OK', primary: true, value: true }] }), 300);
+  }
 
   function afterLoad(first) {
     if (Ed.isEditing()) Ed.cancel();
