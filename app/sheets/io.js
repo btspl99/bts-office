@@ -53,7 +53,9 @@
         catch (e2) { console.warn('Detailed import unavailable, using basic import', e2); }
       }
     }
-    IO.loadSheetJS(wb, file.data);
+    let extra = null;
+    if (ext === 'ods' && window.SODS) { try { extra = await SODS.read(file.data); } catch (e) { console.warn('ODS detail import failed', e); } }
+    IO.loadSheetJS(wb, file.data, extra);
   };
   function decodeText(bytes) {
     if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) return new TextDecoder('utf-8').decode(bytes.subarray(3));
@@ -386,7 +388,8 @@
     }
     return out;
   }
-  IO.loadSheetJS = (wb, data) => {
+  /** extra (from SODS.read, .ods only): our own reading of formulas, formats, sizes, names and view settings */
+  IO.loadSheetJS = (wb, data, extra) => {
     const X = XLSX.read(data, { type: 'array', cellFormula: true, cellNF: true, cellDates: false, cellStyles: true });
     const sheets = [];
     for (const name of X.SheetNames) {
@@ -394,7 +397,7 @@
       for (const a in ws) {
         if (a[0] === '!') continue; const p = SU.parseAddr(a); if (!p) continue; const c = ws[a];
         let v = null;
-        if (c.f) v = '=' + c.f; else if (c.t === 'n') v = c.v; else if (c.t === 'b') v = !!c.v; else if (c.t === 'e') v = c.w || '#N/A'; else if (c.t === 's' || c.t === 'str') v = String(c.v); else if (c.t === 'd') v = SU.jsDateToSerial(new Date(c.v));
+        if (c.f) v = '=' + (c.f.includes('[') && window.SODS ? SODS.fromOF(c.f).slice(1) : c.f); else if (c.t === 'n') v = c.v; else if (c.t === 'b') v = !!c.v; else if (c.t === 'e') v = c.w || '#N/A'; else if (c.t === 's' || c.t === 'str') v = String(c.v); else if (c.t === 'd') v = SU.jsDateToSerial(new Date(c.v));
         if (v !== null && v !== '') (dataArr[p.r] = dataArr[p.r] || [])[p.c] = v;
         const st = {}; if (c.z && c.z !== 'General') st.nf = c.z;
         if (c.s && c.s.fgColor && c.s.fgColor.rgb && c.s.patternType === 'solid') st.fill = '#' + c.s.fgColor.rgb.slice(-6);
@@ -405,12 +408,22 @@
       const merges = (ws['!merges'] || []).map(m => ({ r0: m.s.r, c0: m.s.c, r1: m.e.r, c1: m.e.c }));
       const colW = new Map(), hiddenC = new Set(); (ws['!cols'] || []).forEach((col, i) => { if (!col) return; const px = col.wpx || (col.wch ? widthToPx(col.wch) : col.width ? widthToPx(col.width) : null); if (px && Math.abs(px - SU.DEF_W) > 1) colW.set(i, Math.round(px)); if (col.hidden) hiddenC.add(i); });
       const rowH = new Map(), hiddenR = new Set(); (ws['!rows'] || []).forEach((row, i) => { if (!row) return; const px = row.hpx || (row.hpt ? ptToPx(row.hpt) : null); if (px && Math.abs(px - SU.DEF_H) > 1) rowH.set(i, Math.round(px)); if (row.hidden) hiddenR.add(i); });
-      sheets.push({ name: name.slice(0, 31), data: dataArr, meta: { styles, links, comments, merges, colW, hiddenC, rowH, hiddenR } });
+      const meta = { styles, links, comments, merges, colW, hiddenC, rowH, hiddenR };
+      const ex = extra && extra.sheets.get(name);
+      if (ex) {
+        if (ex.values) for (const [k, v] of ex.values) { const { r, c } = SU.unkey(k); if (dataArr[r] && typeof dataArr[r][c] === 'number') dataArr[r][c] = v; }
+        for (const [k, f] of ex.formulas) { const { r, c } = SU.unkey(k); (dataArr[r] = dataArr[r] || [])[c] = f; }
+        for (const [k, st] of ex.styles) styles.set(k, { ...(styles.get(k) || {}), ...st });
+        meta.colW = ex.colW; meta.rowH = ex.rowH; meta.hiddenC = ex.hiddenC; meta.hiddenR = ex.hiddenR; meta.freeze = ex.freeze; meta.tabColor = ex.tabColor; if (ex.showGrid === false) meta.showGrid = false;
+      }
+      sheets.push({ name: name.slice(0, 31), data: dataArr, meta });
     }
     const names = []; try { (X.Workbook && X.Workbook.Names || []).forEach(n => { if (n.Sheet === undefined && !n.Name.startsWith('_xlnm')) names.push({ name: n.Name, expression: '=' + n.Ref }); }); } catch { }
+    if (extra && extra.names.length) { names.length = 0; names.push(...extra.names); }
     if (!sheets.length) sheets.push({ name: 'Sheet1', data: [], meta: {} });
     IO.buildWorkbook(wb, sheets, names);
     wb.sheets.forEach(s => { if (!s.colW.size) autofitImported(s); });
+    if (extra && extra.activeTable) { const i = wb.sheets.findIndex(s => s.name === extra.activeTable); if (i >= 0) wb.activeIndex = i; }
   };
 
   /* ================= EXPORT ================= */
@@ -622,7 +635,8 @@
     }
     return book;
   };
-  IO.toODS = (wb) => new Uint8Array(XLSX.write(IO.toSheetJSBook(wb), { bookType: 'ods', type: 'array' }));
+  /* .ods: full writer in ods.js (formats, merges, widths, validation…); SheetJS as a last-resort fallback */
+  IO.toODS = async (wb) => { if (window.SODS) { try { return await SODS.write(wb); } catch (e) { console.error('ODS writer failed, using basic export', e); } } return new Uint8Array(XLSX.write(IO.toSheetJSBook(wb), { bookType: 'ods', type: 'array' })); };
   IO.toHTML = (wb) => {
     const parts = wb.sheets.map(s => `<h2>${SU.esc(s.name)}</h2>` + IO.sheetTableHTML(s, s.usedRangeAll(), { gridlines: true }).html);
     return `<!doctype html><html><head><meta charset="utf-8"><title>${SU.esc(BTS.title)}</title><style>body{font-family:Calibri,Carlito,Arial,sans-serif;margin:24px}h2{font:600 16px sans-serif;margin:24px 0 8px}table{border-collapse:collapse;table-layout:fixed}td{padding:0 3px;overflow:hidden;white-space:nowrap;font-size:11pt}td.wrap{white-space:pre-wrap}</style></head><body>${parts.join('\n')}</body></html>`;
