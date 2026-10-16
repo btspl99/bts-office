@@ -47,7 +47,7 @@
         <ul class="hero-points">
           <li><span data-i="refresh-cw"></span>Updates itself in the background</li>
           <li><span data-i="wifi-off"></span>Works offline once installed</li>
-          <li><span data-i="languages"></span>50 fonts, including Hindi and Marathi</li>
+          <li><span data-i="languages"></span>Type in Hindi and Marathi, and convert Kruti Dev files</li>
           <li><span data-i="code-xml"></span>Open source under GPL-3.0</li>
         </ul>
       </div>
@@ -73,8 +73,9 @@
           <ul class="ticks">
             <li>Styles, 14 style sets, tables, pictures, captions and page breaks</li>
             <li>Track changes, comments, citations and bibliography in APA, MLA or IEEE</li>
-            <li>Mail merge for certificates and letters, table of contents, footnotes</li>
-            <li>Opens .docx, .odt, .txt and .md; saves .docx, PDF and more</li>
+            <li>Hindi and Marathi phonetic typing, Kruti Dev and Shivaji to Unicode, offline voice typing</li>
+            <li>SmartArt diagrams, mail merge, table of contents, citation lookup by DOI or ISBN</li>
+            <li>Opens .docx, .odt, .txt and .md; saves .docx, .odt, PDF and more</li>
           </ul>
         </div>
         <figure class="app-shot"><img src="assets/shots/docs.webp" alt="BTS Docs editing a resume with the Home ribbon open" loading="lazy" width="1400" height="900"></figure>
@@ -87,8 +88,9 @@
           <ul class="ticks">
             <li>Over 400 formulas: SUM, IF, VLOOKUP, XLOOKUP, COUNTIF and more</li>
             <li>PivotTables, sparklines, charts, conditional formatting and Goal Seek</li>
-            <li>Rupee formats, 28 table styles, sheet protection and threaded comments</li>
-            <li>Opens .xlsx, .xls, .ods and .csv; saves .xlsx, .csv and PDF</li>
+            <li>Student templates: grade calculator, CGPA to percentage, project plan (Gantt), timeline</li>
+            <li>Autosave and recovery if your computer shuts down suddenly</li>
+            <li>Opens .xlsx, .xls, .ods and .csv; saves .xlsx, .ods, .csv and PDF</li>
           </ul>
         </div>
         <figure class="app-shot"><img src="assets/shots/sheets.webp" alt="BTS Sheets showing a class marks sheet with grades and a chart" loading="lazy" width="1400" height="900"></figure>
@@ -99,10 +101,11 @@
           <div class="app-name"><span class="badge">P</span><h3>BTS Slides</h3></div>
           <p class="app-lede">Presentations for class, seminars and project reviews.</p>
           <ul class="ticks">
-            <li>31 themes, Slide Master, shapes, icons, tables and charts</li>
+            <li>31 themes, Slide Master, SmartArt diagrams, equations, icons, tables and charts</li>
             <li>Transitions and animations, plus a full-screen slide show with a pen and laser pointer</li>
             <li>Presenter view with notes and timer, rehearse timings, handouts</li>
-            <li>Opens and saves .pptx; exports PDF handouts</li>
+            <li>Export as an MP4 video with your recorded narration</li>
+            <li>Opens and saves .pptx; saves .odp; exports PDF handouts</li>
           </ul>
         </div>
         <figure class="app-shot"><img src="assets/shots/slides.webp" alt="BTS Slides editing a presentation about photosynthesis" loading="lazy" width="1400" height="900"></figure>
@@ -111,12 +114,12 @@
       <article class="app flip" style="--c:#C7354A">
         <div class="app-text">
           <div class="app-name"><span class="badge">R</span><h3>BTS PDF</h3></div>
-          <p class="app-lede">Read notes and question papers, and mark them up.</p>
+          <p class="app-lede">Read, fill, sign and fix PDFs for forms and college portals.</p>
           <ul class="ticks">
-            <li>Fast scrolling, page thumbnails, bookmarks and search</li>
-            <li>Highlight, underline, draw, and add sticky notes and text</li>
-            <li>Save a copy with your notes inside the PDF</li>
-            <li>Print, rotate, combine files and extract pages</li>
+            <li>Fill in admission and exam forms, add your signature and photo</li>
+            <li>Compress to under 200 KB, 500 KB or 1 MB for upload portals</li>
+            <li>Merge, split, reorder and rotate pages; turn photos into a PDF</li>
+            <li>Make scanned pages searchable (English, Hindi, Marathi) and convert PDF to Word</li>
           </ul>
         </div>
         <figure class="app-shot"><img src="assets/shots/pdf.webp" alt="BTS PDF showing a document with page thumbnails" loading="lazy" width="1400" height="900"></figure>
@@ -191,6 +194,10 @@
       <details>
         <summary>We run a computer lab. Can we control updates?</summary>
         <p>Yes. Untick <b>Download and install updates automatically</b> in File &gt; Options &amp; about, or add <code>"autoUpdate": false</code> to <code>%APPDATA%\BTS Office\settings.json</code> on each PC. To serve updates from your own server, add <code>"updateUrl": "https://your-server/bts-office/"</code> and copy our <code>updates</code> folder there.</p>
+      </details>
+      <details>
+        <summary>How does voice typing work without internet?</summary>
+        <p>The first time you use voice typing (Alt+Shift+D, or the microphone button in the title bar), BTS Office downloads a speech model for your language once (about 40 MB for English or Hindi). After that it works offline, and what you say never leaves your computer. You can remove the models in File &gt; Options &amp; about.</p>
       </details>
       <details>
         <summary>Which computers does it run on?</summary>
