@@ -41,7 +41,7 @@
     slides: { name: 'BTS Slides', letter: 'P', color: '#D9661A', ext: 'pptx' },
     pdf: { name: 'BTS PDF', letter: 'R', color: '#C7354A', ext: 'pdf' },
   };
-  const FILE_COLOR = { docx: '#3C4FE0', doc: '#3C4FE0', txt: '#47526a', md: '#47526a', html: '#47526a', odt: '#3C4FE0', xlsx: '#0F8A6A', xls: '#0F8A6A', csv: '#0F8A6A', ods: '#0F8A6A', pptx: '#D9661A', pdf: '#C7354A' };
+  const FILE_COLOR = { docx: '#3C4FE0', doc: '#3C4FE0', txt: '#47526a', md: '#47526a', html: '#47526a', odt: '#3C4FE0', rtf: '#3C4FE0', xlsx: '#0F8A6A', xls: '#0F8A6A', csv: '#0F8A6A', ods: '#0F8A6A', pptx: '#D9661A', odp: '#D9661A', pdf: '#C7354A' };
 
   const BTS = window.BTS = {
     cfg: null, title: 'Untitled', filePath: null, dirty: false, esc, $, $$, desktop, APPS, FILE_COLOR,
@@ -189,6 +189,8 @@
         cmds.push({ label, group, tab: tabs[panel.dataset.panel] || '', panel: panel.dataset.panel, el: b, icon: b.dataset.icon });
       });
     });
+    $$('#titlebar [data-search]').forEach(b => cmds.push({ label: b.dataset.search, group: '', tab: 'Title bar', el: b, icon: b.dataset.searchIcon }));
+    if (window.BTSLegacyFonts) cmds.push({ label: 'Convert old Hindi/Marathi fonts (Kruti Dev, Shivaji) to Unicode', group: 'Indian languages', tab: '', run: () => BTSLegacyFonts.dialog(), icon: 'languages' });
     const back = document.createElement('div'); back.className = 'modal-back cmd-back';
     back.innerHTML = `<div class="cmd-pal" role="dialog" aria-label="Search commands"><div class="cmd-in">${icon('lightbulb', 18)}<input placeholder="Tell me what you want to do, for example “insert table” or “page numbers”" spellcheck="false"></div><div class="cmd-list"></div><div class="cmd-foot"><span>↑ ↓ to choose · Enter to run · Esc to close</span><span>${cmds.length} commands</span></div></div>`;
     document.body.appendChild(back);
@@ -198,7 +200,7 @@
       list.innerHTML = shown.length ? shown.map((c, i) => `<div class="cmd-item${i === sel ? ' sel' : ''}" data-i="${i}">${icon(c.icon || 'square-dot', 16)}<span>${esc(c.label)}</span><small>${esc([c.tab, c.group].filter(Boolean).join(' › '))}</small></div>`).join('') : '<div class="empty-note" style="padding:14px 16px">No matching command. Try another word.</div>';
       const s = list.querySelector('.sel'); if (s) s.scrollIntoView({ block: 'nearest' }); };
     const close = () => { back.remove(); document.removeEventListener('keydown', key, true); };
-    const run = (c) => { close(); if (!c) return; if (c.panel) BTS.showTab(c.panel); setTimeout(() => c.el.click(), 30); };
+    const run = (c) => { close(); if (!c) return; if (c.panel) BTS.showTab(c.panel); setTimeout(() => (c.run ? c.run() : c.el.click()), 30); };
     const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } else if (e.key === 'ArrowDown') { e.preventDefault(); sel = Math.min(sel + 1, shown.length - 1); render(); } else if (e.key === 'ArrowUp') { e.preventDefault(); sel = Math.max(sel - 1, 0); render(); } else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); run(shown[sel]); } };
     document.addEventListener('keydown', key, true);
     inp.addEventListener('input', () => { sel = 0; render(); });
@@ -377,11 +379,19 @@
         <label class="check"><input type="checkbox" id="bts-versions-on"> Keep a version of .docx, .xlsx and .pptx files every time I save</label>
         <h2>Updates</h2>
         ${window.BTSUpdates ? BTSUpdates.panelHTML() : ''}
+        ${window.BTSIndic || window.BTSVoice || window.BTSLegacyFonts ? `<h2>Indian languages &amp; voice typing</h2>
+        <div class="bs-actions" style="flex-direction:row;flex-wrap:wrap">${window.BTSIndic ? `<button class="btn" data-act="indic-help">${icon('languages', 15)} Hindi &amp; Marathi typing</button>` : ''}${window.BTSLegacyFonts ? `<button class="btn" data-act="legacy">${icon('replace', 15)} Convert old fonts (Kruti Dev, Shivaji)</button>` : ''}${window.BTSVoice ? `<button class="btn" data-act="voice-try">${icon('mic', 15)} Voice typing</button>` : ''}</div>
+        ${window.BTSVoice && desktop ? `<p class="empty-note" style="padding:8px 0 0;max-width:620px" id="bts-voice-models">Voice typing works offline after a one-time download of a speech model for each language.</p>` : ''}` : ''}
         <h2>Appearance</h2>
         <div class="bs-actions" style="flex-direction:row">${['light', 'dark', 'system'].map(t => `<button class="btn ${BTS.theme === t ? 'primary' : ''}" data-theme="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}</div>
         <h2>Keyboard shortcuts</h2>
-        <div style="display:grid;grid-template-columns:160px 1fr;gap:6px 14px;max-width:520px;color:var(--ink-2)">${[['Ctrl+N', 'New window'], ['Ctrl+O', 'Open'], ['Ctrl+S', 'Save'], ['Ctrl+Shift+S', 'Save a copy'], ['Ctrl+P', 'Print'], ['Ctrl+Z / Ctrl+Y', 'Undo / Redo'], ['Ctrl+F', 'Find'], ['Ctrl+H', 'Replace'], ['Ctrl+F1', 'Show or hide the ribbon'], ['Alt+Q', 'Search commands'], ...(cfg.shortcuts || [])].map(([k, v]) => `<b style="color:var(--ink)">${k}</b><span>${v}</span>`).join('')}</div>`;
+        <div style="display:grid;grid-template-columns:160px 1fr;gap:6px 14px;max-width:520px;color:var(--ink-2)">${[['Ctrl+N', 'New window'], ['Ctrl+O', 'Open'], ['Ctrl+S', 'Save'], ['Ctrl+Shift+S', 'Save a copy'], ['Ctrl+P', 'Print'], ['Ctrl+Z / Ctrl+Y', 'Undo / Redo'], ['Ctrl+F', 'Find'], ['Ctrl+H', 'Replace'], ['Ctrl+F1', 'Show or hide the ribbon'], ['Alt+Q', 'Search commands'], ...(window.BTSVoice ? [['Alt+Shift+D', 'Voice typing']] : []), ...(window.BTSIndic ? [['Ctrl+Alt+H / Ctrl+Alt+M', 'Type in Hindi / Marathi']] : []), ...(cfg.shortcuts || [])].map(([k, v]) => `<b style="color:var(--ink)">${k}</b><span>${v}</span>`).join('')}</div>`;
       if (window.BTSUpdates) BTSUpdates.wirePanel(main);
+      main.querySelector('[data-act="indic-help"]')?.addEventListener('click', indicHelp);
+      main.querySelector('[data-act="legacy"]')?.addEventListener('click', () => BTSLegacyFonts.dialog());
+      main.querySelector('[data-act="voice-try"]')?.addEventListener('click', () => { closeBackstage(); BTSVoice.toggle(); });
+      const vm = main.querySelector('#bts-voice-models');
+      if (vm) { const showModels = async () => { try { const r = await BTSVoice.models(); const got = (r.models || []).filter(m => m.downloaded); vm.innerHTML = got.length ? `Speech models on this computer: ${got.map(m => esc(m.label)).join(', ')} (${Math.max(1, Math.round(r.bytes / 1048576))} MB). <a href="#" data-act="voice-remove" style="color:var(--accent);font-weight:600">Remove</a>` : 'Voice typing works offline after a one-time download of a speech model for each language (about 40 MB).'; const rm = vm.querySelector('[data-act="voice-remove"]'); if (rm) rm.onclick = async (ev) => { ev.preventDefault(); const freed = await BTSVoice.removeModels(); BTS.toast(`Removed speech models (${Math.round(freed / 1048576)} MB freed)`); showModels(); }; } catch { } }; showModels(); }
       const un = main.querySelector('#bts-user-name'); un.addEventListener('change', () => { BTS.userName = un.value.trim(); try { localStorage.setItem('bts-user-name', BTS.userName); } catch {} if (desktop) bts.setSettings({ userName: BTS.userName }); });
       const vo = main.querySelector('#bts-versions-on'); if (desktop) { const st = await bts.getSettings(); vo.checked = st.versionHistory !== false; vo.onchange = () => bts.setSettings({ versionHistory: vo.checked }); } else vo.disabled = true;
     } else if (view === 'info') {
@@ -459,7 +469,10 @@
       <button class="tb-btn" data-cmd="undo" title="Undo (Ctrl+Z)">${icon('undo-2', 16)}</button>
       <button class="tb-btn" data-cmd="redo" title="Redo (Ctrl+Y)">${icon('redo-2', 16)}</button>
       <div class="tb-name"><input id="tb-docname" spellcheck="false" title="Rename"><span class="tb-state" id="tb-state"></span></div>
-      <button class="tb-btn tb-tell" data-cmd="command-search" title="Search commands (Alt+Q)" style="margin-left:auto">${icon('lightbulb', 16)}</button>
+      <span style="margin-left:auto"></span>
+      ${window.BTSIndic ? `<button class="tb-btn tb-indic" data-cmd="indic-typing" data-search="Type in Hindi or Marathi (phonetic typing)" data-search-icon="languages" title="Type in Hindi or Marathi (Ctrl+Alt+H / Ctrl+Alt+M)"><span class="tb-indic-l">अ</span></button>` : ''}
+      ${window.BTSVoice ? `<button class="tb-btn tb-voice" data-cmd="voice-typing" data-search="Voice typing (dictate)" data-search-icon="mic" title="Voice typing (Alt+Shift+D)">${icon('mic', 16)}</button>` : ''}
+      <button class="tb-btn tb-tell" data-cmd="command-search" title="Search commands (Alt+Q)">${icon('lightbulb', 16)}</button>
       ${cfg.search ? `<label class="tb-search" style="margin-left:6px">${icon('search', 15)}<input id="tb-search" placeholder="Search in ${esc(cfg.defaultTitle.toLowerCase())}"></label>` : ''}`;
     document.body.prepend(tb);
     const inp = $('#tb-docname', tb);
@@ -468,6 +481,7 @@
     const s = $('#tb-search', tb);
     if (s) s.addEventListener('keydown', e => { if (e.key === 'Enter') { cfg.search(s.value); } if (e.key === 'Escape') { s.value = ''; s.blur(); BTS.cfg.focus && BTS.cfg.focus(); } });
     tb.addEventListener('click', e => { const c = e.target.closest('[data-cmd]'); if (c) dispatch(c.dataset.cmd, c, e); });
+    if (window.BTSIndic && BTSIndic.onChange) { const upd = () => { const b = $('.tb-indic', tb); if (!b) return; const on = BTSIndic.isOn(); b.classList.toggle('on', on); b.querySelector('.tb-indic-l').textContent = on ? (BTSIndic.lang === 'mr' ? 'म' : 'हि') : 'अ'; b.title = on ? (BTSIndic.lang === 'mr' ? 'Typing in Marathi' : 'Typing in Hindi') + ' — click to change (Ctrl+Alt+H / Ctrl+Alt+M)' : 'Type in Hindi or Marathi (Ctrl+Alt+H / Ctrl+Alt+M)'; }; BTSIndic.onChange(upd); upd(); }
     if (navigator.platform.startsWith('Mac')) document.documentElement.classList.add('mac');
     if (desktop) bts.titlebarColor(getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#3C4FE0', '#ffffff');
   }
@@ -509,6 +523,9 @@
       case 'print': return BTS.print();
       case 'export-pdf': return BTS.exportPDF();
       case 'command-search': return BTS.commandSearch();
+      case 'voice-typing': if (window.BTSVoice) BTSVoice.toggle(); return;
+      case 'indic-typing': return indicMenu(el);
+      case 'legacy-fonts': if (window.BTSLegacyFonts) BTSLegacyFonts.dialog(); return;
       case 'toggle-ribbon': document.body.classList.toggle('ribbon-collapsed'); return;
       case 'theme-toggle': BTS.setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'); return;
       case 'zoom-in': return setZoom(BTS.zoom + 10);
@@ -519,6 +536,26 @@
     catch (err) { console.error(err); BTS.toast(String(err.message || err), { error: true }); }
   }
   BTS.dispatch = dispatch;
+  function indicMenu(el) {
+    if (!window.BTSIndic) return;
+    const cur = BTSIndic.isOn() ? BTSIndic.lang : '';
+    const tick = (v) => (cur === v ? 'check' : '');
+    BTS.menu(el, [
+      { head: 'Type with English letters' },
+      { label: 'English (normal typing)', icon: tick('') || 'type', action: () => BTSIndic.enable(false) },
+      { label: 'हिंदी — Hindi', icon: tick('hi') || 'languages', kbd: 'Ctrl+Alt+H', action: () => BTSIndic.enable('hi') },
+      { label: 'मराठी — Marathi', icon: tick('mr') || 'languages', kbd: 'Ctrl+Alt+M', action: () => BTSIndic.enable('mr') },
+      { sep: true },
+      ...(window.BTSLegacyFonts ? [{ label: 'Convert old fonts (Kruti Dev, Shivaji)…', icon: 'replace', action: () => BTSLegacyFonts.dialog() }] : []),
+      { label: 'How phonetic typing works', icon: 'circle-help', action: indicHelp },
+    ]);
+  }
+  function indicHelp() {
+    const rows = [['namaste', 'नमस्ते'], ['bhaarat / bharat', 'भारत'], ['mahaaraashTra', 'महाराष्ट्र'], ['kRShNa', 'कृष्ण'], ['shrI', 'श्री'], ['dnyaan', 'ज्ञान'], ['Laaj (Marathi)', 'ळाज']];
+    BTS.dialog({ title: 'Typing in Hindi and Marathi', body: `<p style="margin-top:0;line-height:1.55">Type words the way they sound, using English letters. Each word turns into Devanagari as you type and is finished when you press Space, Enter or a punctuation mark. Backspace works letter by letter.</p>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 18px;margin:10px 0 14px">${rows.map(([a, b]) => `<code>${esc(a)}</code><b style="font-size:16px">${b}</b>`).join('')}</div>
+      <p style="line-height:1.55;color:var(--ink-2);margin:0">Capital letters make the retroflex and long sounds (T, D, N, I, U, L). <b>Ctrl+Alt+H</b> turns Hindi on or off, <b>Ctrl+Alt+M</b> does the same for Marathi. Works offline in every BTS Office app.</p>`, buttons: [{ label: 'OK', value: 1, primary: true }] });
+  }
 
   /* ---------- status bar ---------- */
   function setZoom(z) {
@@ -543,6 +580,7 @@
 
   /* ---------- keyboard ---------- */
   function keys(e) {
+    if (e.altKey && e.shiftKey && !e.ctrlKey && e.code === 'KeyD' && window.BTSVoice) { e.preventDefault(); BTSVoice.toggle(); return; }
     if ((e.altKey && !e.ctrlKey && e.key.toLowerCase() === 'q') || ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'p')) { e.preventDefault(); BTS.commandSearch(); return; }
     const mod = e.ctrlKey || e.metaKey; if (!mod) return;
     const k = e.key.toLowerCase();

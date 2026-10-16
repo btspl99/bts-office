@@ -13,7 +13,6 @@ function init({ app }) {
         else items.push({ label: 'No spelling suggestions', enabled: false });
         items.push({ type: 'separator' });
         items.push({ label: `Add "${p.misspelledWord}" to dictionary`, click: () => wc.session.addWordToSpellCheckerDictionary(p.misspelledWord) });
-        items.push({ label: 'Ignore', click: () => wc.replaceMisspelling(p.misspelledWord) });
         items.push({ type: 'separator' });
       }
       const f = p.editFlags || {};
