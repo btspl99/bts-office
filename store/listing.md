@@ -23,7 +23,7 @@ BTS Office is released under the GNU GPL v3 and developed by Bhoomiputra Tech So
 A free, open-source office suite for students: documents, spreadsheets, presentations and PDFs. Opens and saves .docx, .xlsx and .pptx. Works offline, no account needed.
 
 ## What's new in this version (max 1,500)
-50 professional fonts including Hindi and Marathi; track changes, citations and mail merge in Docs; PivotTables, sparklines and Goal Seek in Sheets; presenter view, Slide Master and 31 themes in Slides; Alt+Q command search, document properties and version history in every app.
+Version 1.3: fill, sign, compress, merge and split PDFs, convert PDF to Word and make scanned pages searchable; type in Hindi or Marathi with English letters and convert Kruti Dev text; offline voice typing; SmartArt, equations and video export in Slides; grade, CGPA and Gantt templates in Sheets; save as .odt, .ods and .odp; autosave and recovery.
 
 ## Product features (up to 20, max 200 chars each)
 1. Word processor, spreadsheet, presentation and PDF apps in one free download
@@ -38,6 +38,11 @@ A free, open-source office suite for students: documents, spreadsheets, presenta
 10. Works offline, no account, no ads; your files stay on your computer
 11. Version history keeps earlier copies of your files every time you save
 12. Light and dark themes and Alt+Q search for any command
+13. Fill and sign PDF forms, compress PDFs to under 200 KB, merge and split pages
+14. Type in Hindi or Marathi with English letters; convert Kruti Dev and Shivaji text to Unicode
+15. Offline voice typing in English and Hindi
+16. Export presentations as MP4 video with your narration
+17. Grade calculator, CGPA to percentage converter and Gantt project plan templates
 
 ## Search terms (max 7, total ≤ 21 words)
 office suite · word processor · spreadsheet · presentation · pdf reader · student · free office
@@ -47,8 +52,6 @@ office suite · word processor · spreadsheet · presentation · pdf reader · s
 - Additional license terms: GNU General Public License v3.0 — https://www.gnu.org/licenses/gpl-3.0.html
 - Developed by: Bhoomiputra Tech Solutions Private Limited
 - Website: https://office.btspl.tech
-- Store ID: 9PNM51QX7C96  (https://apps.microsoft.com/detail/9PNM51QX7C96)
-- Package identity: BTSPL.BTSOffice / CN=1083D034-8784-47FC-A79A-FB1BC9BE8E80 / BTSPL
 - Store ID: 9PNM51QX7C96  (https://apps.microsoft.com/detail/9PNM51QX7C96)
 - Package identity: BTSPL.BTSOffice / CN=1083D034-8784-47FC-A79A-FB1BC9BE8E80 / BTSPL
 - Support contact: btspl99@gmail.com
