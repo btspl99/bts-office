@@ -49,6 +49,7 @@
   };
   function syncPicture() {
     const img = D.selImg; if (!img) return;
+    const sab = $('#btn-img-smartart'); if (sab) sab.classList.toggle('hidden', !(D.isSmartArt && D.isSmartArt(img)));
     $('#in-img-w').value = (img.offsetWidth / PX * 2.54).toFixed(2); $('#in-img-h').value = (img.offsetHeight / PX * 2.54).toFixed(2);
     const wrap = img.classList.contains('img-left') ? 'left' : img.classList.contains('img-right') ? 'right' : img.classList.contains('img-center') ? 'center' : 'inline';
     $$('[data-panel="picture"] [data-wrap]').forEach(b => b.classList.toggle('on', b.dataset.wrap === wrap));

@@ -127,6 +127,67 @@
     b.dataset.style = style;
   }
 
+  /* ---------- look up a source online (DOI → Crossref, ISBN → Open Library, then Google Books) ---------- */
+  const strip = (h) => { const d = document.createElement('div'); d.innerHTML = String(h || '').replace(/<[^>]+>/g, ''); return d.textContent.replace(/\s+/g, ' ').trim(); };
+  const lastFirst = (name) => { name = String(name || '').trim(); if (!name || name.includes(',')) return name; const w = name.split(/\s+/); return w.length < 2 ? name : w[w.length - 1] + ', ' + w.slice(0, -1).join(' '); };
+  const ordinal = (n) => { n = String(n || ''); if (!/^\d+$/.test(n)) return n; const t = +n % 100, u = +n % 10; return n + (t >= 11 && t <= 13 ? 'th' : u === 1 ? 'st' : u === 2 ? 'nd' : u === 3 ? 'rd' : 'th'); };
+  /** What the user typed: { doi } | { isbn } | { bad: message }. */
+  D.parseLookup = (q) => {
+    q = String(q || '').trim();
+    const doi = q.match(/10\.\d{4,9}\/[^\s"<>]+/i);
+    if (doi) { let d = doi[0]; try { d = decodeURIComponent(d); } catch { } return { doi: d.replace(/[.,;)\]]+$/, '') }; }
+    const n = q.replace(/^isbn(-1[03])?[:\s]*/i, '').replace(/[\s-]/g, '').toUpperCase();
+    if (/^\d{9}[\dX]$/.test(n)) { let sum = 0; for (let i = 0; i < 10; i++) sum += (n[i] === 'X' ? 10 : +n[i]) * (10 - i); return sum % 11 === 0 ? { isbn: n } : { bad: 'That ISBN has a typing mistake — its last digit doesn’t match. Check the number.' }; }
+    if (/^97[89]\d{10}$/.test(n)) { let sum = 0; for (let i = 0; i < 13; i++) sum += +n[i] * (i % 2 ? 3 : 1); return sum % 10 === 0 ? { isbn: n } : { bad: 'That ISBN has a typing mistake — its last digit doesn’t match. Check the number.' }; }
+    return { bad: 'That doesn’t look like a DOI or an ISBN. A DOI starts with 10. (for example 10.1038/nature12373); an ISBN has 10 or 13 digits.' };
+  };
+  async function getJSON(url) {
+    if (D.lookupTransport) { const r = await D.lookupTransport(url); if (r && r.ok) return r.data; const e = new Error((r && r.error) || 'Lookup failed'); e.code = /No internet/i.test(e.message) ? 'offline' : /Not found/i.test(e.message) ? 'notfound' : 'other'; throw e; } // tests
+    if (!(window.bts && bts.ext)) { const e = new Error('Looking up sources works in the BTS Office desktop app. You can still type the details yourself.'); e.code = 'nodesk'; throw e; }
+    let r; try { r = await bts.ext('fetch-json', url); } catch { const e = new Error('Looking up sources isn’t available right now. You can still type the details yourself.'); e.code = 'nodesk'; throw e; }
+    if (r && r.ok) return r.data;
+    const e = new Error((r && r.error) || 'Lookup failed'); e.code = /No internet/i.test(e.message) ? 'offline' : /Not found/i.test(e.message) ? 'notfound' : 'other'; throw e;
+  }
+  const OFFLINE = 'You’re offline. Connect to the internet to look up sources, or type the details yourself.';
+  /** Source fields for a DOI / ISBN / link with a DOI. Throws an Error with a friendly message. */
+  D.lookupSource = async (q) => {
+    const p = D.parseLookup(q); if (p.bad) throw new Error(p.bad);
+    try {
+      if (p.doi) {
+        const m = (await getJSON('https://api.crossref.org/works/' + encodeURIComponent(p.doi))).message || {};
+        const dp = (m.issued || m['published-print'] || m['published-online'] || m.created || {})['date-parts'];
+        const year = dp && dp[0] && dp[0][0] ? String(dp[0][0]) : '';
+        const authors = (m.author || m.editor || []).map(a => a.family ? a.family + (a.given ? ', ' + a.given : '') : (a.name || '')).filter(Boolean).join('; ');
+        const t = m.type || '';
+        const type = /journal-article|proceedings-article|posted-content|peer-review|article/.test(t) ? 'journal' : /report/.test(t) ? 'report' : /dissertation/.test(t) ? 'thesis' : 'book';
+        const title = strip((m.title || [])[0]) + (m.subtitle && m.subtitle[0] ? ': ' + strip(m.subtitle[0]) : '');
+        const f = { type, authors, title, year, doi: m.DOI || p.doi };
+        if (type === 'journal') Object.assign(f, { journal: strip((m['container-title'] || [])[0] || (m['short-container-title'] || [])[0] || ''), volume: m.volume || '', issue: m.issue || '', pages: String(m.page || '').replace(/-/g, '–'), publisher: m.publisher || '' });
+        else if (type === 'thesis') Object.assign(f, { publisher: (m.institution && m.institution[0] && m.institution[0].name) || m.publisher || '', kind: 'Doctoral dissertation' });
+        else Object.assign(f, { publisher: m.publisher || '', city: m['publisher-location'] || '', edition: m['edition-number'] ? ordinal(m['edition-number']) : '' });
+        return f;
+      }
+      // ISBN: Open Library first, Google Books as a fallback
+      try {
+        const b = await getJSON('https://openlibrary.org/isbn/' + p.isbn + '.json');
+        const names = [];
+        for (const a of (b.authors || []).slice(0, 8)) { try { const au = await getJSON('https://openlibrary.org' + a.key + '.json'); if (au && (au.personal_name || au.name)) names.push(lastFirst(au.personal_name || au.name)); } catch (e) { if (e.code === 'offline') throw e; } }
+        const year = ((b.publish_date || '').match(/\d{4}/) || [''])[0];
+        return { type: 'book', authors: names.join('; ') || lastFirst(String(b.by_statement || '').replace(/^by\s+/i, '').replace(/\.$/, '')), title: (b.title || '') + (b.subtitle ? ': ' + b.subtitle : ''), year, publisher: (b.publishers || [])[0] || '', city: (b.publish_places || [])[0] || '', edition: String(b.edition_name || '').replace(/[[\]]/g, '').replace(/\.\s*\.$/, '.').trim(), url: b.key ? 'https://openlibrary.org' + b.key : '' };
+      } catch (e) {
+        if (e.code === 'offline' || e.code === 'nodesk') throw e;
+        const g = await getJSON('https://www.googleapis.com/books/v1/volumes?q=isbn:' + p.isbn);
+        const v = g && g.items && g.items[0] && g.items[0].volumeInfo; if (!v) { const nf = new Error('Not found'); nf.code = 'notfound'; throw nf; }
+        return { type: 'book', authors: (v.authors || []).map(lastFirst).join('; '), title: (v.title || '') + (v.subtitle ? ': ' + v.subtitle : ''), year: ((v.publishedDate || '').match(/\d{4}/) || [''])[0], publisher: v.publisher || '', url: v.infoLink || '' };
+      }
+    } catch (e) {
+      if (e.code === 'offline') throw new Error(OFFLINE);
+      if (e.code === 'nodesk') throw e;
+      if (e.code === 'notfound') throw new Error(p.doi ? 'No article or book was found for that DOI. Check it and try again.' : 'No book was found for that ISBN. Check the number, or type the details yourself.');
+      throw new Error('The lookup didn’t work (' + e.message + '). Try again, or type the details yourself.');
+    }
+  };
+
   /* ---------- manage sources dialog ---------- */
   const FIELDS = {
     book: [['authors', 'Author(s)'], ['title', 'Title'], ['year', 'Year'], ['edition', 'Edition (e.g. 2nd)'], ['publisher', 'Publisher'], ['city', 'City'], ['doi', 'DOI'], ['url', 'URL']],
@@ -142,7 +203,7 @@
     const render = () => {
       const s = work.find(x => x.id === cur);
       body.innerHTML = `<div class="src-side"><div class="src-search">${icon('search', 14)}<input id="src-q" placeholder="Search sources" spellcheck="false"></div><div class="src-list">${work.length ? work.map(x => `<button class="src-item${x.id === cur ? ' on' : ''}" data-id="${esc(x.id)}"><b>${esc(D.parseAuthors(x.authors).map(lastOf).slice(0, 2).join(', ') || x.title || 'Untitled')}${x.year ? ' (' + esc(x.year) + ')' : ''}</b><small>${esc(D.SOURCE_TYPES[x.type] || '')} · ${esc(x.title || '')}</small></button>`).join('') : '<div class="empty-note" style="padding:10px">No sources yet.</div>'}</div><div class="src-side-btns"><button class="btn primary" data-a="new">${icon('plus', 15)} New source</button>${s ? `<button class="btn danger" data-a="del" title="Delete this source">${icon('trash-2', 15)}</button>` : ''}</div></div>
-        <div class="src-main">${s ? `<div class="field"><label>Type of source</label><select id="src-type">${Object.entries(D.SOURCE_TYPES).map(([k, v]) => `<option value="${k}" ${s.type === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+        <div class="src-main"><div class="src-lookup"><div class="src-search">${icon('search', 14)}<input id="src-lookup" placeholder="Look up by DOI, ISBN or a link with a DOI" spellcheck="false" data-indic="off"></div><button class="btn" data-a="lookup" title="Fill in the details from Crossref (articles) or Open Library / Google Books (books)">${icon('globe', 15)} Look up</button><span class="src-net" title="This is the only part of BTS Docs that uses the internet">Needs internet</span></div><div class="src-lookup-msg" id="src-lookup-msg"></div>${s ? `<div class="field"><label>Type of source</label><select id="src-type">${Object.entries(D.SOURCE_TYPES).map(([k, v]) => `<option value="${k}" ${s.type === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
           <div class="src-fields">${FIELDS[s.type || 'book'].map(([k, l]) => `<div class="field${k === 'title' || k === 'authors' || k === 'url' ? ' wide' : ''}"><label>${l}</label><input data-f="${k}" value="${esc(s[k] || '')}" spellcheck="false"></div>`).join('')}</div>
           <div class="hint">Authors: separate people with semicolons and write each as <b>Last, First</b> — e.g. <i>Sharma, Priya; Rao, K. N.</i> For an organisation just type its name.</div>
           <div class="src-prev"><div class="src-prev-h">Preview — ${esc(D.CITE_STYLES[bib().style])}</div><div class="src-prev-e"><span>${D.formatCitation([s.id], '', bib().style, new Map([[s.id, 1]])).replace(/^\(Source missing\)$/, '')}</span><p>${D.formatEntry(s, bib().style)}</p></div></div>` : '<div class="empty-note" style="padding:30px 10px">Add the books, articles and web pages you use. They are saved inside this document.</div>'}</div>`;
@@ -153,10 +214,26 @@
       const it = e.target.closest('.src-item'); if (it) { cur = it.dataset.id; render(); return; }
       const a = e.target.closest('[data-a]'); if (!a) return;
       if (a.dataset.a === 'new') newSrc();
+      if (a.dataset.a === 'lookup') doLookup();
       if (a.dataset.a === 'del') { const used = $$('.cite', D.doc).some(c => (c.dataset.src || '').split(/[;,]/).includes(cur)); const i = work.findIndex(x => x.id === cur); if (i >= 0) work.splice(i, 1); cur = work[0] ? work[0].id : null; render(); if (used) BTS.toast('That source was cited — those citations will show “Source missing”.', { error: true }); }
     });
     body.addEventListener('input', e => { const f = e.target.dataset.f; if (!f) return; const s = work.find(x => x.id === cur); if (!s) return; s[f] = e.target.value; const pe = $('.src-prev-e', body); if (pe) pe.innerHTML = `<span>${D.formatCitation([s.id], '', bib().style, new Map([[s.id, 1]]))}</span><p>${D.formatEntry(s, bib().style)}</p>`; const lb = $(`.src-item[data-id="${CSS.escape(s.id)}"] b`, body); if (lb) lb.textContent = (D.parseAuthors(s.authors).map(lastOf).slice(0, 2).join(', ') || s.title || 'Untitled') + (s.year ? ' (' + s.year + ')' : ''); });
     body.addEventListener('change', e => { if (e.target.id === 'src-type') { const s = work.find(x => x.id === cur); s.type = e.target.value; render(); } });
+    body.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'src-lookup') { e.preventDefault(); e.stopPropagation(); doLookup(); } });
+    let looking = false;
+    const doLookup = async () => {
+      const inp = $('#src-lookup', body); const q = inp ? inp.value.trim() : ''; const msg = (t, err) => { const m = $('#src-lookup-msg', body); if (m) { m.textContent = t; m.classList.toggle('err', !!err); } };
+      if (!q) { msg('Paste a DOI (like 10.1038/nature12373), an ISBN (like 978-0-14-303943-3) or a link that contains a DOI.', true); inp && inp.focus(); return; }
+      if (looking) return; looking = true; const btn = $('[data-a="lookup"]', body); if (btn) btn.disabled = true; msg('Looking up…');
+      try {
+        const f = await D.lookupSource(q);
+        let s = work.find(x => x.id === cur);
+        if (!s || ((s.title || '').trim() && (s.title || '').trim() !== (f.title || '').trim())) { s = { id: 's' + Math.random().toString(36).slice(2, 8) }; work.unshift(s); cur = s.id; }
+        Object.keys(s).forEach(k => { if (k !== 'id') delete s[k]; }); Object.assign(s, f);
+        render(); msg(`Found: ${f.title || 'Untitled'}${f.year ? ' (' + f.year + ')' : ''}. Check the details, then Save.`);
+      } catch (err) { msg(err.message || String(err), true); }
+      finally { looking = false; const b2 = $('[data-a="lookup"]', body); if (b2) b2.disabled = false; const i2 = $('#src-lookup', body); if (i2 && !i2.value) i2.value = q; }
+    };
     // temporarily swap so previews resolve against the working list
     const real = bib().sources; bib().sources = work;
     if (opts.newSource) newSrc(); else render();

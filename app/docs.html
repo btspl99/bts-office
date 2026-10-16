@@ -11,6 +11,9 @@
 <script src="common/fonts.js"></script>
 <script src="common/updates.js"></script>
 <script src="common/shell.js"></script>
+<script src="common/indic.js"></script>
+<script src="common/legacy-fonts.js"></script>
+<script src="common/smartart.js"></script>
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/mammoth.browser.min.js"></script>
 <script src="vendor/docx.iife.js"></script>
@@ -26,6 +29,9 @@
 <script src="docs/review.js" defer></script>
 <script src="docs/import.js" defer></script>
 <script src="docs/docx-export.js" defer></script>
+<script src="docs/odt-export.js" defer></script>
+<script src="docs/indian.js" defer></script>
+<script src="docs/smartart.js" defer></script>
 <script src="docs/templates.js" defer></script>
 <script src="docs/app.js" defer></script>
 </head>
@@ -49,7 +55,7 @@
   </div>
 </nav>
 
-<div id="ribbon">
+<div id="ribbon" data-indic="off">
   <!-- ================= HOME ================= -->
   <section class="ribbon-panel" data-panel="home">
     <div class="rgroup"><div class="rgroup-body">
@@ -141,6 +147,7 @@
     <div class="rgroup"><div class="rgroup-body">
       <button class="rb lg" data-cmd="picture" data-icon="image" title="Insert a picture from this PC"><span>Picture</span></button>
       <button class="rb lg" data-cmd="shapes-menu" data-icon="shapes" title="Insert a shape"><span>Shapes</span></button>
+      <button class="rb lg" data-cmd="smartart" data-icon="network" title="Insert SmartArt — a process, cycle, list or hierarchy diagram made from a few lines of text"><span>SmartArt</span></button>
     </div><div class="rgroup-label">Illustrations</div></div>
     <div class="rgroup"><div class="rgroup-body">
       <button class="rb lg" data-cmd="link" data-icon="link" title="Insert link (Ctrl+K)"><span>Link</span></button>
@@ -283,6 +290,14 @@
       <button class="rb lg" data-cmd="word-count" data-icon="book-open-check" title="Word count, reading time and readability"><span>Word count</span></button>
     </div><div class="rgroup-label">Proofing</div></div>
     <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg split" data-cmd="indic-toggle" id="btn-indic" data-icon="languages" title="Type in Hindi or Marathi using English letters (Ctrl+Alt+H / Ctrl+Alt+M)"><span>Type हिंदी <svg class="ic caret" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></span></button>
+      <div class="rstack">
+        <button class="rb md" data-cmd="legacy-convert" data-icon="wand-sparkles" title="Convert old fonts — turn Kruti Dev, DevLys or Shivaji text (in the selection, or the whole document) into Unicode"><span>Convert old fonts</span></button>
+        <button class="rb md" data-cmd="to-krutidev" data-icon="type" title="Convert the selected Hindi text to Kruti Dev 010 (for offices that still ask for it)"><span>To Kruti Dev</span></button>
+        <button class="rb md" data-cmd="legacy-dialog" data-icon="arrow-left-right" title="Font converter — paste text in an old font, convert and copy"><span>Font converter</span></button>
+      </div>
+    </div><div class="rgroup-label">Hindi &amp; Marathi</div></div>
+    <div class="rgroup"><div class="rgroup-body">
       <button class="rb lg" data-cmd="a11y-check" id="btn-a11y" data-icon="accessibility" title="Check accessibility — alt text, headings, tables, contrast"><span>Check accessibility</span></button>
     </div><div class="rgroup-label">Accessibility</div></div>
     <div class="rgroup"><div class="rgroup-body">
@@ -412,6 +427,7 @@
       <button class="rb md" data-cmd="img-shadow" id="btn-img-shadow" data-icon="copy" title="Soft shadow"><span>Shadow</span></button>
     </div></div><div class="rgroup-label">Picture style</div></div>
     <div class="rgroup"><div class="rgroup-body">
+      <button class="rb lg hidden" id="btn-img-smartart" data-cmd="smartart-edit" data-icon="network" title="Change the SmartArt layout or text (or double-click the diagram)"><span>Edit SmartArt</span></button>
       <button class="rb lg" data-cmd="img-alt" data-icon="message-square-text" title="Add alt text (describe the picture for screen readers)"><span>Alt text</span></button>
       <button class="rb lg" data-cmd="img-replace" data-icon="image-up" title="Replace picture"><span>Replace</span></button>
       <button class="rb lg" data-cmd="img-delete" data-icon="trash-2" title="Delete picture"><span>Delete</span></button>
