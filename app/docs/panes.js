@@ -226,13 +226,17 @@
   const AK = 'bts-docs-autosave:'; const SID = Math.random().toString(36).slice(2, 10);
   const ls = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); return true; } catch { return false; } }, del: (k) => { try { localStorage.removeItem(k); } catch { } }, keys: () => { try { return Object.keys(localStorage); } catch { return []; } } };
   let autoTimer = 0;
+  // File > Options > Save: "Save recovery info every N seconds" (BTS.prefs.autosaveSeconds); 0 = soon after each change
   D.autosave = () => {
+    const every = +((window.BTS && BTS.prefs && BTS.prefs.autosaveSeconds) || 0) * 1000;
+    if (every && autoTimer) return; // a save is already planned; it writes the latest text when it runs
     clearTimeout(autoTimer);
     autoTimer = setTimeout(() => {
+      autoTimer = 0;
       if (!BTS.dirty) return;
       const rec = { t: Date.now(), hb: Date.now(), title: BTS.title, html: D.serializeNative() };
       if (!ls.set(AK + SID, JSON.stringify(rec))) { rec.html = rec.html.replace(/src="data:[^"]{20000,}"/g, 'src=""'); ls.set(AK + SID, JSON.stringify(rec)); }
-    }, 1500);
+    }, every || 1500);
   };
   setInterval(() => { const raw = ls.get(AK + SID); if (!raw) return; try { const r = JSON.parse(raw); r.hb = Date.now(); ls.set(AK + SID, JSON.stringify(r)); } catch { } }, 5000);
   D.clearAutosave = () => ls.del(AK + SID);

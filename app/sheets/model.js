@@ -145,7 +145,7 @@
       this.resetBook();
     }
     /** workbook-level 1.2 state: theme, custom/modified cell styles, scenarios, structure protection */
-    resetBook() { this.theme = 'bts'; this.themeOver = null; this.customStyles = []; this.styleMods = {}; this.scenarios = []; this.protectStructure = null; }
+    resetBook() { this.theme = 'bts'; this.themeOver = null; this.defSize = 11; this.customStyles = []; this.styleMods = {}; this.scenarios = []; this.protectStructure = null; }
     static get config() { return HF_CONFIG; }
     get active() { return this.sheets[this.activeIndex]; }
     on(fn) { this.listeners.add(fn); }

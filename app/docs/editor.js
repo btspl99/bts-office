@@ -58,12 +58,21 @@
   const TEXT_BLOCKS = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'PRE']);
   D.TEXT_BLOCKS = TEXT_BLOCKS;
 
-  D.defaultPage = () => ({ size: 'A4', orient: 'portrait', m: { t: 1, b: 1, l: 1, r: 1 }, hdrDist: 0.5, ftrDist: 0.5 });
+  D.defaultPage = () => ({ size: (window.BTS && BTS.prefs && D.PAPER[BTS.prefs.pageSize]) ? BTS.prefs.pageSize : 'A4', orient: 'portrait', m: { t: 1, b: 1, l: 1, r: 1 }, hdrDist: 0.5, ftrDist: 0.5 });
   D.defaultDesign = () => ({ theme: 'bts', pageColor: null, watermark: null, border: null, pspacing: null, hdrFirst: false,
     styleSet: 'classic', styleMods: {}, customStyles: [], accent: null, dark: null,
     biblio: { style: 'apa', sources: [] }, track: false, markup: 'all', protect: null });
+  /** design for a new, blank document: File > Options > New documents (font and size) on top of the defaults */
+  D.newDesign = () => {
+    const d = D.defaultDesign(); const p = (window.BTS && BTS.prefs) || {};
+    if (p.docsFont) d.bodyFont = p.docsFont;
+    if (+p.docsSize) d.styleMods = { normal: { size: +p.docsSize } };
+    return d;
+  };
+  /** ruler and page-setup units (File > Options > New documents) */
+  D.inches = () => !!(window.BTS && BTS.prefs && BTS.prefs.units === 'in');
   D.page = D.defaultPage();
-  D.design = D.defaultDesign();
+  D.design = D.newDesign();
 
   /* ---------------- unit helpers ---------------- */
   D.toPx = (v, base = 11 * 4 / 3) => {
@@ -760,13 +769,13 @@
   function drawRuler(W, m) {
     const ri = $('#ruler-inner'); ri.style.width = W + 'px';
     const rail = $('#crail'); $('#ruler').style.paddingRight = rail.classList.contains('hidden') ? '' : ((rail.offsetWidth + 18) * D.zoom / 100) + 'px';
-    const metric = true; const unit = metric ? PX / 2.54 : PX / 8;
+    const metric = !D.inches(); const unit = metric ? PX / 2.54 : PX / 8;
     let html = `<div class="r-margin" style="left:0;width:${m.l * PX}px"></div><div class="r-margin" style="right:0;width:${m.r * PX}px"></div>`;
     const origin = m.l * PX;
     for (let x = origin % unit, i = -Math.floor(origin / unit); x <= W; x += unit, i++) {
       const isCm = metric; const big = isCm ? true : i % 8 === 0;
-      if (i !== 0 && big) html += `<span class="r-num" style="left:${x}px">${Math.abs(i)}</span>`;
-      html += `<span class="r-tick" style="left:${x}px;height:${i === 0 ? 10 : 3}px"></span>`;
+      if (i !== 0 && big) html += `<span class="r-num" style="left:${x}px">${Math.abs(isCm ? i : i / 8)}</span>`;
+      html += `<span class="r-tick" style="left:${x}px;height:${i === 0 ? 10 : isCm ? 3 : i % 8 === 0 ? 6 : i % 4 === 0 ? 5 : 3}px"></span>`;
       if (isCm) html += `<span class="r-tick" style="left:${x + unit / 2}px;height:5px"></span>`;
     }
     html += `<span class="r-handle" data-h="l" style="left:${m.l * PX}px" title="Left margin"></span><span class="r-handle" data-h="r" style="left:${W - m.r * PX}px" title="Right margin"></span>`;
@@ -787,7 +796,7 @@
       if (drag.side === 'l') m.l = Math.max(0.2, Math.min(ps.w - m.r - 1, drag.m0.l + dx)); else m.r = Math.max(0.2, Math.min(ps.w - m.l - 1, drag.m0.r - dx));
       m.l = Math.round(m.l * 20) / 20; m.r = Math.round(m.r * 20) / 20;
       D.page.m = m; D.layout();
-      tip.textContent = (drag.side === 'l' ? 'Left margin: ' : 'Right margin: ') + (m[drag.side] * 2.54).toFixed(2) + ' cm';
+      tip.textContent = (drag.side === 'l' ? 'Left margin: ' : 'Right margin: ') + (D.inches() ? m[drag.side].toFixed(2) + ' in' : (m[drag.side] * 2.54).toFixed(2) + ' cm');
       tip.style.left = e.clientX + 12 + 'px'; tip.style.top = e.clientY + 16 + 'px';
     });
     addEventListener('mouseup', () => { if (!drag) return; drag = null; tip && tip.remove(); D.afterChange(); });

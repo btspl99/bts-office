@@ -160,13 +160,13 @@
     BTS.menu(anchor, opts.map(([l, v]) => ({ label: l, checked: JSON.stringify(cur || null) === JSON.stringify(v), action: () => D.setDesign({ pspacing: v }) })));
   }
   function marginsMenu(anchor) {
-    const m = D.page.m; const cm = (x) => (x * 2.54).toFixed(2).replace(/\.?0+$/, '');
-    BTS.menu(anchor, [...Object.entries(D.MARGINS).map(([k, v]) => ({ checked: v.t === m.t && v.b === m.b && v.l === m.l && v.r === m.r, html: `<span style="min-width:120px"><b style="font-weight:600">${v.label}</b><br><small style="color:var(--ink-3)">T ${cm(v.t)} cm · B ${cm(v.b)} · L ${cm(v.l)} · R ${cm(v.r)}</small></span>`, action: () => D.setMargins(v) })), { sep: true }, { label: 'Custom margins…', icon: 'settings-2', action: customMargins }]);
+    const m = D.page.m; const inch = D.inches(); const cm = (x) => (inch ? x : x * 2.54).toFixed(2).replace(/\.?0+$/, ''); const u = inch ? '″' : ' cm';
+    BTS.menu(anchor, [...Object.entries(D.MARGINS).map(([k, v]) => ({ checked: v.t === m.t && v.b === m.b && v.l === m.l && v.r === m.r, html: `<span style="min-width:120px"><b style="font-weight:600">${v.label}</b><br><small style="color:var(--ink-3)">T ${cm(v.t)}${u} · B ${cm(v.b)} · L ${cm(v.l)} · R ${cm(v.r)}</small></span>`, action: () => D.setMargins(v) })), { sep: true }, { label: 'Custom margins…', icon: 'settings-2', action: customMargins }]);
     const p = $('.pop'); if (p) $$('.menu-item', p).forEach(i => i.style.height = '42px');
   }
   async function customMargins() {
-    const m = D.page.m; const cm = (x) => +(x * 2.54).toFixed(2);
-    const v = await BTS.dialog({ title: 'Page setup', width: 440, body: `<div class="dlg-grid"><div class="field"><label>Top (cm)</label><input id="cm-t" type="number" step="0.1" min="0" value="${cm(m.t)}"></div><div class="field"><label>Bottom (cm)</label><input id="cm-b" type="number" step="0.1" min="0" value="${cm(m.b)}"></div><div class="field"><label>Left (cm)</label><input id="cm-l" type="number" step="0.1" min="0" value="${cm(m.l)}"></div><div class="field"><label>Right (cm)</label><input id="cm-r" type="number" step="0.1" min="0" value="${cm(m.r)}"></div><div class="field"><label>Header from top (cm)</label><input id="cm-h" type="number" step="0.1" min="0" value="${cm(D.page.hdrDist)}"></div><div class="field"><label>Footer from bottom (cm)</label><input id="cm-f" type="number" step="0.1" min="0" value="${cm(D.page.ftrDist)}"></div></div>`, buttons: [{ label: 'Cancel', value: null }, { label: 'OK', primary: true, value: (r) => ['t', 'b', 'l', 'r', 'h', 'f'].map(k => Math.max(0, +$('#cm-' + k, r).value / 2.54)) }] });
+    const m = D.page.m; const inch = D.inches(); const f = inch ? 1 : 2.54; const U = inch ? 'in' : 'cm'; const cm = (x) => +(x * f).toFixed(2);
+    const v = await BTS.dialog({ title: 'Page setup', width: 440, body: `<div class="dlg-grid"><div class="field"><label>Top (${U})</label><input id="cm-t" type="number" step="0.1" min="0" value="${cm(m.t)}"></div><div class="field"><label>Bottom (${U})</label><input id="cm-b" type="number" step="0.1" min="0" value="${cm(m.b)}"></div><div class="field"><label>Left (${U})</label><input id="cm-l" type="number" step="0.1" min="0" value="${cm(m.l)}"></div><div class="field"><label>Right (${U})</label><input id="cm-r" type="number" step="0.1" min="0" value="${cm(m.r)}"></div><div class="field"><label>Header from top (${U})</label><input id="cm-h" type="number" step="0.1" min="0" value="${cm(D.page.hdrDist)}"></div><div class="field"><label>Footer from bottom (${U})</label><input id="cm-f" type="number" step="0.1" min="0" value="${cm(D.page.ftrDist)}"></div></div>`, buttons: [{ label: 'Cancel', value: null }, { label: 'OK', primary: true, value: (r) => ['t', 'b', 'l', 'r', 'h', 'f'].map(k => Math.max(0, +$('#cm-' + k, r).value / f)) }] });
     if (!v) return; const ps = D.paperSize();
     if (v[2] + v[3] > ps.w - 1 || v[0] + v[1] > ps.h - 1) { BTS.toast('Those margins leave no room for text.', { error: true }); return; }
     D.setPage({ m: { t: v[0], b: v[1], l: v[2], r: v[3] }, hdrDist: v[4], ftrDist: v[5] });
@@ -628,7 +628,7 @@
   /* ================= serialize & init ================= */
   D.hasContent = () => !!(D.doc.textContent.replace(/​/g, '').trim() || D.doc.querySelector('img,table,hr,.toc') || D.hdr.textContent.trim() || D.ftr.textContent.trim());
   function newDocument() {
-    D.page = D.defaultPage(); D.design = D.defaultDesign(); D.comments = {};
+    D.page = D.defaultPage(); D.design = D.newDesign(); D.comments = {};
     if (D.mm.preview) D.mmPreview(false);
     D.setContent('<p><br></p>'); D.renderComments(); BTS.setTitle('Document'); BTS.filePath = null; BTS.markClean(); D.setCaret(D.doc.firstChild, 0);
   }
@@ -697,6 +697,7 @@
     };
     BTS.hasContent = D.hasContent; // the shell reads BTS.hasContent (not cfg.hasContent)
     BTS.init(cfg);
+    if (BTS.onPrefs) BTS.onPrefs((p, k) => { if (!k || k === 'units') D.scheduleLayout(0); });
     // a successful save (or load) makes the recovery copy unnecessary
     const mc = BTS.markClean; BTS.markClean = () => { mc(); D.clearAutosave(); };
     D.layout();

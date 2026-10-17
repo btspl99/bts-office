@@ -5,7 +5,11 @@
   const { key } = SU;
   let wb;
 
-  function newWorkbook() { wb.reset(); wb._addSheetRaw('Sheet1'); wb.activeIndex = 0; }
+  function newWorkbook() {
+    wb.reset(); wb._addSheetRaw('Sheet1'); wb.activeIndex = 0;
+    // File > Options > New documents: font and size for new workbooks
+    const p = BTS.prefs || {}; if (p.sheetsFont) wb.themeOver = { body: p.sheetsFont }; if (+p.sheetsSize) wb.defSize = +p.sheetsSize;
+  }
 
   function init() {
     wb = new SheetModel.Workbook(); App.wb = wb; window.WB = wb;
@@ -257,7 +261,7 @@
     tog('btn-merge', !!s.mergeAt(a.r, a.c)); tog('btn-showf', Grid.showFormulas); tog('btn-filter', !!s.filter); tog('btn-protect', s.protected);
     tog('btn-freeze', s.freeze.r || s.freeze.c); tog('btn-showcomments', App.notesShown); tog('btn-protectwb', !!wb.protectStructure); tog('btn-cmpane', Threads.isOpen());
     const sf = $('#sel-font span'); const fname = st.font || SU.defFont; if (sf.textContent !== fname) { sf.textContent = fname; sf.style.fontFamily = SU.cssFont(fname).replace(/"/g, "'"); }
-    const sz = $('#sel-size'); if (document.activeElement !== sz) { const val = String(st.sz || 11); if (![...sz.options].some(o => o.value === val)) sz.insertAdjacentHTML('beforeend', `<option>${val}</option>`); sz.value = val; }
+    const sz = $('#sel-size'); if (document.activeElement !== sz) { const val = String(st.sz || SU.defSize); if (![...sz.options].some(o => o.value === val)) sz.insertAdjacentHTML('beforeend', `<option>${val}</option>`); sz.value = val; }
     const nf = $('#sel-numfmt'); if (document.activeElement !== nf) nf.value = SU.formatId(st.nf);
     $('#chk-vgrid').checked = s.showGrid; $('#chk-vgrid2').checked = s.showGrid; $('#chk-vhead').checked = s.showHeadings; $('#chk-vfbar').checked = !document.body.classList.contains('no-fbar');
     $('#chk-pgrid').checked = !!s.page.gridlines; $('#chk-phead').checked = !!s.page.headings; $('#chk-fitw').checked = s.page.fit === 'width'; $('#chk-fitp').checked = s.page.fit === 'page';
@@ -419,13 +423,13 @@
     body.innerHTML = `<div class="dlg-grid" style="grid-template-columns:110px 1fr">
       <label>Style name</label><input id="cs-name" value="${SU.esc(name)}" ${nameEditable ? '' : 'disabled'}>
       <label>Font</label><select id="cs-font">${fonts.map(f => `<option value="${SU.esc(f)}" ${(cur.font || '') === f ? 'selected' : ''}>${f || '(Body font)'}</option>`).join('')}</select>
-      <label>Size</label><input id="cs-sz" type="number" min="6" max="96" value="${cur.sz || 11}">
+      <label>Size</label><input id="cs-sz" type="number" min="6" max="96" value="${cur.sz || SU.defSize}">
       <label>Font style</label><div><label class="check" style="display:inline-flex;margin-right:10px"><input type="checkbox" id="cs-b" ${cur.b ? 'checked' : ''}> Bold</label><label class="check" style="display:inline-flex;margin-right:10px"><input type="checkbox" id="cs-i" ${cur.i ? 'checked' : ''}> Italic</label><label class="check" style="display:inline-flex"><input type="checkbox" id="cs-u" ${cur.u ? 'checked' : ''}> Underline</label></div>
       <label>Font colour</label><input id="cs-color" type="color" value="${cur.color || '#000000'}">
       <label>Fill</label><div style="display:flex;gap:8px;align-items:center"><input id="cs-fill" type="color" value="${cur.fill || '#ffffff'}"><label class="check"><input type="checkbox" id="cs-nofill" ${cur.fill ? '' : 'checked'}> No fill</label></div>
       <label>Number format</label><input id="cs-nf" value="${SU.esc(cur.nf || 'General')}">
       <label>Preview</label><div id="cs-prev" class="cs-prev">AaBbCc 1,234</div></div>`;
-    const read = () => { const q = (x) => body.querySelector(x); const o = { ...cur }; o.font = q('#cs-font').value || undefined; o.sz = +q('#cs-sz').value === 11 ? undefined : +q('#cs-sz').value || undefined; o.b = q('#cs-b').checked || undefined; o.i = q('#cs-i').checked || undefined; o.u = q('#cs-u').checked || undefined; o.color = q('#cs-color').value.toUpperCase() === '#000000' ? undefined : q('#cs-color').value; o.fill = q('#cs-nofill').checked ? undefined : q('#cs-fill').value; o.nf = q('#cs-nf').value === 'General' ? undefined : q('#cs-nf').value; Object.keys(o).forEach(k => o[k] === undefined && delete o[k]); return o; };
+    const read = () => { const q = (x) => body.querySelector(x); const o = { ...cur }; o.font = q('#cs-font').value || undefined; o.sz = +q('#cs-sz').value === SU.defSize ? undefined : +q('#cs-sz').value || undefined; o.b = q('#cs-b').checked || undefined; o.i = q('#cs-i').checked || undefined; o.u = q('#cs-u').checked || undefined; o.color = q('#cs-color').value.toUpperCase() === '#000000' ? undefined : q('#cs-color').value; o.fill = q('#cs-nofill').checked ? undefined : q('#cs-fill').value; o.nf = q('#cs-nf').value === 'General' ? undefined : q('#cs-nf').value; Object.keys(o).forEach(k => o[k] === undefined && delete o[k]); return o; };
     const prev = () => { const o = read(); const el = body.querySelector('#cs-prev'); el.style.cssText = A.cssOfStyle(o).replace(/font-family:([^;]+)/, (m, f) => 'font-family:' + SU.cssFont(f.trim()).replace(/"/g, "'")); };
     body.addEventListener('input', prev); body.addEventListener('change', prev); setTimeout(prev, 0);
     const res = await BTS.dialog({ title, width: 440, body, buttons: [{ label: 'Cancel', value: null }, { label: 'OK', primary: true, value: () => ({ name: body.querySelector('#cs-name').value.trim(), st: read() }) }] });

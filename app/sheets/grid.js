@@ -120,7 +120,7 @@
   /* ---------- rendering ---------- */
   const al = (v) => Math.round(v * dpr) / dpr;              // align to device pixel
   const ln = (v) => (Math.round(v * dpr) + 0.5) / dpr;        // 1 device px line center
-  function fontStr(st, z, num) { const name = st.font || (num && SU.numFont) || SU.defFont; STheme.fontReady(name, st.b, st.i); return `${st.i ? 'italic ' : ''}${st.b ? 'bold ' : ''}${((st.sz || 11) * 96 / 72 * z).toFixed(2)}px ${SU.cssFont(name)}`; }
+  function fontStr(st, z, num) { const name = st.font || (num && SU.numFont) || SU.defFont; STheme.fontReady(name, st.b, st.i); return `${st.i ? 'italic ' : ''}${st.b ? 'bold ' : ''}${((st.sz || SU.defSize) * 96 / 72 * z).toFixed(2)}px ${SU.cssFont(name)}`; }
   STheme.onFontsLoaded = () => { measureCache.clear(); G.render(); G.onFontsLoaded && G.onFontsLoaded(); };
   G.fontStr = fontStr;
 
@@ -327,7 +327,7 @@
     const font = fontStr(effSt, z, isNum);
     let color = (cf && cf.color) || fmt.color || st.color || (tb && tb.color) || (s.links.has(key(r, c)) ? '#1155cc' : '#000000');
     const padX = 3 * z + (st.indent || 0) * 9 * z;
-    const fsz = (st.sz || 11) * 96 / 72 * z;
+    const fsz = (st.sz || SU.defSize) * 96 / 72 * z;
     // filter button room
     let btnRoom = 0; if (s.filter && r === s.filter.range.r0 && c >= s.filter.range.c0 && c <= s.filter.range.c1) btnRoom = 16 * z;
     for (const t of s.tables) if (t.header !== false && t.filterBtn !== false && r === t.range.r0 && SU.inRange(t.range, r, c)) btnRoom = 16 * z;
