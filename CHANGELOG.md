@@ -2,6 +2,11 @@
 
 Release notes live in [`website/releases.json`](website/releases.json). That one file feeds the website, the in-app "What's new" note and the GitHub Release. This file summarises the same notes.
 
+## 1.3.1 (2026-10-17)
+- Hindi and Marathi keyboards: InScript (the standard Windows keyboard), Remington (GAIL) for Kruti Dev typists, and phonetic typing with suggestions as you type. An on-screen keyboard shows where every letter is.
+- New File > Options page: spell-check languages, default save format, how often autosave runs, default font and paper size for new files, cm or inches, default typing language and keyboard.
+- About is now its own page in the File menu.
+
 ## 1.3.0 (2026-10-17)
 - PDF: fill in forms, add your signature and photo, merge, split, reorder and rotate pages, compress to under 200 KB for upload portals, turn photos into a PDF, convert PDF to Word, and make scanned pages searchable in English, Hindi and Marathi.
 - Type in Hindi or Marathi with English letters (Ctrl+Alt+H / Ctrl+Alt+M), and convert old Kruti Dev and Shivaji text to Unicode and back, in every app.

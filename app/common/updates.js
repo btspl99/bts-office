@@ -1,6 +1,6 @@
 /* BTS Office — update notifications (renderer side)
  * Shows a small card when an update has downloaded, and provides the "Updates" section
- * used on File ▸ Options & about. Talks to updater.js in the main process via window.bts.
+ * used on File ▸ Options. Talks to updater.js in the main process via window.bts.
  */
 (function () {
   const desktop = !!(window.bts && window.bts.isDesktop && window.bts.updateState);
