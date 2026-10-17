@@ -1,7 +1,3 @@
-- PDF: fill in forms, add your signature and photo, merge, split, reorder and rotate pages, compress to under 200 KB for upload portals, turn photos into a PDF, convert PDF to Word, and make scanned pages searchable in English, Hindi and Marathi.
-- Type in Hindi or Marathi with English letters (Ctrl+Alt+H / Ctrl+Alt+M), and convert old Kruti Dev and Shivaji text to Unicode and back, in every app.
-- Voice typing in English and Hindi (Alt+Shift+D). Works offline after a one-time download.
-- Slides: SmartArt diagrams, equations, export as an MP4 video with recorded narration, and save as .odp.
-- Sheets: grade calculator, CGPA to percentage converter, project plan (Gantt) and timeline templates, and save as .ods.
-- Docs: SmartArt diagrams, citation lookup by DOI or ISBN, and save as .odt.
-- Autosave and recovery in Sheets and Slides, and spelling suggestions when you right-click a word.
+- Hindi and Marathi keyboards: InScript (the standard Windows keyboard), Remington (GAIL) for Kruti Dev typists, and phonetic typing with suggestions as you type. An on-screen keyboard shows where every letter is.
+- New File > Options page: spell-check languages, default save format, how often autosave runs, default font and paper size for new files, cm or inches, default typing language and keyboard.
+- About is now its own page in the File menu.

@@ -8,5 +8,5 @@ window.BTS_SITE = {
   supportEmail: 'btspl99@gmail.com',
   organisation: 'Bhoomiputra Tech Solutions Private Limited',
   organisationUrl: 'https://btspl.tech',
-  fallback: { version: '1.3.0', file: 'BTS-Office-Setup-1.3.0.exe', size: 106492870, date: '2026-10-16' },
+  fallback: { version: '1.3.1', file: 'BTS-Office-Setup-1.3.1.exe', size: 106503311, date: '2026-10-17' },
 };
