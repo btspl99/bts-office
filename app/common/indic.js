@@ -73,7 +73,44 @@
   for (const k in LEX) { lexOf[k] = {}; LEX[k].split(',').forEach(p => { const [a, b] = p.split('='); if (a && b) lexOf[k][a] = b; }); }
 
   function normLang(l) { if (!l) return null; l = String(l).toLowerCase(); return l.startsWith('m') ? 'mr' : 'hi'; }
-  const opts = { digits: 'latin' };
+  const opts = { digits: 'latin', layout: 'phonetic', suggest: true };
+
+  /* Keyboard layouts.
+   *  phonetic  — type how it sounds in English letters (like Microsoft Indic Language Input Tool / Google Input Tools)
+   *  inscript  — the Government of India standard InScript layout, as in Windows' "Hindi Traditional" / "Marathi" keyboards
+   *  remington — Remington (GAIL) typewriter layout, the one Kruti Dev typists and government typing exams use */
+  const LAYOUTS = [
+    { id: 'phonetic', label: 'Phonetic (type how it sounds)', short: 'Phonetic', desc: 'namaste → नमस्ते. Suggestions as you type.' },
+    { id: 'inscript', label: 'InScript (Microsoft standard)', short: 'InScript', desc: 'The Windows Hindi / Marathi keyboard: k = क, e = ा, d = ्.' },
+    { id: 'remington', label: 'Remington (GAIL) — Kruti Dev typing', short: 'Remington', desc: 'Typewriter layout used with Kruti Dev: Hkkjr → भारत.' },
+  ];
+  // InScript, keyed by the character a US keyboard produces (normal / Shift).
+  const INSCRIPT = {
+    '`': 'ॊ', '~': 'ऒ', '1': '१', '!': 'ऍ', '2': '२', '@': 'ॅ', '3': '३', '#': '्र', '4': '४', '$': 'र्', '5': '५', '%': 'ज्ञ',
+    '6': '६', '^': 'त्र', '7': '७', '&': 'क्ष', '8': '८', '*': 'श्र', '9': '९', '(': '(', '0': '०', ')': ')', '-': '-', '_': 'ः', '=': 'ृ', '+': 'ऋ',
+    q: 'ौ', Q: 'औ', w: 'ै', W: 'ऐ', e: 'ा', E: 'आ', r: 'ी', R: 'ई', t: 'ू', T: 'ऊ', y: 'ब', Y: 'भ', u: 'ह', U: 'ङ', i: 'ग', I: 'घ',
+    o: 'द', O: 'ध', p: 'ज', P: 'झ', '[': 'ड', '{': 'ढ', ']': '़', '}': 'ञ', '\\': 'ॉ', '|': 'ऑ',
+    a: 'ो', A: 'ओ', s: 'े', S: 'ए', d: '्', D: 'अ', f: 'ि', F: 'इ', g: 'ु', G: 'उ', h: 'प', H: 'फ', j: 'र', J: 'ऱ', k: 'क', K: 'ख',
+    l: 'त', L: 'थ', ';': 'च', ':': 'छ', "'": 'ट', '"': 'ठ',
+    z: 'ॆ', Z: 'ऎ', x: 'ं', X: 'ँ', c: 'म', C: 'ण', v: 'न', V: 'ऩ', b: 'व', B: 'ऴ', n: 'ल', N: 'ळ', m: 'स', M: 'श',
+    ',': ',', '<': 'ष', '.': '.', '>': '।', '/': 'य', '?': 'य़',
+  };
+  const INS_LATIN_DIGITS = { '१': '1', '२': '2', '३': '3', '४': '4', '५': '5', '६': '6', '७': '7', '८': '8', '९': '9', '०': '0' };
+  // US keyboard rows, for the on-screen keyboard
+  const KB_ROWS = [
+    [['`', '~'], ['1', '!'], ['2', '@'], ['3', '#'], ['4', '$'], ['5', '%'], ['6', '^'], ['7', '&'], ['8', '*'], ['9', '('], ['0', ')'], ['-', '_'], ['=', '+']],
+    [['q', 'Q'], ['w', 'W'], ['e', 'E'], ['r', 'R'], ['t', 'T'], ['y', 'Y'], ['u', 'U'], ['i', 'I'], ['o', 'O'], ['p', 'P'], ['[', '{'], [']', '}'], ['\\', '|']],
+    [['a', 'A'], ['s', 'S'], ['d', 'D'], ['f', 'F'], ['g', 'G'], ['h', 'H'], ['j', 'J'], ['k', 'K'], ['l', 'L'], [';', ':'], ["'", '"']],
+    [['z', 'Z'], ['x', 'X'], ['c', 'C'], ['v', 'V'], ['b', 'B'], ['n', 'N'], ['m', 'M'], [',', '<'], ['.', '>'], ['/', '?']],
+  ];
+  // Character palette (phonetic layout's on-screen keyboard)
+  const PALETTE = [
+    ['अ', 'आ', 'इ', 'ई', 'उ', 'ऊ', 'ऋ', 'ए', 'ऐ', 'ओ', 'औ', 'ऑ', 'ॲ', 'अं', 'अः'],
+    ['ा', 'ि', 'ी', 'ु', 'ू', 'ृ', 'े', 'ै', 'ो', 'ौ', 'ॉ', 'ॅ', 'ं', 'ँ', 'ः', '्', '़'],
+    ['क', 'ख', 'ग', 'घ', 'ङ', 'च', 'छ', 'ज', 'झ', 'ञ', 'ट', 'ठ', 'ड', 'ढ', 'ण'],
+    ['त', 'थ', 'द', 'ध', 'न', 'प', 'फ', 'ब', 'भ', 'म', 'य', 'र', 'ल', 'व', 'ळ'],
+    ['श', 'ष', 'स', 'ह', 'क्ष', 'त्र', 'ज्ञ', 'श्र', 'र्‍', '।', '॥', 'ॐ', '₹', '०', '१', '२', '३', '४', '५', '६', '७', '८', '९'],
+  ];
 
   /** Transliterate one word (letters and scheme symbols only). */
   function word(w, lang) {
@@ -151,7 +188,7 @@
     if (!pill) return;
     pill.classList.toggle('on', !!lang);
     pill.innerHTML = lang ? `<b>अ</b><span>${NAMES[lang]}</span>` : `<b>A</b><span>English</span>`;
-    pill.title = lang ? `Typing in ${lang === 'hi' ? 'Hindi' : 'Marathi'} — type in English letters, get Devanagari. Click for options (Ctrl+Alt+${lang === 'hi' ? 'H' : 'M'} to turn off)` : 'Type in Hindi or Marathi using English letters (Ctrl+Alt+H / Ctrl+Alt+M)';
+    pill.title = lang ? `Typing in ${lang === 'hi' ? 'Hindi' : 'Marathi'} (${(LAYOUTS.find(l => l.id === opts.layout) || LAYOUTS[0]).short} keyboard). Click for options (Ctrl+Alt+${lang === 'hi' ? 'H' : 'M'} to turn off)` : 'Type in Hindi or Marathi using English letters (Ctrl+Alt+H / Ctrl+Alt+M)';
   }
   function menuItems() {
     return [
@@ -159,8 +196,13 @@
       { label: 'English (off)', checked: !lang, action: () => enable(false) },
       { label: 'हिंदी — Hindi', kbd: 'Ctrl+Alt+H', checked: lang === 'hi', action: () => enable('hi') },
       { label: 'मराठी — Marathi', kbd: 'Ctrl+Alt+M', checked: lang === 'mr', action: () => enable('mr') },
+      { head: 'Keyboard' },
+      ...LAYOUTS.map(l => ({ label: l.label, checked: opts.layout === l.id, action: () => setLayout(l.id) })),
+      { label: 'On-screen keyboard', icon: 'keyboard', action: showKeyboard },
       { sep: true },
-      { label: 'Devanagari digits (१२३)', checked: opts.digits === 'deva', action: () => setOptions({ digits: opts.digits === 'deva' ? 'latin' : 'deva' }) },
+      opts.layout === 'inscript' ? { label: 'Devanagari digits (१२३)', checked: opts.inscriptDigits !== 'latin', action: () => setOptions({ inscriptDigits: opts.inscriptDigits === 'latin' ? 'deva' : 'latin' }) }
+        : { label: 'Devanagari digits (१२३)', checked: opts.digits === 'deva', action: () => setOptions({ digits: opts.digits === 'deva' ? 'latin' : 'deva' }) },
+      ...(opts.layout === 'phonetic' ? [{ label: 'Show suggestions while typing', checked: opts.suggest !== false, action: () => setOptions({ suggest: opts.suggest === false }) }] : []),
       { label: 'How to type…', icon: 'circle-help', action: help },
     ];
   }
@@ -202,6 +244,15 @@
     setTimeout(() => document.addEventListener('mousedown', function off(e) { if (!m.contains(e.target)) { m.remove(); document.removeEventListener('mousedown', off, true); } }, true), 0);
   }
   function help() {
+    if (opts.layout !== 'phonetic') {
+      const lay = LAYOUTS.find(l => l.id === opts.layout);
+      const txt = opts.layout === 'inscript'
+        ? 'InScript is the standard Hindi and Marathi keyboard built into Windows. Each key always gives the same letter: <b>k</b> = क, <b>e</b> = ा, <b>f</b> = ि (typed after the letter), and <b>d</b> (्) joins two letters, so <b>k d k</b> = क्क. Shift gives the second letter on each key.'
+        : 'Remington (GAIL) is the typewriter layout used with Kruti Dev and in government typing tests. Type exactly as you would in Kruti Dev — <b>Hkkjr</b> gives भारत, <b>f</b> before a letter gives ि — and BTS Office writes proper Unicode text that works everywhere.';
+      const body = `<p style="margin-top:0;line-height:1.55;font-size:13px">${txt}</p><p style="font-size:12.5px;color:var(--ink-2)">Open the on-screen keyboard to see where every letter is. Turn typing on or off with <b>Ctrl+Alt+H</b> (Hindi) or <b>Ctrl+Alt+M</b> (Marathi).</p>`;
+      if (window.BTS && BTS.dialog) BTS.dialog({ title: lay.label, body, buttons: [{ label: 'Show on-screen keyboard', value: 'kb' }, { label: 'Close', value: 1, primary: true }] }).then(v => { if (v === 'kb') showKeyboard(); });
+      return;
+    }
     const rows = [['namaste', 'नमस्ते'], ['bhaarat or bharat', 'भारत'], ['kRShNa', 'कृष्ण'], ['shrI', 'श्री'], ['dnyaan / jnaan / GYaan', 'ज्ञान'], ['mahaaraashTra', 'महाराष्ट्र'], ['hiMdI / hindii', 'हिंदी / हिन्दी'], ['shaaLaa (Marathi)', 'शाळा'], ['DOkTar', 'डॉक्टर'], ['raamaH . |', 'रामः . ।']];
     const keys = [['a aa/A i ii/ee/I u uu/oo/U', 'अ आ इ ई उ ऊ'], ['e ai o au O R', 'ए ऐ ओ औ ऑ ऋ'], ['T Th D Dh N', 'ट ठ ड ढ ण'], ['t th d dh n', 'त थ द ध न'], ['sh Sh s h L', 'श ष स ह ळ'], ['x / ksh, GY / dny', 'क्ष, ज्ञ'], ['M  .N  H  .h', 'ं  ँ  ः  ्'], ['q K G z f .D', 'क़ ख़ ग़ ज़ फ़ ड़'], ['Marathi: z  ~a  r^', 'झ  ॲ  र्\u200D'], ['| ||', '। ॥']];
     const tbl = (rs) => '<table style="border-collapse:collapse;width:100%">' + rs.map(([a, b]) => `<tr><td style="padding:3px 10px 3px 0;font-family:Consolas,monospace;color:var(--ink-2)">${a}</td><td style="padding:3px 0;font-family:'Noto Sans Devanagari',sans-serif;font-size:15px">${b}</td></tr>`).join('') + '</table>';
@@ -213,7 +264,7 @@
 
   /* ---------------- live typing engine ---------------- */
   let st = { el: null, buf: '', out: '', literal: false }; let busy = false;
-  function reset() { st = { el: null, buf: '', out: '', literal: false }; }
+  function reset() { st = { el: null, buf: '', out: '', literal: false }; hideSuggest(); }
   const TEXT_TYPES = new Set(['text', 'search', '']);
   function editableOf(t) {
     if (!t || t.nodeType !== 1) t = t && t.parentElement; if (!t) return null;
@@ -271,8 +322,11 @@
     } finally { busy = false; }
   }
   const continuing = (el) => { if (!st.buf || st.el !== el) return false; const b = before(el, st.out.length); return !!b && b.text === st.out; };
-  const wordChar = (c, inWord) => isLetter(c) || c === '|' || (inWord && /[.~^]/.test(c));
-  const render = (buf, literal) => literal ? buf : word(buf, lang);
+  const wordChar = (c, inWord) => opts.layout === 'remington' ? (c.length === 1 && c > ' ' && c !== '\u007f') : (isLetter(c) || c === '|' || (inWord && /[.~^]/.test(c)));
+  // A word typed on Remington can start with a vowel sign (ि is typed before its letter). Until the letter comes,
+  // show the sign on a dotted circle, as Windows does — a lone sign would merge with the space before it.
+  const remington = (buf) => { const o = window.BTSLegacyFonts ? BTSLegacyFonts.toUnicode(buf, 'krutidev') : buf; return /^[\u0900-\u0903\u093A-\u094F\u0955-\u0957\u0962\u0963]/.test(o) ? '\u25CC' + o : o; };
+  const render = (buf, literal) => literal ? buf : opts.layout === 'remington' ? remington(buf) : word(buf, lang);
 
   function onBeforeInput(e) {
     if (!lang || busy) return;
@@ -281,6 +335,12 @@
     if (e.inputType !== 'insertText' || !e.data) { reset(); return; }
     if (isField(el) && /^=/.test(el.value) && el.selectionStart > 0) return; // spreadsheet formulas stay in English
     const ch = e.data;
+    if (opts.layout === 'inscript') {
+      if (ch.length !== 1 || !(ch in INSCRIPT)) { reset(); return; }
+      let out = INSCRIPT[ch];
+      if (opts.inscriptDigits === 'latin' && INS_LATIN_DIGITS[out]) out = INS_LATIN_DIGITS[out];
+      e.preventDefault(); e.stopPropagation(); replace(el, 0, out, true); return;
+    }
     const cont = continuing(el);
     if (ch.length !== 1 || !wordChar(ch, cont)) {
       // digits: Devanagari digits if asked for
@@ -294,23 +354,28 @@
     e.preventDefault(); e.stopPropagation();
     replace(el, st.out.length, out, !st.buf);
     st = { el, buf, out, literal: st.literal };
+    suggestSoon(el);
   }
   function onKeyDown(e) {
     if (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey && (e.code === 'KeyH' || e.code === 'KeyM' || /^[hm]$/i.test(e.key))) {
       const want = (e.code === 'KeyH' || /^h$/i.test(e.key)) ? 'hi' : 'mr';
       e.preventDefault(); e.stopPropagation();
       enable(lang === want ? false : want);
-      if (window.BTS && BTS.toast) BTS.toast(lang ? `Typing in ${lang === 'hi' ? 'Hindi (हिंदी)' : 'Marathi (मराठी)'} — type in English letters` : 'Typing in English');
+      if (window.BTS && BTS.toast) BTS.toast(lang ? `Typing in ${lang === 'hi' ? 'Hindi (हिंदी)' : 'Marathi (मराठी)'} — ${opts.layout === 'phonetic' ? 'type in English letters' : (LAYOUTS.find(l => l.id === opts.layout) || {}).short + ' keyboard'}` : 'Typing in English');
       return;
     }
     if (!lang || !st.buf) return;
     if (e.isComposing) { reset(); return; }
     const el = editableOf(e.target);
+    if (sug && sug.items.length > 1 && el && continuing(el) && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); sug.sel = (sug.sel + (e.key === 'ArrowDown' ? 1 : sug.items.length - 1)) % sug.items.length; drawSuggest(); return; }
+      if ((e.key === 'Enter' || e.key === 'Tab') && sug.sel > 0) { e.preventDefault(); e.stopPropagation(); pickSuggest(sug.sel); return; }
+    }
     if (e.key === 'Backspace' && !e.ctrlKey && !e.altKey && !e.metaKey && el && continuing(el)) {
       e.preventDefault(); e.stopPropagation();
       const buf = st.buf.slice(0, -1); const out = buf ? render(buf, st.literal) : '';
       replace(el, st.out.length, out, false);
-      if (buf) st = { el, buf, out, literal: st.literal }; else reset();
+      if (buf) { st = { el, buf, out, literal: st.literal }; suggestSoon(el); } else reset();
       return;
     }
     if (e.key === 'Escape' && el && continuing(el) && !st.literal) {
@@ -325,7 +390,142 @@
   document.addEventListener('keydown', onKeyDown, true);
   document.addEventListener('mousedown', (e) => { if (!pill || !pill.contains(e.target)) reset(); }, true);
   document.addEventListener('compositionstart', reset, true);
-  document.addEventListener('focusin', () => reset(), true);
+  document.addEventListener('focusin', (e) => { reset(); const ed = editableOf(e.target); if (ed) lastField = ed; }, true);
+
+  /* ---------------- suggestions (phonetic) ---------------- */
+  let sug = null, sugEl = null, sugTimer = 0, lastField = null;
+  let dictOK = null; // can the Hindi spelling dictionary rank words? (null = not checked yet)
+  const isWord = (w) => { try { return window.bts && bts.isWord ? bts.isWord(w) : null; } catch { return null; } };
+  function dictReady() {
+    if (dictOK !== null) return dictOK;
+    const real = isWord('भारत'), junk = isWord('क्ज़्ज़्फ़');
+    dictOK = real === true && junk === false; return dictOK;
+  }
+  function variants(buf) {
+    const out = new Set();
+    const subs = [[/(^|[^a])a(?!a|i|u)/g, (m, p) => p + 'aa'], [/(^|[^ae])i(?!i)/g, (m, p) => p + 'ee'], [/(^|[^ao])u(?!u)/g, (m, p) => p + 'oo'],
+      [/n(?=[bcdfghjklmpqrstvwxyz])/g, () => 'M'], [/n$/g, () => 'M'], [/t(?!h)/g, () => 'T'], [/d(?!h)/g, () => 'D'],
+      [/s(?!h)/g, () => 'sh'], [/sh/g, () => 'Sh'], [/ri/g, () => 'R'], [/aa/g, () => 'a'], [/ee/g, () => 'i'], [/v/g, () => 'w'], [/n/g, () => 'N'], [/e$/g, () => 'ey']];
+    for (const [re, fn] of subs) {
+      if (!fn) continue; re.lastIndex = 0; let m;
+      const r = new RegExp(re.source, 'g');
+      while ((m = r.exec(buf))) { const v = buf.slice(0, m.index) + fn(m[0], m[1]) + buf.slice(m.index + m[0].length); if (v !== buf) out.add(v); if (out.size > 60) break; if (m[0] === '') r.lastIndex++; }
+    }
+    return [...out];
+  }
+  function suggestSoon(el) { clearTimeout(sugTimer); if (opts.layout !== 'phonetic' || opts.suggest === false || st.literal) { hideSuggest(); return; } sugTimer = setTimeout(() => buildSuggest(el), 60); }
+  function buildSuggest(el) {
+    if (!st.buf || st.el !== el || !lang) { hideSuggest(); return; }
+    const base = st.out; const items = [base];
+    const lexHit = Object.values(lexOf[lang]);
+    if (st.buf.length >= 2) {
+      const cands = [...new Set(variants(st.buf).map(v => word(v, lang)))].filter(w => w && w !== base);
+      const useDict = dictReady();
+      const good = cands.filter(w => lexHit.includes(w) || (useDict && isWord(w) === true));
+      good.slice(0, 4).forEach(w => items.push(w));
+    }
+    items.push(st.buf); // the English letters, as typed
+    sug = { el, items: [...new Set(items)], sel: 0 }; drawSuggest();
+  }
+  function caretRect(el) {
+    if (isField(el)) { const r = el.getBoundingClientRect(); return { left: r.left + 6, bottom: Math.min(r.bottom, r.top + 28) }; }
+    const s = getSelection(); if (s.rangeCount) { const rr = s.getRangeAt(0).getBoundingClientRect(); if (rr.width || rr.height) return { left: rr.left, bottom: rr.bottom }; }
+    const r = el.getBoundingClientRect(); return { left: r.left, bottom: r.top + 24 };
+  }
+  function drawSuggest() {
+    if (!sug) return;
+    injectCSS();
+    if (!sugEl) { sugEl = document.createElement('div'); sugEl.className = 'indic-sug'; sugEl.setAttribute('data-indic', 'off'); sugEl.addEventListener('mousedown', e => { e.preventDefault(); const b = e.target.closest('[data-i]'); if (b) pickSuggest(+b.dataset.i); }); document.body.appendChild(sugEl); }
+    sugEl.innerHTML = sug.items.map((w, i) => `<button data-i="${i}" class="${i === sug.sel ? 'sel' : ''}${i === sug.items.length - 1 ? ' en' : ''}"><small>${i + 1}</small>${w.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</button>`).join('') + '<i>↑↓ choose · Enter pick · Space keep first</i>';
+    const r = caretRect(sug.el); sugEl.style.display = 'flex';
+    const w = sugEl.offsetWidth, h = sugEl.offsetHeight;
+    sugEl.style.left = Math.max(6, Math.min(r.left, innerWidth - w - 8)) + 'px';
+    sugEl.style.top = (r.bottom + 6 + h > innerHeight ? r.bottom - h - 30 : r.bottom + 6) + 'px';
+  }
+  function hideSuggest() { sug = null; clearTimeout(sugTimer); if (sugEl) sugEl.style.display = 'none'; }
+  function pickSuggest(i) {
+    if (!sug || !st.buf) return; const w = sug.items[i]; const el = sug.el; if (w == null || !continuing(el)) { hideSuggest(); return; }
+    replace(el, st.out.length, w, false); reset();
+  }
+
+  /* ---------------- on-screen keyboard ---------------- */
+  let kbEl = null, kbShift = false;
+  function keyOut(ch) {
+    if (opts.layout === 'inscript') { const o = INSCRIPT[ch]; return o && opts.inscriptDigits === 'latin' && INS_LATIN_DIGITS[o] ? INS_LATIN_DIGITS[o] : o; }
+    if (opts.layout === 'remington') return window.BTSLegacyFonts ? BTSLegacyFonts.toUnicode(ch, 'krutidev') : ch;
+    return null;
+  }
+  function insertText(t) {
+    const el = (document.activeElement && editableOf(document.activeElement)) || lastField;
+    if (!el) { if (window.BTS && BTS.toast) BTS.toast('Click where you want the text to go first'); return; }
+    if (document.activeElement !== el) el.focus();
+    if (opts.layout === 'remington' && lang) { // feed the key through the typing engine so letters combine
+      const ev = new InputEvent('beforeinput', { inputType: 'insertText', data: t, bubbles: true, cancelable: true });
+      if (el.dispatchEvent(ev)) document.execCommand('insertText', false, t); return;
+    }
+    reset(); replace(el, 0, t, true);
+  }
+  function drawKeyboard() {
+    if (!kbEl) return;
+    const lay = LAYOUTS.find(l => l.id === opts.layout) || LAYOUTS[0];
+    let body = '';
+    if (opts.layout === 'phonetic') body = PALETTE.map(r => `<div class="r">${r.map(c => `<button class="k ch" data-t="${c}">${c}</button>`).join('')}</div>`).join('');
+    else body = KB_ROWS.map((r, ri) => `<div class="r r${ri}">${r.map(([n, sh]) => { const key = kbShift ? sh : n; const o = keyOut(key) || ''; return `<button class="k" data-key="${key.replace(/"/g, '&quot;')}"><em>${(kbShift ? sh : n).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))}</em><b>${o.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</b></button>`; }).join('')}</div>`).join('')
+      + `<div class="r"><button class="k wide ${kbShift ? 'on' : ''}" data-act="shift">⇧ Shift</button><button class="k space" data-t=" ">Space</button><button class="k wide" data-act="bksp">⌫</button></div>`;
+    kbEl.innerHTML = `<div class="kb-h"><b>${lang ? NAMES[lang] : 'हिंदी / मराठी'} · ${lay.short}</b><select data-act="layout">${LAYOUTS.map(l => `<option value="${l.id}" ${l.id === opts.layout ? 'selected' : ''}>${l.short}</option>`).join('')}</select><button data-act="close" title="Close">✕</button></div><div class="kb-b">${body}</div>`;
+  }
+  function showKeyboard() {
+    injectCSS();
+    if (!kbEl) {
+      kbEl = document.createElement('div'); kbEl.className = 'indic-kb'; kbEl.setAttribute('data-indic', 'off');
+      kbEl.addEventListener('mousedown', e => { if (!e.target.closest('select')) e.preventDefault(); });
+      kbEl.addEventListener('click', e => {
+        const b = e.target.closest('button'); if (!b) return;
+        const act = b.dataset.act;
+        if (act === 'close') return hideKeyboard();
+        if (act === 'shift') { kbShift = !kbShift; return drawKeyboard(); }
+        if (act === 'bksp') { const el = (document.activeElement && editableOf(document.activeElement)) || lastField; if (el) { el.focus(); reset(); document.execCommand('delete'); } return; }
+        if (b.dataset.t != null) { insertText(b.dataset.t); return; }
+        if (b.dataset.key != null) { if (opts.layout === 'remington') insertText(b.dataset.key); else insertText(keyOut(b.dataset.key) || ''); if (kbShift) { kbShift = false; drawKeyboard(); } }
+      });
+      kbEl.addEventListener('change', e => { if (e.target.dataset.act === 'layout') setLayout(e.target.value); });
+      // drag by the title row
+      kbEl.addEventListener('mousedown', e => {
+        if (!e.target.closest('.kb-h') || e.target.closest('select,button')) return;
+        const r = kbEl.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+        const mv = (ev) => { kbEl.style.left = Math.max(0, Math.min(innerWidth - r.width, ev.clientX - dx)) + 'px'; kbEl.style.top = Math.max(0, Math.min(innerHeight - r.height, ev.clientY - dy)) + 'px'; kbEl.style.right = 'auto'; kbEl.style.bottom = 'auto'; };
+        const up = () => { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); };
+        document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
+      });
+      document.body.appendChild(kbEl);
+    }
+    kbEl.style.display = 'block'; drawKeyboard();
+    if (!lang) enable(lastLang);
+  }
+  function hideKeyboard() { if (kbEl) kbEl.style.display = 'none'; }
+  function setLayout(id) {
+    if (!LAYOUTS.some(l => l.id === id)) return;
+    setOptions({ layout: id }); reset();
+    if (kbEl && kbEl.style.display !== 'none') drawKeyboard();
+    if (window.BTS && BTS.toast && lang) BTS.toast(`Keyboard: ${LAYOUTS.find(l => l.id === id).label}`);
+  }
+  function injectCSS() {
+    if (document.getElementById('indic-css2')) return;
+    const st2 = document.createElement('style'); st2.id = 'indic-css2';
+    st2.textContent = `.indic-sug{position:fixed;z-index:9998;display:none;align-items:center;gap:2px;flex-wrap:wrap;max-width:560px;background:var(--surface,#fff);color:var(--ink,#1f2533);border:1px solid var(--line,#d5d9e2);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:3px;font-family:'Noto Sans Devanagari','Mukta',sans-serif}
+.indic-sug button{border:0;background:none;color:inherit;font:inherit;font-size:16px;padding:3px 9px;border-radius:5px;cursor:pointer;display:flex;align-items:baseline;gap:4px}.indic-sug button small{font:11px system-ui,sans-serif;color:var(--ink-3,#7a8399)}
+.indic-sug button.sel{background:var(--accent-soft,#e8ebff);color:var(--accent,#3C4FE0)}html[data-theme="dark"] .indic-sug button.sel{color:color-mix(in srgb,var(--accent,#3C4FE0) 40%,#fff)}.indic-sug button.en{font:13px system-ui,sans-serif;color:var(--ink-2,#47526a)}.indic-sug button:hover{background:var(--surface-2,#f3f5f9)}
+.indic-sug i{font:11px system-ui,sans-serif;font-style:normal;color:var(--ink-3,#7a8399);padding:0 8px;width:100%}
+.indic-kb{position:fixed;z-index:9997;right:18px;bottom:44px;display:none;background:var(--surface,#fff);color:var(--ink,#1f2533);border:1px solid var(--line,#d5d9e2);border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,.22);padding:8px 10px 10px;user-select:none}
+.indic-kb .kb-h{cursor:move;display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:13px}.indic-kb .kb-h b{font-family:'Noto Sans Devanagari','Mukta',system-ui,sans-serif;flex:1}.indic-kb .kb-h select{font:inherit;font-size:12px;border:1px solid var(--line,#d5d9e2);border-radius:6px;background:var(--surface,#fff);color:inherit;padding:2px 4px}
+.indic-kb .kb-h button{border:0;background:none;color:var(--ink-2,#47526a);font-size:14px;cursor:pointer;padding:2px 6px;border-radius:5px}.indic-kb .kb-h button:hover{background:var(--surface-2,#f3f5f9)}
+.indic-kb .r{display:flex;gap:4px;margin-top:4px}.indic-kb .r1{padding-left:14px}.indic-kb .r2{padding-left:24px}.indic-kb .r3{padding-left:40px}
+.indic-kb .k{position:relative;min-width:38px;height:40px;border:1px solid var(--line,#d5d9e2);border-radius:7px;background:var(--surface-2,#f6f7fa);color:inherit;cursor:pointer;font-family:'Noto Sans Devanagari','Mukta',sans-serif;font-size:17px;display:grid;place-items:center;padding:0 4px}
+.indic-kb .k:hover{border-color:var(--accent,#3C4FE0);background:var(--accent-soft,#e8ebff)}.indic-kb .k:active{transform:translateY(1px)}
+.indic-kb .k em{position:absolute;left:4px;top:2px;font:10px system-ui,sans-serif;font-style:normal;color:var(--ink-3,#7a8399)}.indic-kb .k b{font-weight:500}
+.indic-kb .k.ch{min-width:32px;height:34px;font-size:16px}.indic-kb .k.wide{min-width:84px;font:12px system-ui,sans-serif}.indic-kb .k.wide.on{background:var(--accent-soft,#e8ebff);border-color:var(--accent,#3C4FE0)}.indic-kb .k.space{flex:1;font:12px system-ui,sans-serif}`;
+    document.head.appendChild(st2);
+  }
 
   const API = window.BTSIndic = {
     lang: null,
@@ -338,6 +538,7 @@
        (e.g. the first key that opens a spreadsheet cell editor) — convert them and continue the word from there. */
     adopt: (el, latin) => { if (!lang || !el || !latin) return; const b = before(el, latin.length); if (!b || b.text !== latin) return; const out = render(latin, false); replace(el, latin.length, out, true); st = { el, buf: latin, out, literal: false }; },
     menuItems, help, lastLang: () => lastLang,
+    layouts: LAYOUTS.map(l => ({ id: l.id, label: l.label, desc: l.desc })), get layout() { return opts.layout; }, setLayout, showKeyboard, hideKeyboard, inscript: INSCRIPT,
     toggle: (l) => enable(lang ? false : (normLang(l) || lastLang)),
     skip: '[data-indic="off"], #ribbon input, #ribbon select, input[type="number"], #gkeys',
   };

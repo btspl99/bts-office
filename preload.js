@@ -1,8 +1,10 @@
 // BTS Office — secure bridge between the UI and the system (no Node access in pages)
-const { contextBridge, ipcRenderer, webUtils } = require('electron');
+const { contextBridge, ipcRenderer, webUtils, webFrame } = require('electron');
 
 contextBridge.exposeInMainWorld('bts', {
   isDesktop: true,
+  // spelling dictionary lookups (used to rank Hindi typing suggestions); null when unavailable
+  isWord: (w) => { try { return !webFrame.isWordMisspelled(String(w)); } catch { return null; } },
   pathFor: (file) => { try { return webUtils.getPathForFile(file); } catch { return ''; } },
   info: () => ipcRenderer.invoke('bts:info'),
   initialFile: () => ipcRenderer.invoke('bts:initial-file'),

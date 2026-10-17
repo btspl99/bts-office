@@ -541,13 +541,14 @@
     const cur = BTSIndic.isOn() ? BTSIndic.lang : '';
     const tick = (v) => (cur === v ? 'check' : '');
     BTS.menu(el, [
-      { head: 'Type with English letters' },
+      { head: 'Typing language' },
       { label: 'English (normal typing)', icon: tick('') || 'type', action: () => BTSIndic.enable(false) },
       { label: 'हिंदी — Hindi', icon: tick('hi') || 'languages', kbd: 'Ctrl+Alt+H', action: () => BTSIndic.enable('hi') },
       { label: 'मराठी — Marathi', icon: tick('mr') || 'languages', kbd: 'Ctrl+Alt+M', action: () => BTSIndic.enable('mr') },
+      ...(BTSIndic.layouts ? [{ head: 'Keyboard' }, ...BTSIndic.layouts.map(l => ({ label: l.label, icon: BTSIndic.layout === l.id ? 'check' : 'keyboard', action: () => BTSIndic.setLayout(l.id) })), { label: 'On-screen keyboard', icon: 'keyboard', action: () => BTSIndic.showKeyboard() }] : []),
       { sep: true },
       ...(window.BTSLegacyFonts ? [{ label: 'Convert old fonts (Kruti Dev, Shivaji)…', icon: 'replace', action: () => BTSLegacyFonts.dialog() }] : []),
-      { label: 'How phonetic typing works', icon: 'circle-help', action: indicHelp },
+      { label: 'How typing works', icon: 'circle-help', action: () => (BTSIndic.layout && BTSIndic.layout !== 'phonetic' ? BTSIndic.help() : indicHelp()) },
     ]);
   }
   function indicHelp() {
