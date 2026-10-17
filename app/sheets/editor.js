@@ -34,7 +34,7 @@
     keys.addEventListener('keydown', onGridKey);
     const resetKeys = () => { keys.value = ' '; keys.select(); }; Ed.resetKeys = resetKeys;
     keys.addEventListener('focus', resetKeys);
-    keys.addEventListener('input', (e) => { if (e.isComposing) return; const v = keys.value; resetKeys(); if (v && !Ed.state && !A.protectedCheck()) { Ed.start(v, 'enter'); if (window.BTSIndic && BTSIndic.isOn() && /^[A-Za-z]$/.test(v)) setTimeout(() => BTSIndic.adopt(ed, v), 0); } });
+    keys.addEventListener('input', (e) => { if (e.isComposing) return; const v = keys.value; resetKeys(); if (v && !Ed.state && !A.protectedCheck()) { Ed.start(v, 'enter'); if (window.BTSIndic && BTSIndic.isOn() && (BTSIndic.layout && BTSIndic.layout !== 'phonetic' ? /^[!-~]$/ : /^[A-Za-z]$/).test(v)) setTimeout(() => BTSIndic.adopt(ed, v), 0); } });
     keys.addEventListener('compositionend', () => { const v = keys.value; resetKeys(); if (!v) return; if (Ed.state) Ed.insertAtCaret(v); else if (!A.protectedCheck()) Ed.start(v, 'enter'); });
     keys.addEventListener('compositionstart', () => { if (!Ed.state && !A.protectedCheck(true)) { keys.value = ''; } });
     ed.addEventListener('keydown', onEditKey);

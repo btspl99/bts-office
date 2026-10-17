@@ -536,7 +536,7 @@
     rangeBefore: (el, n) => before(el, n),
     /* App hook: the last `latin` characters before the caret in `el` were typed while focus was elsewhere
        (e.g. the first key that opens a spreadsheet cell editor) — convert them and continue the word from there. */
-    adopt: (el, latin) => { if (!lang || !el || !latin) return; const b = before(el, latin.length); if (!b || b.text !== latin) return; const out = render(latin, false); replace(el, latin.length, out, true); st = { el, buf: latin, out, literal: false }; },
+    adopt: (el, latin) => { if (!lang || !el || !latin) return; const b = before(el, latin.length); if (!b || b.text !== latin) return; if (opts.layout === 'inscript') { const o = [...latin].map(c => INSCRIPT[c] || c).join(''); replace(el, latin.length, o, true); reset(); return; } const out = render(latin, false); replace(el, latin.length, out, true); st = { el, buf: latin, out, literal: false }; },
     menuItems, help, lastLang: () => lastLang,
     layouts: LAYOUTS.map(l => ({ id: l.id, label: l.label, desc: l.desc })), get layout() { return opts.layout; }, setLayout, showKeyboard, hideKeyboard, inscript: INSCRIPT,
     toggle: (l) => enable(lang ? false : (normLang(l) || lastLang)),
