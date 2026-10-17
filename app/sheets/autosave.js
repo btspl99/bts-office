@@ -48,7 +48,7 @@
     const names = []; try { wb.hf.getAllNamedExpressionsSerialized().forEach(n => names.push({ name: n.name, expression: n.expression, scope: n.scope === undefined ? null : wb.sheets.findIndex(s => s.id === n.scope), options: n.options })); } catch { }
     const snap = {
       v: 1, t: Date.now(), title: BTS.title, props: BTS.props, filePath: BTS.filePath || null,
-      book: { theme: wb.theme, themeOver: wb.themeOver, customStyles: wb.customStyles, styleMods: wb.styleMods, scenarios: wb.scenarios, protectStructure: wb.protectStructure, activeIndex: wb.activeIndex, wbProps: wb.props, names },
+      book: { theme: wb.theme, themeOver: wb.themeOver, customStyles: wb.customStyles, styleMods: wb.styleMods, scenarios: wb.scenarios, protectStructure: wb.protectStructure, defSize: wb.defSize, activeIndex: wb.activeIndex, wbProps: wb.props, names },
       sheets: wb.sheets.map(s => { const meta = {}; SHEET_PROPS.forEach(p => { if (s[p] !== undefined) meta[p] = s[p]; }); return { name: s.name, data: cellsOf(wb, s), meta }; }),
     };
     return JSON.stringify(snap, replacer);
@@ -60,7 +60,7 @@
     const glob = snap.book.names.filter(n => n.scope === null || n.scope === undefined || n.scope < 0).map(n => ({ name: n.name, expression: SU.fromHF(n.expression) }));
     IO.buildWorkbook(wb, snap.sheets.map(s => ({ name: s.name, data: s.data, meta: s.meta })), glob);
     for (const n of snap.book.names) if (n.scope !== null && n.scope >= 0 && wb.sheets[n.scope]) { try { wb.hf.addNamedExpression(n.name, n.expression, wb.sheets[n.scope].id, n.options); } catch (e) { console.warn('name', n.name, e); } }
-    const b = snap.book; Object.assign(wb, { theme: b.theme || 'bts', themeOver: b.themeOver || null, customStyles: b.customStyles || [], styleMods: b.styleMods || {}, scenarios: b.scenarios || [], protectStructure: b.protectStructure || null });
+    const b = snap.book; Object.assign(wb, { theme: b.theme || 'bts', themeOver: b.themeOver || null, customStyles: b.customStyles || [], styleMods: b.styleMods || {}, scenarios: b.scenarios || [], protectStructure: b.protectStructure || null, defSize: +b.defSize || 11 });
     if (b.wbProps) wb.props = b.wbProps;
     wb.activeIndex = Math.min(Math.max(0, b.activeIndex || 0), wb.sheets.length - 1);
     wb.undoStack = []; wb.redoStack = [];
@@ -71,13 +71,16 @@
   /* ---------- writing ---------- */
   let wbRef = null, timer = 0, firstPending = 0, gen = 0, writing = null;
   AS.init = (wb) => { wbRef = wb; };
+  // File > Options > Save: "Save recovery info every N seconds" (BTS.prefs.autosaveSeconds); 0 = soon after each change
   AS.schedule = () => {
     if (!wbRef) return; const now = Date.now(); if (!firstPending) firstPending = now;
+    const every = +((BTS.prefs && BTS.prefs.autosaveSeconds) || 0) * 1000;
+    if (every) { if (!timer) timer = setTimeout(AS.flush, every); return; }
     clearTimeout(timer);
     timer = setTimeout(AS.flush, now - firstPending > MAX_WAIT ? 0 : DEBOUNCE);
   };
   AS.flush = async () => {
-    clearTimeout(timer); firstPending = 0;
+    clearTimeout(timer); timer = 0; firstPending = 0;
     if (!wbRef || !BTS.dirty) return;
     if (writing) { await writing.catch(() => { }); }
     const g = gen; let json;
@@ -91,7 +94,7 @@
   };
   /* heartbeat: tells other windows this slot is still alive */
   setInterval(() => { const r = readIdx(LK + SID); if (!r) return; r.hb = Date.now(); ls.set(LK + SID, JSON.stringify(r)); }, 5000);
-  AS.clear = () => { gen++; clearTimeout(timer); firstPending = 0; ls.del(LK + SID); AS.idb.del(SID).catch(() => { }); };
+  AS.clear = () => { gen++; clearTimeout(timer); timer = 0; firstPending = 0; ls.del(LK + SID); AS.idb.del(SID).catch(() => { }); };
   AS.hasSlot = () => !!readIdx(LK + SID);
 
   /* ---------- recovery ---------- */

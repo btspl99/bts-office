@@ -24,14 +24,18 @@
     return { t: Date.now(), title: BTS.title, path: BTS.filePath || null, pres: json, assets: used, slides: SL.pres.slides.length };
   };
   let timer = 0, writing = false;
+  // File > Options > Save: "Save recovery info every N seconds" (BTS.prefs.autosaveSeconds); 0 = soon after each change
   R.schedule = () => {
+    const every = +((BTS.prefs && BTS.prefs.autosaveSeconds) || 0) * 1000;
+    if (every && timer) return; // already planned; the snapshot is taken when it runs
     clearTimeout(timer);
     timer = setTimeout(async () => {
+      timer = 0;
       if (!BTS.dirty || writing) return; writing = true;
       try { await R.put(SID, R.snapshot()); } catch (e) { console.warn('autosave', e); } finally { writing = false; }
-    }, 2000);
+    }, every || 2000);
   };
-  R.clear = () => { clearTimeout(timer); return R.del(SID); };
+  R.clear = () => { clearTimeout(timer); timer = 0; return R.del(SID); };
   const beat = () => ls.set(HB + SID, String(Date.now()));
   beat(); setInterval(beat, 5000);
 

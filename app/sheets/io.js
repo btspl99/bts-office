@@ -226,7 +226,7 @@
       if (tf) { const t = STheme.readThemeXML(await tf.async('string')); const hit = STheme.byFonts(t.head, t.body, t.accents.every(Boolean) ? t.accents : null); if (hit) wb.theme = hit.id; else if (t.body && t.accents.every(Boolean)) { const base = STheme.byFonts(t.head, t.body) || STheme.get('office'); wb.theme = base.id; const over = {}; if (t.accents.join() !== base.accents.join()) Object.assign(over, { accents: t.accents, dk2: t.dk2 || base.dk2, lt2: t.lt2 || base.lt2 }); if (t.head !== base.head || t.body !== base.body) Object.assign(over, { head: t.head || base.head, body: t.body || base.body }); if (Object.keys(over).length) wb.themeOver = over; } }
       const wx = zip && zip.file('xl/workbook.xml'); if (wx) { const x = await wx.async('string'); const m = /<workbookProtection\b([^>]*)\/?>/.exec(x); if (m && /lockStructure="(1|true)"/.test(m[1])) { const at = (n) => (new RegExp(`\\b${n}="([^"]*)"`).exec(m[1]) || [])[1]; wbProt = { hash: at('workbookHashValue') ? { algorithmName: at('workbookAlgorithmName') || 'SHA-512', hashValue: at('workbookHashValue'), saltValue: at('workbookSaltValue'), spinCount: +at('workbookSpinCount') || 100000 } : at('workbookPassword') ? { algorithmName: 'legacy', password: at('workbookPassword') } : null }; } }
     } catch (e) { console.warn('theme', e); }
-    if (meta && meta.book) { const b = meta.book; if (b.theme) wb.theme = b.theme; wb.themeOver = b.themeOver || null; wb.customStyles = b.customStyles || []; wb.styleMods = b.styleMods || {}; wb.scenarios = b.scenarios || []; }
+    if (meta && meta.book) { const b = meta.book; if (b.theme) wb.theme = b.theme; wb.themeOver = b.themeOver || null; wb.customStyles = b.customStyles || []; wb.styleMods = b.styleMods || {}; wb.scenarios = b.scenarios || []; if (+b.defSize) wb.defSize = +b.defSize; }
     wb.protectStructure = wbProt || (meta && meta.book && meta.book.protectStructure) || null;
     // tables (read from the zip; see sanitizeForExcelJS)
     let zipTables = new Map(); try { zipTables = await tablesFromZip(zip, paths); } catch (e) { console.warn('tables', e); }
@@ -430,7 +430,7 @@
   function excelStyle(st, tbl, num) {
     const o = {};
     const font = {}; if (st.b || (tbl && tbl.b)) font.bold = true; if (st.i) font.italic = true; if (st.u) font.underline = st.u === 'double' ? 'double' : true; if (st.s) font.strike = true;
-    font.name = st.font || (num && SU.numFont) || SU.defFont; font.size = st.sz || 11; const fc = st.color || (tbl && tbl.color); if (fc) font.color = { argb: toARGB(fc) };
+    font.name = st.font || (num && SU.numFont) || SU.defFont; font.size = st.sz || SU.defSize; const fc = st.color || (tbl && tbl.color); if (fc) font.color = { argb: toARGB(fc) };
     o.font = font;
     const fill = st.fill || (tbl && tbl.fill); if (fill) o.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: toARGB(fill) }, bgColor: { indexed: 64 } };
     const b = (x) => x ? { style: x.style || 'thin', color: { argb: toARGB(x.color || '#000000') } } : undefined;
@@ -498,7 +498,7 @@
       for (const [k, st] of s.styles) { const { r, c } = unkey(k); if (r > 1048575) continue; ws.getCell(r + 1, c + 1).style = excelStyle(st, tblStyles ? tableCellStyle(s, r, c) : null, isNum(r, c)); }
       if (tblStyles) for (const t of s.tables) { const g = t.range; for (let r = g.r0; r <= g.r1; r++) for (let c = g.c0; c <= g.c1; c++) if (!s.styles.has(key(r, c))) { const ts = tableCellStyle(s, r, c); if (ts) ws.getCell(r + 1, c + 1).style = excelStyle({}, ts, isNum(r, c)); } }
       // cells without a style still get the theme font (and the theme's number font) so every app shows the same typeface
-      if (SU.defFont !== 'Calibri' || SU.numFont) for (let r = 0; r <= used.r1; r++) for (let c = 0; c <= used.c1; c++) { if (s.isEmpty(r, c) || s.styles.has(key(r, c)) || (tblStyles && tableCellStyle(s, r, c))) continue; ws.getCell(r + 1, c + 1).style = excelStyle({}, null, isNum(r, c)); }
+      if (SU.defFont !== 'Calibri' || SU.numFont || SU.defSize !== 11) for (let r = 0; r <= used.r1; r++) for (let c = 0; c <= used.c1; c++) { if (s.isEmpty(r, c) || s.styles.has(key(r, c)) || (tblStyles && tableCellStyle(s, r, c))) continue; ws.getCell(r + 1, c + 1).style = excelStyle({}, null, isNum(r, c)); }
       for (const [k, txt] of s.comments) { const { r, c } = unkey(k); ws.getCell(r + 1, c + 1).note = String(txt); }
       const threadNotes = []; for (const [k, t] of s.threads) { if (s.comments.has(k)) continue; const { r, c } = unkey(k); ws.getCell(r + 1, c + 1).note = Threads.asNote(t); threadNotes.push(k); }
       // rows
@@ -571,8 +571,8 @@
       post.sheets.push({ name: s.name, spark: Spark.toXML(s), ranges: s.protected && s.allowRanges.length ? s.allowRanges : null, legacyPw: lp || null });
     }
     for (const n of wb.listNames()) { try { X.definedNames.add(SU.fromHF(n.expr).replace(/^=/, ''), n.name); } catch (e) { console.warn('name', n, e); } }
-    meta.book = { theme: wb.theme, themeOver: wb.themeOver || undefined, customStyles: wb.customStyles.length ? wb.customStyles : undefined, styleMods: Object.keys(wb.styleMods).length ? wb.styleMods : undefined, scenarios: wb.scenarios.length ? wb.scenarios : undefined, protectStructure: wb.protectStructure || undefined };
-    if (Object.keys(meta.sheets).length || wb.theme !== 'bts' || wb.themeOver || wb.customStyles.length || Object.keys(wb.styleMods).length || wb.scenarios.length || wb.protectStructure) {
+    meta.book = { theme: wb.theme, themeOver: wb.themeOver || undefined, customStyles: wb.customStyles.length ? wb.customStyles : undefined, styleMods: Object.keys(wb.styleMods).length ? wb.styleMods : undefined, scenarios: wb.scenarios.length ? wb.scenarios : undefined, protectStructure: wb.protectStructure || undefined, defSize: SU.defSize !== 11 ? SU.defSize : undefined };
+    if (Object.keys(meta.sheets).length || wb.theme !== 'bts' || wb.themeOver || SU.defSize !== 11 || wb.customStyles.length || Object.keys(wb.styleMods).length || wb.scenarios.length || wb.protectStructure) {
       const mw = X.addWorksheet('_btsmeta', { state: 'veryHidden' }); const json = JSON.stringify(meta);
       for (let i = 0, r = 1; i < json.length; i += 30000, r++) mw.getCell(r, 1).value = json.slice(i, i + 30000);
     }

@@ -54,6 +54,8 @@
   };
   SU.FONTS = T.fontNames();
   Object.defineProperty(SU, 'defFont', { get: () => T.cur().body, configurable: true });
+  /** default cell font size (11; a new workbook can start bigger or smaller: File > Options > New documents) */
+  Object.defineProperty(SU, 'defSize', { get: () => (window.WB && +WB.defSize) || 11, configurable: true });
   Object.defineProperty(SU, 'numFont', { get: () => T.cur().num || null, configurable: true });
   /* Canvas text only uses a web font once it is loaded. We load each face on first use, then redraw. */
   const ready = new Set(), pending = new Map(); let redrawT = 0;

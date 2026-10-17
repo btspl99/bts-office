@@ -28,6 +28,8 @@
  *   BTS.setStatus(key, html)  (status bar slot created on demand, left side)
  *   BTS.pickFile(accept) -> Promise({name, data}|null)  (images etc.)
  *   BTS.showTab(name) · BTS.esc(str)
+ *   BTS.prefs (File > Options; see PREF_DEFAULTS) · BTS.setPref(key, value) · BTS.onPrefs(cb(prefs, key)) · BTS.defaultExt()
+ *   BTS.openBackstage(view)  views: home, new, open, info, saveas, export, print, about, options
  */
 (function () {
   const $ = (s, r = document) => r.querySelector(s);
@@ -47,9 +49,29 @@
     cfg: null, title: 'Untitled', filePath: null, dirty: false, esc, $, $$, desktop, APPS, FILE_COLOR,
     /* Document properties. Apps read these when saving (docx/xlsx/pptx core properties) and set them when opening a file. */
     props: { title: '', subject: '', author: '', company: '', keywords: '', comments: '', category: '' },
-    /* The person using BTS Office (File > Options & about). Used as default author, and for comments and tracked changes. */
+    /* The person using BTS Office (File > Options). Used as default author, and for comments and tracked changes. */
     userName: (() => { try { return localStorage.getItem('bts-user-name') || ''; } catch { return ''; } })(),
   };
+  /* ---------- options (File > Options) ----------
+   * BTS.prefs holds the person's options. It is read synchronously from localStorage ('bts-prefs') when this file
+   * loads, so apps can use it while they build their first document; BTS.init then merges settings.json (desktop).
+   * BTS.setPref(key, value) saves to both; BTS.onPrefs(cb) → cb(prefs, changedKey) after every change. */
+  const PREF_DEFAULTS = { startScreen: false, zoom: 100, spellCheck: true, spellLanguages: null, autosaveSeconds: 0,
+    defaultFormat_docs: 'docx', defaultFormat_sheets: 'xlsx', defaultFormat_slides: 'pptx',
+    docsFont: '', docsSize: 0, sheetsFont: '', sheetsSize: 0, pageSize: 'A4', units: 'cm' };
+  BTS.PREF_DEFAULTS = PREF_DEFAULTS;
+  BTS.prefs = Object.assign({}, PREF_DEFAULTS, (() => { try { return JSON.parse(localStorage.getItem('bts-prefs') || '{}') || {}; } catch { return {}; } })());
+  const prefListeners = [];
+  const mirrorPrefs = () => { try { localStorage.setItem('bts-prefs', JSON.stringify(BTS.prefs)); } catch {} };
+  BTS.onPrefs = (cb) => { prefListeners.push(cb); return () => { const i = prefListeners.indexOf(cb); if (i >= 0) prefListeners.splice(i, 1); }; };
+  const firePrefs = (k) => prefListeners.forEach(cb => { try { cb(BTS.prefs, k); } catch (e) { console.error(e); } });
+  BTS.setPref = (k, v) => {
+    BTS.prefs[k] = v; mirrorPrefs();
+    const done = desktop ? bts.setSettings({ [k]: v }) : Promise.resolve(true);
+    firePrefs(k); return done;
+  };
+  // other windows: pick up changes made in another window's Options page
+  window.addEventListener('storage', (e) => { if (e.key !== 'bts-prefs' || !e.newValue) return; try { Object.assign(BTS.prefs, JSON.parse(e.newValue)); firePrefs(null); } catch {} });
   BTS.setProps = (p) => { Object.assign(BTS.props, p || {}); };
   BTS.resetProps = () => { BTS.props = { title: '', subject: '', author: BTS.userName || '', company: '', keywords: '', comments: '', category: '' }; };
 
@@ -278,7 +300,7 @@
       await BTS.cfg.load(f);
       const ext = extOf(f.name);
       BTS.title = baseOf(f.name);
-      BTS.filePath = (BTS.cfg.saveFormats.some(s => s.ext === ext) && BTS.cfg.saveFormats[0].ext === ext) ? f.path || null : null;
+      BTS.filePath = (BTS.cfg.saveFormats.some(s => s.ext === ext) && nativeExt(ext)) ? f.path || null : null;
       BTS.loadedExt = ext;
       BTS.markClean();
     } catch (err) { console.error(err); BTS.toast('Couldn’t open ' + f.name + ': ' + (err.message || err), { error: true, ms: 5000 }); }
@@ -300,21 +322,26 @@
       return r;
     } else { BTS.download(BTS.title + '.' + ext, data); return { name: BTS.title + '.' + ext }; }
   }
+  /* The format Save uses for a new file: File > Options > Save ("defaultFormat_<app>"), else the app's first format.
+   * Files in the app's main format or in the chosen default format are saved in place; others go through Save As. */
+  BTS.defaultExt = () => { const fm = BTS.cfg.saveFormats; const p = BTS.prefs['defaultFormat_' + BTS.cfg.app]; return (p && fm.some(f => f.ext === p)) ? p : fm[0].ext; };
+  const nativeExt = (e) => e === BTS.cfg.saveFormats[0].ext || e === BTS.defaultExt();
   BTS.save = async () => {
     if (!BTS.filePath) return BTS.saveAs();
-    const r = await writeOut(BTS.cfg.saveFormats[0].ext, BTS.filePath);
+    const fe = extOf(BTS.filePath);
+    const r = await writeOut(nativeExt(fe) ? fe : BTS.cfg.saveFormats[0].ext, BTS.filePath);
     if (r) { BTS.markClean(); BTS.toast('Saved'); }
     return !!r;
   };
   BTS.saveAs = async (ext) => {
     closeBackstage();
-    ext = ext || BTS.cfg.saveFormats[0].ext;
+    ext = ext || BTS.defaultExt();
     const fmt = BTS.cfg.saveFormats.find(f => f.ext === ext) || BTS.cfg.saveFormats[0];
     if (desktop) {
       const p = await bts.saveDialog(BTS.title + '.' + fmt.ext, [{ name: fmt.label, extensions: [fmt.ext] }]);
       if (!p) return false;
       const r = await writeOut(fmt.ext, p); if (!r) return false;
-      if (fmt.ext === BTS.cfg.saveFormats[0].ext) { BTS.filePath = p; BTS.title = baseOf(r.name); BTS.markClean(); }
+      if (nativeExt(fmt.ext)) { BTS.filePath = p; BTS.title = baseOf(r.name); BTS.markClean(); }
       BTS.toast('Saved as ' + r.name);
       return true;
     } else { await writeOut(fmt.ext); BTS.markClean(); return true; }
@@ -369,31 +396,18 @@
       main.innerHTML = `<h1>Print</h1><div class="bs-actions"><button class="bs-action" data-act="print">${icon('printer')}<div><b>Print</b><small>Choose a printer and settings</small></div></button><button class="bs-action" data-act="pdf">${icon('file-down')}<div><b>Save as PDF</b><small>Create a PDF you can share</small></div></button></div>`;
     } else if (view === 'about') {
       const info = desktop ? await bts.info() : { version: 'web' };
-      main.innerHTML = `<h1>About BTS Office</h1>
-        <div style="display:flex;gap:16px;align-items:center;margin-bottom:18px">${appBadge(cfg.app, 54)}<div><div style="font-size:20px;font-weight:700">${esc(cfg.name)}</div><div style="color:var(--ink-3)">Version ${esc(info.version)}</div></div></div>
-        <p style="max-width:620px;line-height:1.6">BTS Office is a free, open-source office suite for students — documents, spreadsheets, presentations and PDFs, with support for the file formats your school and college already use (.docx, .xlsx, .pptx, .pdf).</p>
-        <div style="display:grid;grid-template-columns:110px 1fr;gap:6px 14px;max-width:620px;margin:0 0 16px;padding:12px 16px;border:1px solid var(--line);border-radius:10px;background:var(--surface)"><span style="color:var(--ink-3)">Developer</span><b>Bhoomiputra Tech Solutions Private Limited</b><span style="color:var(--ink-3)">Website</span><a href="#" data-ext="https://btspl.tech" style="color:var(--accent);font-weight:600">btspl.tech</a></div>
-        <p style="max-width:620px;line-height:1.6">Released under the GNU General Public License v3. You can use, share and improve it freely. Built with Electron, HyperFormula, ExcelJS, SheetJS, docx, Mammoth, PptxGenJS, PDF.js, Chart.js and Lucide icons.</p>
-        <h2>Your name</h2>
-        <div class="field" style="max-width:420px"><input id="bts-user-name" value="${esc(BTS.userName)}" placeholder="Shown as the author of your files, comments and changes"></div>
-        <label class="check"><input type="checkbox" id="bts-versions-on"> Keep a version of .docx, .xlsx and .pptx files every time I save</label>
+      main.innerHTML = `<h1>About</h1>
+        <div class="about-head">${appBadge(cfg.app, 54)}<div><div class="about-name">${esc(cfg.name)}</div><div class="about-ver">BTS Office · Version ${esc(info.version)}</div></div></div>
+        <p class="about-p">BTS Office is a free, open-source office suite for students — documents, spreadsheets, presentations and PDFs, with support for the file formats your school and college already use (.docx, .xlsx, .pptx, .pdf).</p>
+        <div class="about-box"><span>Developer</span><b>Bhoomiputra Tech Solutions Private Limited</b><span>Website</span><a href="#" data-ext="https://btspl.tech">btspl.tech</a></div>
+        <p class="about-p">Released under the GNU General Public License v3. You can use, share and improve it freely. Built with Electron, HyperFormula, ExcelJS, SheetJS, docx, Mammoth, PptxGenJS, PDF.js, Chart.js and Lucide icons.</p>
         <h2>Updates</h2>
         ${window.BTSUpdates ? BTSUpdates.panelHTML() : ''}
-        ${window.BTSIndic || window.BTSVoice || window.BTSLegacyFonts ? `<h2>Indian languages &amp; voice typing</h2>
-        <div class="bs-actions" style="flex-direction:row;flex-wrap:wrap">${window.BTSIndic ? `<button class="btn" data-act="indic-help">${icon('languages', 15)} Hindi &amp; Marathi typing</button>` : ''}${window.BTSLegacyFonts ? `<button class="btn" data-act="legacy">${icon('replace', 15)} Convert old fonts (Kruti Dev, Shivaji)</button>` : ''}${window.BTSVoice ? `<button class="btn" data-act="voice-try">${icon('mic', 15)} Voice typing</button>` : ''}</div>
-        ${window.BTSVoice && desktop ? `<p class="empty-note" style="padding:8px 0 0;max-width:620px" id="bts-voice-models">Voice typing works offline after a one-time download of a speech model for each language.</p>` : ''}` : ''}
-        <h2>Appearance</h2>
-        <div class="bs-actions" style="flex-direction:row">${['light', 'dark', 'system'].map(t => `<button class="btn ${BTS.theme === t ? 'primary' : ''}" data-theme="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}</div>
         <h2>Keyboard shortcuts</h2>
-        <div style="display:grid;grid-template-columns:160px 1fr;gap:6px 14px;max-width:520px;color:var(--ink-2)">${[['Ctrl+N', 'New window'], ['Ctrl+O', 'Open'], ['Ctrl+S', 'Save'], ['Ctrl+Shift+S', 'Save a copy'], ['Ctrl+P', 'Print'], ['Ctrl+Z / Ctrl+Y', 'Undo / Redo'], ['Ctrl+F', 'Find'], ['Ctrl+H', 'Replace'], ['Ctrl+F1', 'Show or hide the ribbon'], ['Alt+Q', 'Search commands'], ...(window.BTSVoice ? [['Alt+Shift+D', 'Voice typing']] : []), ...(window.BTSIndic ? [['Ctrl+Alt+H / Ctrl+Alt+M', 'Type in Hindi / Marathi']] : []), ...(cfg.shortcuts || [])].map(([k, v]) => `<b style="color:var(--ink)">${k}</b><span>${v}</span>`).join('')}</div>`;
+        <div class="about-keys">${[['Ctrl+N', 'New window'], ['Ctrl+O', 'Open'], ['Ctrl+S', 'Save'], ['Ctrl+Shift+S', 'Save a copy'], ['Ctrl+P', 'Print'], ['Ctrl+Z / Ctrl+Y', 'Undo / Redo'], ['Ctrl+F', 'Find'], ['Ctrl+H', 'Replace'], ['Ctrl+F1', 'Show or hide the ribbon'], ['Alt+Q', 'Search commands'], ...(window.BTSVoice ? [['Alt+Shift+D', 'Voice typing']] : []), ...(window.BTSIndic ? [['Ctrl+Alt+H / Ctrl+Alt+M', 'Type in Hindi / Marathi']] : []), ...(cfg.shortcuts || [])].map(([k, v]) => `<b>${k}</b><span>${v}</span>`).join('')}</div>`;
       if (window.BTSUpdates) BTSUpdates.wirePanel(main);
-      main.querySelector('[data-act="indic-help"]')?.addEventListener('click', indicHelp);
-      main.querySelector('[data-act="legacy"]')?.addEventListener('click', () => BTSLegacyFonts.dialog());
-      main.querySelector('[data-act="voice-try"]')?.addEventListener('click', () => { closeBackstage(); BTSVoice.toggle(); });
-      const vm = main.querySelector('#bts-voice-models');
-      if (vm) { const showModels = async () => { try { const r = await BTSVoice.models(); const got = (r.models || []).filter(m => m.downloaded); vm.innerHTML = got.length ? `Speech models on this computer: ${got.map(m => esc(m.label)).join(', ')} (${Math.max(1, Math.round(r.bytes / 1048576))} MB). <a href="#" data-act="voice-remove" style="color:var(--accent);font-weight:600">Remove</a>` : 'Voice typing works offline after a one-time download of a speech model for each language (about 40 MB).'; const rm = vm.querySelector('[data-act="voice-remove"]'); if (rm) rm.onclick = async (ev) => { ev.preventDefault(); const freed = await BTSVoice.removeModels(); BTS.toast(`Removed speech models (${Math.round(freed / 1048576)} MB freed)`); showModels(); }; } catch { } }; showModels(); }
-      const un = main.querySelector('#bts-user-name'); un.addEventListener('change', () => { BTS.userName = un.value.trim(); try { localStorage.setItem('bts-user-name', BTS.userName); } catch {} if (desktop) bts.setSettings({ userName: BTS.userName }); });
-      const vo = main.querySelector('#bts-versions-on'); if (desktop) { const st = await bts.getSettings(); vo.checked = st.versionHistory !== false; vo.onchange = () => bts.setSettings({ versionHistory: vo.checked }); } else vo.disabled = true;
+    } else if (view === 'options') {
+      await renderOptions(main);
     } else if (view === 'info') {
       const P = BTS.props; const fld = (k, label, ph) => `<div class="field"><label>${label}</label><input data-prop="${k}" value="${esc(P[k] || '')}" placeholder="${esc(ph || '')}"></div>`;
       main.innerHTML = `<h1>Info</h1>${cfg.infoHTML ? cfg.infoHTML() : ''}
@@ -405,6 +419,103 @@
       if (!desktop || !BTS.filePath) vl.innerHTML = '<div class="empty-note">Save the file to start keeping versions. Every time you save, BTS Office keeps a copy (the last 30) that you can go back to.</div>';
       else { const vs = await bts.versions(BTS.filePath); vl.innerHTML = vs.length ? vs.map((v, i) => `<button class="bs-row" data-version="${esc(v.id)}"><div class="fi" style="background:var(--accent)">${icon('history', 16)}</div><div><div>${new Date(v.time).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}${i === 0 ? ' (current)' : ''}</div><div class="meta">${Math.max(1, Math.round(v.size / 1024))} KB · opens as a copy in a new window</div></div></button>`).join('') : '<div class="empty-note">No saved versions yet. A version is kept each time you save.</div>'; }
     }
+  }
+  /* ---------- File > Options ---------- */
+  const OPT_SECTIONS = [['general', 'General', 'sliders-horizontal'], ['proofing', 'Proofing', 'spell-check'], ['save', 'Save', 'save'], ['new', 'New documents', 'file-plus'], ['language', 'Language', 'languages']];
+  async function renderOptions(main) {
+    const P = BTS.prefs; const st = desktop ? await bts.getSettings().catch(() => ({})) : {};
+    const sel = (key, opts, val) => `<select class="opt-sel" data-pref="${key}">${opts.map(([v, l]) => `<option value="${esc(v)}"${String(v) === String(val) ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+    const sw = (id, on, attrs = '') => `<label class="opt-sw"><input type="checkbox" id="${id}"${on ? ' checked' : ''} ${attrs}><span></span></label>`;
+    const row = (label, hint, ctl, extra = '') => `<div class="opt-row" ${extra}><div class="opt-l"><b>${label}</b>${hint ? `<small>${hint}</small>` : ''}</div><div class="opt-c">${ctl}</div></div>`;
+    const fmtOpts = (app) => (({ docs: [['docx', 'Word document (.docx)'], ['odt', 'OpenDocument Text (.odt)']], sheets: [['xlsx', 'Excel workbook (.xlsx)'], ['ods', 'OpenDocument spreadsheet (.ods)']], slides: [['pptx', 'PowerPoint (.pptx)'], ['odp', 'OpenDocument presentation (.odp)']] })[app]);
+    const sizes = [['0', 'Default'], ...[8, 9, 10, 10.5, 11, 12, 14, 16, 18, 20].map(s => [String(s), String(s)])];
+    const fontBtn = (key) => `<button class="btn opt-font" data-font-pref="${key}" style="font-family:${P[key] ? (window.btsFontStack ? btsFontStack(P[key]) : `'${P[key]}'`).replace(/"/g, "'") : 'inherit'}">${esc(P[key] || 'Default (Calibri)')}${icon('chevron-down', 14)}</button>`;
+    const indicL = window.BTSIndic && typeof BTSIndic.setLayout === 'function' && Array.isArray(BTSIndic.layouts) && BTSIndic.layouts.length;
+    let indicDef = ''; try { indicDef = localStorage.getItem('bts-indic-default') || ''; } catch {}
+    main.innerHTML = `<h1>Options</h1>
+      <div class="opt-page">
+        <div class="opt-nav" role="navigation" aria-label="Options sections">${OPT_SECTIONS.map(([id, l, ic], i) => `<button data-opt-sec="${id}"${i === 0 ? ' class="on"' : ''}>${icon(ic, 16)}<span>${l}</span></button>`).join('')}</div>
+        <div class="opt-body">
+          <section class="opt-sec" id="opt-general"><h2>General</h2><div class="opt-card">
+            ${row('Your name', 'Shown as the author of your files, comments and changes.', `<input class="opt-in" id="bts-user-name" value="${esc(BTS.userName)}" placeholder="Your name" spellcheck="false">`)}
+            ${row('Appearance', 'System follows your Windows light or dark setting.', `<div class="opt-seg">${['light', 'dark', 'system'].map(t => `<button data-set-theme="${t}"${BTS.theme === t ? ' class="on"' : ''}>${icon(t === 'light' ? 'sun' : t === 'dark' ? 'moon' : 'monitor', 14)}${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}</div>`)}
+            ${row('When an app opens', 'What you see when you start Docs, Sheets or Slides.', sel('startScreen', [['false', 'Open a blank document'], ['true', 'Show the start screen']], !!P.startScreen))}
+            ${row('Zoom', 'Starting zoom for Docs and Sheets.', sel('zoom', [75, 90, 100, 110, 125, 150, 175, 200].map(z => [z, z + '%' + (z === 100 ? ' (default)' : '')]), P.zoom || 100))}
+          </div></section>
+          <section class="opt-sec" id="opt-proofing"><h2>Proofing</h2><div class="opt-card" id="opt-spell">
+            ${row('Check spelling as I type', 'Underlines words that may be misspelt. Right-click a word for suggestions.', sw('opt-spell-on', P.spellCheck !== false, desktop ? '' : 'disabled'))}
+            ${row('Spelling languages', desktop ? 'Words are accepted if they are right in any chosen language.' : 'Available in the desktop app.', `<div class="opt-langs" id="opt-spell-langs">${desktop ? '<span class="opt-note">Loading…</span>' : ''}</div>`)}
+          </div></section>
+          <section class="opt-sec" id="opt-save"><h2>Save</h2><div class="opt-card">
+            ${['docs', 'sheets', 'slides'].map(a => row(`Save new ${a === 'docs' ? 'documents' : a === 'sheets' ? 'workbooks' : 'presentations'} as`, APPS[a].name + (a === 'docs' ? ' · Save a copy can still use any format.' : ''), sel('defaultFormat_' + a, fmtOpts(a), P['defaultFormat_' + a] || fmtOpts(a)[0][0]))).join('')}
+            ${row('Save recovery info', 'If BTS Office closes by accident, you can get your work back the next time you open the app.', sel('autosaveSeconds', [[0, 'Soon after each change (recommended)'], [10, 'Every 10 seconds'], [30, 'Every 30 seconds'], [60, 'Every minute'], [120, 'Every 2 minutes'], [300, 'Every 5 minutes'], [600, 'Every 10 minutes']], P.autosaveSeconds || 0))}
+            ${row('Keep version history', 'Keeps a copy of .docx, .xlsx and .pptx files every time you save (the last 30). See File &gt; Info.', sw('bts-versions-on', st.versionHistory !== false, desktop ? '' : 'disabled'))}
+          </div></section>
+          <section class="opt-sec" id="opt-new"><h2>New documents</h2><div class="opt-card">
+            ${row('BTS Docs font', 'Body text font and size for new documents. Normally Calibri 11.', `<div class="opt-pair">${fontBtn('docsFont')}${sel('docsSize', sizes, P.docsSize || 0)}</div>`)}
+            ${row('BTS Sheets font', 'Cell font and size for new workbooks. Normally Calibri 11.', `<div class="opt-pair">${fontBtn('sheetsFont')}${sel('sheetsSize', sizes, P.sheetsSize || 0)}</div>`)}
+            ${row('Paper size', 'Page size for new documents in BTS Docs.', sel('pageSize', [['A4', 'A4 (21 × 29.7 cm)'], ['Letter', 'Letter (8.5 × 11 in)']], P.pageSize || 'A4'))}
+            ${row('Measure in', 'Units for the ruler and margins in BTS Docs.', `<div class="opt-seg">${[['cm', 'Centimetres'], ['in', 'Inches']].map(([v, l]) => `<button data-set-units="${v}"${(P.units || 'cm') === v ? ' class="on"' : ''}>${l}</button>`).join('')}</div>`)}
+          </div></section>
+          <section class="opt-sec" id="opt-language"><h2>Language</h2><div class="opt-card">
+            ${window.BTSIndic ? row('Default typing language', 'Language each app starts typing in. Ctrl+Alt+H / Ctrl+Alt+M switch any time.', `<select class="opt-sel" id="opt-indic-def">${[['', 'English'], ['hi', 'हिंदी — Hindi'], ['mr', 'मराठी — Marathi']].map(([v, l]) => `<option value="${v}"${v === indicDef ? ' selected' : ''}>${l}</option>`).join('')}</select>`) : ''}
+            ${indicL ? row('Hindi/Marathi keyboard', 'How keys turn into Devanagari letters.', `<div class="opt-pair"><select class="opt-sel" id="opt-indic-layout">${BTSIndic.layouts.map(l => `<option value="${esc(l.id)}"${l.id === BTSIndic.layout ? ' selected' : ''} title="${esc(l.desc || '')}">${esc(l.label)}</option>`).join('')}</select>${typeof BTSIndic.showKeyboard === 'function' ? `<button class="btn icon-only" id="opt-indic-kb" title="Show the on-screen keyboard">${icon('keyboard', 15)}</button>` : ''}</div>`, '') + `<div class="opt-sub" id="opt-indic-desc">${esc((BTSIndic.layouts.find(l => l.id === BTSIndic.layout) || BTSIndic.layouts[0]).desc || '')}</div>` : ''}
+          </div>
+          ${window.BTSIndic || window.BTSVoice || window.BTSLegacyFonts ? `<h2>Indian languages &amp; voice typing</h2>
+          <div class="bs-actions" style="flex-direction:row;flex-wrap:wrap">${window.BTSIndic ? `<button class="btn" data-act="indic-help">${icon('languages', 15)} Hindi &amp; Marathi typing</button>` : ''}${window.BTSLegacyFonts ? `<button class="btn" data-act="legacy">${icon('replace', 15)} Convert old fonts (Kruti Dev, Shivaji)</button>` : ''}${window.BTSVoice ? `<button class="btn" data-act="voice-try">${icon('mic', 15)} Voice typing</button>` : ''}</div>
+          ${window.BTSVoice && desktop ? `<p class="empty-note" style="padding:8px 0 0;max-width:620px" id="bts-voice-models">Voice typing works offline after a one-time download of a speech model for each language.</p>` : ''}` : ''}
+          </section>
+        </div>
+      </div>`;
+    const body = main.querySelector('.opt-body');
+    // mini-nav: jump to a section, highlight the one in view
+    main.querySelectorAll('[data-opt-sec]').forEach(b => b.addEventListener('click', () => { const s = main.querySelector('#opt-' + b.dataset.optSec); main.scrollTo({ top: s.offsetTop - 24, behavior: 'smooth' }); }));
+    const spy = () => { let cur = OPT_SECTIONS[0][0]; for (const [id] of OPT_SECTIONS) { const s = main.querySelector('#opt-' + id); if (s && s.getBoundingClientRect().top - main.getBoundingClientRect().top < 120) cur = id; } if (main.scrollTop + main.clientHeight >= main.scrollHeight - 4) cur = OPT_SECTIONS[OPT_SECTIONS.length - 1][0]; main.querySelectorAll('[data-opt-sec]').forEach(b => b.classList.toggle('on', b.dataset.optSec === cur)); };
+    main.onscroll = () => { if (main.querySelector(".opt-page")) spy(); };
+    const saved = () => BTS.toast('Saved', { ms: 1200 });
+    // simple selects bound to BTS.prefs
+    body.querySelectorAll('select[data-pref]').forEach(s => s.addEventListener('change', () => {
+      const k = s.dataset.pref; let v = s.value;
+      if (k === 'startScreen') v = v === 'true'; else if (/^(zoom|autosaveSeconds|docsSize|sheetsSize)$/.test(k)) v = +v;
+      BTS.setPref(k, v); saved();
+    }));
+    const un = main.querySelector('#bts-user-name'); un.addEventListener('change', () => { BTS.userName = un.value.trim(); try { localStorage.setItem('bts-user-name', BTS.userName); } catch {} if (desktop) bts.setSettings({ userName: BTS.userName }); saved(); });
+    body.querySelectorAll('[data-set-theme]').forEach(b => b.addEventListener('click', () => { BTS.setTheme(b.dataset.setTheme); body.querySelectorAll('[data-set-theme]').forEach(x => x.classList.toggle('on', x === b)); }));
+    body.querySelectorAll('[data-set-units]').forEach(b => b.addEventListener('click', () => { BTS.setPref('units', b.dataset.setUnits); body.querySelectorAll('[data-set-units]').forEach(x => x.classList.toggle('on', x === b)); saved(); }));
+    body.querySelectorAll('[data-font-pref]').forEach(b => b.addEventListener('click', async () => {
+      const k = b.dataset.fontPref; let f;
+      if (window.BTS_FONTS) f = await BTS.fontPicker(b, { current: BTS.prefs[k] || 'Calibri' }); else f = await BTS.prompt('Font', 'Font name', BTS.prefs[k] || 'Calibri');
+      if (!f) return; f = f.trim(); const v = f === 'Calibri' ? '' : f;
+      BTS.setPref(k, v); b.innerHTML = esc(v || 'Default (Calibri)') + icon('chevron-down', 14); b.style.fontFamily = v ? (window.btsFontStack ? btsFontStack(v) : `'${v}'`).replace(/"/g, "'") : 'inherit'; saved();
+    }));
+    const vo = main.querySelector('#bts-versions-on'); if (desktop) vo.onchange = () => { bts.setSettings({ versionHistory: vo.checked }); saved(); };
+    // proofing (main process: main/prefs.js)
+    const spOn = main.querySelector('#opt-spell-on'); const langsEl = main.querySelector('#opt-spell-langs');
+    const applySpell = async () => { try { return await bts.ext('prefs-apply'); } catch (e) { console.error(e); return null; } };
+    if (desktop) {
+      spOn.onchange = async () => { await BTS.setPref('spellCheck', spOn.checked); await applySpell(); saved(); };
+      let sp = null; try { sp = await bts.ext('prefs-spell'); } catch {}
+      if (!sp) langsEl.innerHTML = '<span class="opt-note">Not available.</span>';
+      else if (!sp.choose) langsEl.innerHTML = '<span class="opt-note">Your Mac picks spelling languages from System Settings.</span>';
+      else {
+        const cur = Array.isArray(P.spellLanguages) ? P.spellLanguages : sp.languages;
+        langsEl.innerHTML = sp.offer.map(l => `<label class="opt-chip"><input type="checkbox" value="${esc(l.id)}"${cur.includes(l.id) ? ' checked' : ''}><span>${esc(l.label)}</span></label>`).join('') || '<span class="opt-note">No spelling dictionaries found.</span>';
+        langsEl.addEventListener('change', async (e) => {
+          const list = [...langsEl.querySelectorAll('input:checked')].map(i => i.value);
+          if (!list.length) { e.target.checked = true; BTS.toast('Keep at least one language.', { error: true }); return; }
+          await BTS.setPref('spellLanguages', list); await applySpell(); saved();
+        });
+      }
+    }
+    // language
+    const idf = main.querySelector('#opt-indic-def'); if (idf) idf.onchange = () => { try { if (idf.value) localStorage.setItem('bts-indic-default', idf.value); else localStorage.removeItem('bts-indic-default'); } catch {} if (window.BTSIndic) BTSIndic.enable(idf.value || false); saved(); };
+    const il = main.querySelector('#opt-indic-layout'); if (il) il.onchange = () => { try { BTSIndic.setLayout(il.value); } catch (e) { console.error(e); } const d = main.querySelector('#opt-indic-desc'); const l = BTSIndic.layouts.find(x => x.id === il.value); if (d) d.textContent = (l && l.desc) || ''; saved(); };
+    main.querySelector('#opt-indic-kb')?.addEventListener('click', () => { closeBackstage(); BTSIndic.showKeyboard(); });
+    main.querySelector('[data-act="indic-help"]')?.addEventListener('click', indicHelp);
+    main.querySelector('[data-act="legacy"]')?.addEventListener('click', () => BTSLegacyFonts.dialog());
+    main.querySelector('[data-act="voice-try"]')?.addEventListener('click', () => { closeBackstage(); BTSVoice.toggle(); });
+    const vm = main.querySelector('#bts-voice-models');
+    if (vm) { const showModels = async () => { try { const r = await BTSVoice.models(); const got = (r.models || []).filter(m => m.downloaded); vm.innerHTML = got.length ? `Speech models on this computer: ${got.map(m => esc(m.label)).join(', ')} (${Math.max(1, Math.round(r.bytes / 1048576))} MB). <a href="#" data-act="voice-remove" style="color:var(--accent);font-weight:600">Remove</a>` : 'Voice typing works offline after a one-time download of a speech model for each language (about 40 MB).'; const rm = vm.querySelector('[data-act="voice-remove"]'); if (rm) rm.onclick = async (ev) => { ev.preventDefault(); const freed = await BTSVoice.removeModels(); BTS.toast(`Removed speech models (${Math.round(freed / 1048576)} MB freed)`); showModels(); }; } catch { } }; showModels(); }
   }
   function greet() { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; }
   async function renderRecent(el, n) {
@@ -430,7 +541,8 @@
       <button data-view="export">${icon('file-output')} Export</button>
       <button data-view="print">${icon('printer')} Print</button>
       <div class="bs-gap"></div>
-      <button data-view="about">${icon('settings')} Options &amp; about</button>
+      <button data-view="about">${icon('badge-info')} About</button>
+      <button data-view="options">${icon('settings')} Options</button>
       <button data-act="closewin">${icon('x')} Close</button></nav><div class="bs-main"></div>`;
     document.body.appendChild(b);
     b.addEventListener('click', async e => {
@@ -453,7 +565,6 @@
       const r = e.target.closest('[data-path]'); if (r) { closeBackstage(); const file = await bts.readFile(r.dataset.path); if (extOf(file.name || '') && appOfExt(extOf(file.name)) === BTS.cfg.app && !BTS.dirty && !BTS.hasContent?.()) loadFile(file); else bts.openApp(null, r.dataset.path); return; }
       const ex = e.target.closest('[data-ext]'); if (ex) { e.preventDefault(); if (desktop) bts.openExternal(ex.dataset.ext); else window.open(ex.dataset.ext); return; }
       const vv = e.target.closest('[data-version]'); if (vv) { bts.openVersion(BTS.filePath, vv.dataset.version); return; }
-      const th = e.target.closest('[data-theme]'); if (th) { BTS.setTheme(th.dataset.theme); renderBackstage('about'); }
     });
   }
   function appOfExt(e) { return ({ docx: 'docs', txt: 'docs', html: 'docs', htm: 'docs', md: 'docs', odt: 'docs', rtf: 'docs', xlsx: 'sheets', xls: 'sheets', csv: 'sheets', tsv: 'sheets', ods: 'sheets', pptx: 'slides', pdf: 'pdf' })[e]; }
@@ -597,21 +708,31 @@
   /* ---------- init ---------- */
   BTS.init = async (cfg) => {
     BTS.cfg = cfg = Object.assign({ defaultTitle: 'Untitled', saveFormats: [{ ext: 'txt', label: 'Text' }] }, cfg);
+    // options: settings.json (desktop) is the source of truth; localStorage is the fast copy read at load
+    // (merged after the shell is built: apps run code right after calling BTS.init without awaiting it)
+    const settingsP = desktop ? bts.getSettings().catch(() => ({})) : Promise.resolve({});
+    const mergePrefs = (settings) => { let ch = false; for (const k of Object.keys(PREF_DEFAULTS)) if (settings[k] !== undefined && JSON.stringify(settings[k]) !== JSON.stringify(BTS.prefs[k])) { BTS.prefs[k] = settings[k]; ch = true; } if (ch) { mirrorPrefs(); firePrefs(null); } };
     document.body.dataset.app = cfg.app;
     if (cfg.hasContent && !BTS.hasContent) BTS.hasContent = cfg.hasContent;
     BTS.title = cfg.defaultTitle;
     BTS.resetProps();
     buildTitlebar(); buildBackstage(); wireRibbon(); buildStatusbar();
-    BTS.zoom = cfg.zoom || 100; if (cfg.onZoom) setZoom(BTS.zoom);
+    BTS.zoom = cfg.zoom || 100;
+    if ((cfg.app === 'docs' || cfg.app === 'sheets') && +BTS.prefs.zoom && +BTS.prefs.zoom !== 100) BTS.zoom = +BTS.prefs.zoom;
+    if (cfg.onZoom) setZoom(BTS.zoom);
     document.addEventListener('keydown', keys);
     $$('#ribbon-tabs .file-tab').forEach(b => b.addEventListener('click', () => BTS.openBackstage()));
     updateTitle();
     if (desktop) {
       bts.onSaveThenClose(async () => { const ok = await BTS.save(); if (ok) bts.closeNow(); });
-      const s = await bts.getSettings(); if (s.theme && !localStorage.getItem('bts-theme')) applyTheme(s.theme);
+      const s = await settingsP; mergePrefs(s); if (s.theme && !localStorage.getItem('bts-theme')) applyTheme(s.theme);
       if (s.userName && !BTS.userName) BTS.userName = s.userName;
       const f = await bts.initialFile(); if (f) await loadFile(f);
     }
+    // File > Options > General: show the start screen instead of a blank document (not when a file was opened)
+    if (BTS.prefs.startScreen && cfg.app !== 'pdf' && !BTS.loadedExt && !BTS.filePath) BTS.openBackstage('home');
+    // File > Options > Language: default typing language
+    { let d = ''; try { d = localStorage.getItem('bts-indic-default') || ''; } catch {} if (d && window.BTSIndic && BTSIndic.enable && !BTSIndic.isOn?.()) { try { BTSIndic.enable(d); } catch (e) { console.error(e); } } }
     // drag & drop files onto the window
     document.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('Files') && !e.target.closest('[data-own-drop]')) e.preventDefault(); });
     document.addEventListener('drop', async e => {

@@ -106,7 +106,7 @@
       // hyperlink detection
       if (typeof res.v === 'string' && /^(https?:\/\/|www\.)\S+$/i.test(res.v) && !s.links.has(key(r, c))) { const m = new Map(s.links); m.set(key(r, c), res.v.startsWith('www.') ? 'https://' + res.v : res.v); wb.setProp(s, 'links', m); }
       // auto-grow row height for multi-line text
-      if (typeof res.v === 'string' && res.v.includes('\n') && !s.rowH.has(r)) { const lines = res.v.split('\n').length; const m = new Map(s.rowH); m.set(r, Math.max(SU.DEF_H, Math.ceil(lines * (s.style(r, c).sz || 11) * 96 / 72 * 1.22 + 6))); wb.setProp(s, 'rowH', m); }
+      if (typeof res.v === 'string' && res.v.includes('\n') && !s.rowH.has(r)) { const lines = res.v.split('\n').length; const m = new Map(s.rowH); m.set(r, Math.max(SU.DEF_H, Math.ceil(lines * (s.style(r, c).sz || SU.defSize) * 96 / 72 * 1.22 + 6))); wb.setProp(s, 'rowH', m); }
     });
     A.extendTablesAfterEntry(s, r, c);
     autoWiden(s, r, c);
@@ -260,8 +260,8 @@
     const nf = SU.changeDecimals(base, d, sample);
     A.applyStyle(() => ({ nf }), 'Decimals');
   };
-  A.setFontSize = (sz) => A.applyStyle({ sz: sz === 11 ? undefined : sz }, 'Font size');
-  A.growFont = (d) => { const s = S(); const cur = s.style(s.active.r, s.active.c).sz || 11; const i = SU.SIZES.findIndex(x => x >= cur); const n = d > 0 ? SU.SIZES[Math.min(SU.SIZES.length - 1, (SU.SIZES[i] === cur ? i + 1 : i))] : SU.SIZES[Math.max(0, (i < 0 ? SU.SIZES.length : i) - 1)]; A.setFontSize(n); };
+  A.setFontSize = (sz) => A.applyStyle({ sz: sz === SU.defSize ? undefined : sz }, 'Font size');
+  A.growFont = (d) => { const s = S(); const cur = s.style(s.active.r, s.active.c).sz || SU.defSize; const i = SU.SIZES.findIndex(x => x >= cur); const n = d > 0 ? SU.SIZES[Math.min(SU.SIZES.length - 1, (SU.SIZES[i] === cur ? i + 1 : i))] : SU.SIZES[Math.max(0, (i < 0 ? SU.SIZES.length : i) - 1)]; A.setFontSize(n); };
 
   /* ---------- borders ---------- */
   A.borderLine = { style: 'thin', color: '#000000' };
@@ -856,7 +856,7 @@
         let w = 0; for (let r = 0; r <= u.r1; r++) { if (s.isEmpty(r, i) || s.isRowHidden(r)) continue; const mg = s.mergeAt(r, i); if (mg && (mg.c0 !== mg.c1)) continue; const st = s.style(r, i); if (st.wrap) continue; const t = G_text(s, r, i); w = Math.max(w, Grid.measure(Grid.fontStr(st, 1), t) + 10 + (st.indent || 0) * 9 + (s.filter && r === s.filter.range.r0 ? 16 : 0)); }
         if (w) m.set(i, Math.min(800, Math.ceil(w))); else m.delete(i);
       } else {
-        let h = 0; for (let c = 0; c <= Math.max(u.c1, 0); c++) { const st = s.style(i, c); const fs = (st.sz || 11) * 96 / 72; let lines = 1; if (!s.isEmpty(i, c)) { const t = G_text(s, i, c); if (st.wrap) lines = Grid.wrapLines(Grid.fontStr(st, 1), t, Math.max(4, s.colWidth(c) - 6)).length; else lines = 1; } h = Math.max(h, Math.ceil(lines * fs * 1.22 + 5)); }
+        let h = 0; for (let c = 0; c <= Math.max(u.c1, 0); c++) { const st = s.style(i, c); const fs = (st.sz || SU.defSize) * 96 / 72; let lines = 1; if (!s.isEmpty(i, c)) { const t = G_text(s, i, c); if (st.wrap) lines = Grid.wrapLines(Grid.fontStr(st, 1), t, Math.max(4, s.colWidth(c) - 6)).length; else lines = 1; } h = Math.max(h, Math.ceil(lines * fs * 1.22 + 5)); }
         h = Math.max(h, SU.DEF_H); if (h === SU.DEF_H) m.delete(i); else m.set(i, h);
       }
     }

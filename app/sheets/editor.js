@@ -90,7 +90,7 @@
     wrap.style.minWidth = (rc.w - 1) + 'px'; wrap.style.minHeight = (rc.h - 1) + 'px'; wrap.style.width = 'auto'; wrap.style.height = 'auto';
     wrap.style.maxWidth = Math.max(rc.w, host.width - rc.x - 20) + 'px';
     wrap.style.background = style.fill || '#fff';
-    const fs = (style.sz || 11) * 96 / 72 * z;
+    const fs = (style.sz || SU.defSize) * 96 / 72 * z;
     ed.style.font = `${style.i ? 'italic ' : ''}${style.b ? 'bold ' : ''}${fs}px ${SU.cssFont(style.font || SU.defFont)}`;
     ed.style.color = style.color || '#000'; ed.style.textAlign = style.h === 'center' ? 'center' : style.h === 'right' ? 'right' : 'left';
     ed.style.paddingTop = Math.max(0, (rc.h - fs * 1.22) - 3 * z) + 'px';
